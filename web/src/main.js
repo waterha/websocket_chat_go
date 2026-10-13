@@ -1,5 +1,5 @@
 import { createApp, ref, computed, onMounted, onUnmounted, nextTick } from 'vue/dist/vue.esm-bundler.js'
-import { appendPage, Requests } from './realtime.js'
+import { appendPage, Requests, SyncTasks } from './realtime.js'
 import './style.css'
 
 async function api(path, options = {}) {
@@ -41,7 +41,7 @@ createApp({
     const deviceID = sessionStorage.getItem('im.device') || crypto.randomUUID()
     sessionStorage.setItem('im.device', deviceID)
     const cache = new Map()
-    const syncing = new Map()
+    const syncing = new SyncTasks()
     let socket
     let requests
     let retrySend
@@ -49,6 +49,7 @@ createApp({
     let refreshTimer
     let errorTimer
     let refreshTask
+    let refreshTicks = 0
     let epoch = 0
     let disposed = false
 
@@ -93,10 +94,9 @@ createApp({
       refreshTask = task
       try { await task } finally { if (refreshTask === task) refreshTask = null }
     }
-    function syncConversation(id) {
-      if (syncing.has(id)) return syncing.get(id)
+    function syncConversation(id, lastSeq = 0) {
       const version = epoch
-      const task = (async () => {
+      return syncing.run(id, lastSeq, async () => {
         let hasMore = true
         while (hasMore && me.value && version === epoch) {
           const existing = cache.get(id) || []
@@ -113,10 +113,25 @@ createApp({
           if (id === active.value && stick) await scroll()
           hasMore = page.has_more
         }
-      })()
-      syncing.set(id, task)
-      task.finally(() => { if (syncing.get(id) === task) syncing.delete(id) }).catch(() => {})
-      return task
+        if (version === epoch && me.value) return cache.get(id)?.at(-1)?.seq || 0
+      })
+    }
+    async function catchUp(cursors) {
+      const version = epoch
+      if (cursors.some(cursor => !conversations.value.some(item => item.id === cursor.conversation_id))) await refresh()
+      for (const cursor of cursors) {
+        if (version !== epoch || !me.value) return
+        const conversation = conversations.value.find(item => item.id === cursor.conversation_id)
+        if (conversation) conversation.last_seq = Math.max(conversation.last_seq, cursor.last_seq)
+        const localSeq = cache.get(cursor.conversation_id)?.at(-1)?.seq || 0
+        if (cursor.last_seq > localSeq || cursor.received_seq < localSeq) await syncConversation(cursor.conversation_id, cursor.last_seq)
+      }
+      if (version === epoch) await markRead()
+    }
+    async function reconcile() {
+      const version = epoch
+      const cursors = await api(`/devices/${deviceID}/cursors`)
+      if (version === epoch && me.value) await catchUp(cursors)
     }
     async function select(id) {
       active.value = id
@@ -136,7 +151,7 @@ createApp({
       const receipt = await api(`/conversations/${id}/read`, { method: 'POST', body: JSON.stringify({ seq }) })
       if (version === epoch) applyReceipt(receipt)
     }
-    const onVisible = () => { if (me.value) refresh().catch(showError) }
+    const onVisible = () => { if (me.value) reconcile().catch(showError) }
     const onScroll = () => { markRead().catch(showError) }
     function connect() {
       if (disposed || !me.value) return
@@ -150,7 +165,12 @@ createApp({
           const envelope = JSON.parse(event.data)
           if (channel.receive(envelope)) return
           if (envelope.event === 'connection.ready') { connected.value = true; await refresh() }
-          if (envelope.event === 'message.created') { await syncConversation(envelope.data.conversation_id); await refresh() }
+          if (envelope.event === 'message.created') {
+            if (!conversations.value.some(item => item.id === envelope.data.conversation_id)) await refresh()
+            await syncConversation(envelope.data.conversation_id, envelope.data.seq)
+            await markRead()
+          }
+          if (envelope.event === 'message.sync_required') await catchUp(envelope.data.cursors)
           if (envelope.event === 'conversation.created') await refresh()
           if (envelope.event === 'conversation.read') applyReceipt(envelope.data)
           if (envelope.event === 'error') throw new Error(envelope.error.message)
@@ -215,7 +235,7 @@ createApp({
         if (version !== epoch) return
         retrySend = null
         if (active.value === id && draft.value.trim() === content) draft.value = ''
-        await syncConversation(id); await refresh()
+        await syncConversation(id); await markRead()
       } catch (cause) { showError(cause) }
       finally { sending.value = false }
     }
@@ -237,7 +257,11 @@ createApp({
       if (me.value) connect()
       refreshTimer = setInterval(async () => {
         if (!me.value) return
-        try { await refresh() } catch (cause) { showError(cause) }
+        try {
+          refreshTicks++
+          if (refreshTicks % 12 === 0) await refresh()
+          else await reconcile()
+        } catch (cause) { showError(cause) }
       }, 5000)
       document.addEventListener('visibilitychange', onVisible)
       window.addEventListener('focus', onVisible)
@@ -273,7 +297,7 @@ createApp({
       </aside>
       <main class="chat">
         <template v-if="current">
-          <header class="chat-head"><span class="avatar">{{ title(current).slice(0,1) }}</span><div><h2>{{ title(current) }}</h2><p>{{ current.members.map(member => member.name).join('、') }}</p></div></header>
+          <header class="chat-head"><span class="avatar">{{ title(current).slice(0,1) }}</span><div><h2>{{ title(current) }}</h2><p>{{ current.members.slice(0,5).map(member => member.name).join('、') }}{{ current.members.length > 5 ? ' 等 ' + current.members.length + ' 人' : '' }}</p></div></header>
           <section ref="stream" class="stream" aria-label="聊天记录" @scroll.passive="onScroll">
             <button v-if="messages[0]?.seq > 1" class="older" @click="loadOlder">加载更早的消息</button>
             <div v-if="!messages.length" class="empty-chat">说声你好，开始这段对话。</div>
@@ -286,7 +310,7 @@ createApp({
         </template>
         <div v-else class="welcome"><span class="brand-mark">✦</span><h2>开启一段新对话</h2><p>与同伴即时沟通，让想法流动起来。</p><button class="primary" @click="showCreate = true">发起聊天</button></div>
       </main>
-      <div v-if="showCreate" class="modal-backdrop" @click.self="showCreate = false"><div class="modal"><div class="modal-head"><h2>发起聊天</h2><button @click="showCreate = false">×</button></div><p class="subtle">选择一位成员开始私聊，或邀请多人创建群聊。</p><div class="user-list"><label v-for="person in users" :key="person.id"><input v-model="selectedUsers" type="checkbox" :value="person.id" /><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>{{ person.email }}</small></span></label><p v-if="!users.length">暂无其他用户，邀请朋友注册后再试。</p></div><input v-if="selectedUsers.length > 1" v-model="groupName" maxlength="100" placeholder="群聊名称" /><button class="primary" :disabled="!selectedUsers.length || (selectedUsers.length > 1 && !groupName.trim())" @click="create(selectedUsers.length === 1 ? 'direct' : 'group', selectedUsers)">创建会话</button></div></div>
+      <div v-if="showCreate" class="modal-backdrop" @click.self="showCreate = false"><div class="modal"><div class="modal-head"><h2>发起聊天</h2><button @click="showCreate = false">×</button></div><p class="subtle">选择一位成员开始私聊，或邀请多人创建群聊。含自己最多 1000 人，已选择 {{ selectedUsers.length }} 位。</p><div class="user-list"><label v-for="person in users" :key="person.id"><input v-model="selectedUsers" type="checkbox" :value="person.id" :disabled="selectedUsers.length >= 999 && !selectedUsers.includes(person.id)" /><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>{{ person.email }}</small></span></label><p v-if="!users.length">暂无其他用户，邀请朋友注册后再试。</p></div><input v-if="selectedUsers.length > 1" v-model="groupName" maxlength="100" placeholder="群聊名称" /><button class="primary" :disabled="!selectedUsers.length || selectedUsers.length > 999 || (selectedUsers.length > 1 && !groupName.trim())" @click="create(selectedUsers.length === 1 ? 'direct' : 'group', selectedUsers)">创建会话</button></div></div>
     </div>
     <div v-if="error" class="toast" role="alert">{{ error }}</div>
   `,

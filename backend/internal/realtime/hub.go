@@ -89,6 +89,20 @@ func (hub *Hub) Publish(recipients []string, event model.Event) {
 	}
 }
 
+func (hub *Hub) Clients() []*Client {
+	hub.mutex.Lock()
+	defer hub.mutex.Unlock()
+	clients := []*Client{}
+	for _, devices := range hub.clients {
+		for _, client := range devices {
+			if client.Context.Err() == nil {
+				clients = append(clients, client)
+			}
+		}
+	}
+	return clients
+}
+
 func (hub *Hub) DisconnectSession(sessionHash string) {
 	hub.mutex.Lock()
 	defer hub.mutex.Unlock()

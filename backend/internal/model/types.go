@@ -56,6 +56,7 @@ type DeviceCursor struct {
 	ConversationID string `json:"conversation_id"`
 	DeviceID       string `json:"device_id"`
 	ReceivedSeq    int64  `json:"received_seq"`
+	LastSeq        int64  `json:"last_seq"`
 }
 
 type SyncPage struct {

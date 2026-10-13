@@ -13,6 +13,8 @@ import (
 
 type Chat struct{ Store *model.Store }
 
+const MaxGroupMembers = 1000
+
 const messageColumns = "id,conversation_id,sender_id,client_msg_id,seq,content,created_at"
 
 func scanMessage(row pgx.Row) (model.Message, error) {
@@ -190,6 +192,7 @@ func (chat *Chat) MarkReceived(ctx context.Context, userID, conversationID, devi
 	if seq < 0 || seq > lastSeq || !ValidDeviceID(deviceID) {
 		return cursor, model.Fail(400, "invalid_cursor")
 	}
+	cursor.LastSeq = lastSeq
 	err = chat.Store.DB.QueryRow(ctx, `INSERT INTO device_cursors(user_id,conversation_id,device_id,received_seq) VALUES($1,$2,$3,$4)
 		ON CONFLICT(user_id,conversation_id,device_id) DO UPDATE SET received_seq=GREATEST(device_cursors.received_seq,EXCLUDED.received_seq),updated_at=now() RETURNING received_seq`, userID, conversationID, deviceID, seq).Scan(&cursor.ReceivedSeq)
 	return cursor, err
@@ -211,7 +214,7 @@ func (chat *Chat) Cursors(ctx context.Context, userID, deviceID string) ([]model
 	if !ValidDeviceID(deviceID) {
 		return nil, model.Fail(400, "invalid_device")
 	}
-	rows, err := chat.Store.DB.Query(ctx, `SELECT cm.conversation_id,COALESCE(dc.received_seq,0) FROM conversation_members cm LEFT JOIN device_cursors dc ON dc.conversation_id=cm.conversation_id AND dc.user_id=cm.user_id AND dc.device_id=$2 WHERE cm.user_id=$1 ORDER BY cm.conversation_id`, userID, deviceID)
+	rows, err := chat.Store.DB.Query(ctx, `SELECT cm.conversation_id,COALESCE(dc.received_seq,0),c.next_seq FROM conversation_members cm JOIN conversations c ON c.id=cm.conversation_id LEFT JOIN device_cursors dc ON dc.conversation_id=cm.conversation_id AND dc.user_id=cm.user_id AND dc.device_id=$2 WHERE cm.user_id=$1 ORDER BY cm.conversation_id`, userID, deviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +222,7 @@ func (chat *Chat) Cursors(ctx context.Context, userID, deviceID string) ([]model
 	cursors := []model.DeviceCursor{}
 	for rows.Next() {
 		cursor := model.DeviceCursor{DeviceID: deviceID}
-		if err := rows.Scan(&cursor.ConversationID, &cursor.ReceivedSeq); err != nil {
+		if err := rows.Scan(&cursor.ConversationID, &cursor.ReceivedSeq, &cursor.LastSeq); err != nil {
 			return nil, err
 		}
 		cursors = append(cursors, cursor)
@@ -252,7 +255,7 @@ func (chat *Chat) Conversations(ctx context.Context, userID string) ([]model.Con
 
 func (chat *Chat) Create(ctx context.Context, userID string, input model.CreateInput) (string, error) {
 	input.Name = strings.TrimSpace(input.Name)
-	if (input.Kind != "direct" && input.Kind != "group") || (input.Kind == "direct" && len(input.MemberIDs) != 1) || (input.Kind == "group" && (len(input.MemberIDs) < 1 || len(input.MemberIDs) > 49 || len([]rune(input.Name)) < 1 || len([]rune(input.Name)) > 100)) {
+	if (input.Kind != "direct" && input.Kind != "group") || (input.Kind == "direct" && len(input.MemberIDs) != 1) || (input.Kind == "group" && (len(input.MemberIDs) < 1 || len(input.MemberIDs) >= MaxGroupMembers || len([]rune(input.Name)) < 1 || len([]rune(input.Name)) > 100)) {
 		return "", model.Fail(400, "invalid_conversation")
 	}
 	ids := append([]string{userID}, input.MemberIDs...)
@@ -294,10 +297,8 @@ func (chat *Chat) Create(ctx context.Context, userID string, input model.CreateI
 	if _, err = tx.Exec(ctx, "INSERT INTO conversations(id,name,kind,direct_key) VALUES($1,$2,$3,$4)", conversationID, input.Name, input.Kind, directKey); err != nil {
 		return "", err
 	}
-	for _, memberID := range ids {
-		if _, err = tx.Exec(ctx, "INSERT INTO conversation_members(conversation_id,user_id) VALUES($1,$2)", conversationID, memberID); err != nil {
-			return "", err
-		}
+	if _, err = tx.Exec(ctx, "INSERT INTO conversation_members(conversation_id,user_id) SELECT $1,unnest($2::text[])", conversationID, ids); err != nil {
+		return "", err
 	}
 	if err = chat.appendEvent(ctx, tx, conversationID, model.Event{Event: "conversation.created", Data: map[string]string{"id": conversationID}}); err != nil {
 		return "", err

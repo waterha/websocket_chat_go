@@ -46,10 +46,14 @@ func New(ctx context.Context, settings config.Config) (*ServiceContext, error) {
 }
 
 func (services *ServiceContext) Start(ctx context.Context) {
-	services.workers.Add(1)
+	services.workers.Add(2)
 	go func() {
 		defer services.workers.Done()
 		(&realtime.Dispatcher{Store: services.Store, Hub: services.Hub}).Run(ctx)
+	}()
+	go func() {
+		defer services.workers.Done()
+		(&realtime.Reconciler{Store: services.Store, Hub: services.Hub}).Run(ctx)
 	}()
 }
 

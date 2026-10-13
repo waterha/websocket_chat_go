@@ -8,6 +8,31 @@ export function appendPage(messages, page, conversationID) {
   return [...messages, ...page.messages]
 }
 
+export class SyncTasks {
+  constructor() { this.pending = new Map() }
+
+  run(id, lastSeq, synchronize) {
+    const existing = this.pending.get(id)
+    if (existing) {
+      existing.target = Math.max(existing.target, lastSeq)
+      return existing.promise
+    }
+    const state = { target: lastSeq }
+    state.promise = (async () => {
+      let received
+      do { received = await synchronize() }
+      while (received !== undefined && received < state.target)
+    })()
+    this.pending.set(id, state)
+    state.promise.finally(() => {
+      if (this.pending.get(id) === state) this.pending.delete(id)
+    }).catch(() => {})
+    return state.promise
+  }
+
+  clear() { this.pending.clear() }
+}
+
 export class Requests {
   constructor(socket, timeout = 8000) {
     this.socket = socket

@@ -83,7 +83,7 @@ func (auth *Auth) Logout(ctx context.Context, sessionHash string) error {
 }
 
 func (auth *Auth) Users(ctx context.Context, userID string) ([]model.User, error) {
-	rows, err := auth.Store.DB.Query(ctx, "SELECT id,email,name FROM users WHERE id<>$1 ORDER BY name LIMIT 100", userID)
+	rows, err := auth.Store.DB.Query(ctx, "SELECT id,email,name FROM users WHERE id<>$1 ORDER BY name,id LIMIT 1000", userID)
 	if err != nil {
 		return nil, err
 	}
