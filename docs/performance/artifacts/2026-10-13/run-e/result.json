@@ -1,0 +1,167 @@
+{
+  "compensation_frames": 10822,
+  "dial_errors": 0,
+  "disconnects": 0,
+  "drain_seconds": 2.9045904,
+  "error_samples": null,
+  "finished_at": "2026-10-13T09:47:50.5232305Z",
+  "go_version": "go1.26.5",
+  "http_errors": 0,
+  "http_latency": {
+    "count": 123222,
+    "p50_ms": 309.7019,
+    "p95_ms": 1133.7686,
+    "p99_ms": 1579.102,
+    "max_ms": 3383.3053
+  },
+  "members": 1000,
+  "passed": true,
+  "payload_bytes": 128,
+  "profile": "real WS send/push + HTTP ordered sync/receive ACK + 5s cursor polling; no DOM/read receipts/metadata refresh/TLS/login hashing",
+  "protocol_errors": 0,
+  "push_frames": 320000,
+  "ramp_seconds": 3.1873237,
+  "reconnects": 0,
+  "server": {
+    "online_connections": 1000,
+    "members": 1000,
+    "last_seq": 320,
+    "confirmed_members": 1000,
+    "pending_outbox": 0,
+    "read_members": 0,
+    "min_received_seq": 320,
+    "max_received_seq": 320
+  },
+  "stages": [
+    {
+      "target_messages_per_second": 0,
+      "started_at": "2026-10-13T09:46:17.0565922Z",
+      "finished_at": "2026-10-13T09:46:47.0577445Z",
+      "attempts": 0,
+      "acknowledged_sends": 0,
+      "send_errors": 0,
+      "processed_deliveries": 0,
+      "min_online": 1000,
+      "send_ack_latency": {
+        "count": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0,
+        "max_ms": 0
+      },
+      "push_frame_latency": {
+        "count": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0,
+        "max_ms": 0
+      },
+      "receive_latency": {
+        "count": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0,
+        "max_ms": 0
+      }
+    },
+    {
+      "target_messages_per_second": 1,
+      "started_at": "2026-10-13T09:46:47.0577445Z",
+      "finished_at": "2026-10-13T09:47:07.0588785Z",
+      "attempts": 20,
+      "acknowledged_sends": 20,
+      "send_errors": 0,
+      "processed_deliveries": 20000,
+      "min_online": 1000,
+      "send_ack_latency": {
+        "count": 20,
+        "p50_ms": 15.9973,
+        "p95_ms": 74.1908,
+        "p99_ms": 95.9972,
+        "max_ms": 95.9972
+      },
+      "push_frame_latency": {
+        "count": 20000,
+        "p50_ms": 121.8952,
+        "p95_ms": 292.981,
+        "p99_ms": 390.4425,
+        "max_ms": 557.6027
+      },
+      "receive_latency": {
+        "count": 20000,
+        "p50_ms": 387.4248,
+        "p95_ms": 722.6379,
+        "p99_ms": 1790.4112,
+        "max_ms": 2919.6076
+      }
+    },
+    {
+      "target_messages_per_second": 5,
+      "started_at": "2026-10-13T09:47:07.0588785Z",
+      "finished_at": "2026-10-13T09:47:27.4218896Z",
+      "attempts": 100,
+      "acknowledged_sends": 100,
+      "send_errors": 0,
+      "processed_deliveries": 100000,
+      "min_online": 1000,
+      "send_ack_latency": {
+        "count": 100,
+        "p50_ms": 296.5524,
+        "p95_ms": 815.1813,
+        "p99_ms": 1107.9302,
+        "max_ms": 1598.2797
+      },
+      "push_frame_latency": {
+        "count": 100000,
+        "p50_ms": 437.1738,
+        "p95_ms": 1307.6707,
+        "p99_ms": 1907.923,
+        "max_ms": 2614.5043
+      },
+      "receive_latency": {
+        "count": 100000,
+        "p50_ms": 1190.2034,
+        "p95_ms": 2501.5651,
+        "p99_ms": 3298.663,
+        "max_ms": 5632.5913
+      }
+    },
+    {
+      "target_messages_per_second": 10,
+      "started_at": "2026-10-13T09:47:27.4218896Z",
+      "finished_at": "2026-10-13T09:47:47.6186401Z",
+      "attempts": 200,
+      "acknowledged_sends": 200,
+      "send_errors": 0,
+      "processed_deliveries": 200000,
+      "min_online": 1000,
+      "send_ack_latency": {
+        "count": 200,
+        "p50_ms": 349.008,
+        "p95_ms": 1188.7176,
+        "p99_ms": 1563.1117,
+        "max_ms": 2028.2504
+      },
+      "push_frame_latency": {
+        "count": 200000,
+        "p50_ms": 514.9042,
+        "p95_ms": 1339.1793,
+        "p99_ms": 2037.0266,
+        "max_ms": 3145.7411
+      },
+      "receive_latency": {
+        "count": 200000,
+        "p50_ms": 1349.6186,
+        "p95_ms": 2645.3516,
+        "p99_ms": 3345.4315,
+        "max_ms": 5339.4084
+      }
+    }
+  ],
+  "started_at": "2026-10-13T09:46:13.7103359Z",
+  "sync_errors": 0,
+  "tcp_dial_concurrency": 50,
+  "total_acknowledged_sends": 320,
+  "total_processed_deliveries": 320000,
+  "verification_error": ""
+}

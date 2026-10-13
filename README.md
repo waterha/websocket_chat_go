@@ -47,6 +47,8 @@ npm run dev
 
 ## 开发验证
 
+真实 1000 条 WebSocket 长连接压测工具与复现方式见 [压测说明](docs/performance/README.md)，本机实测结果、失败轮次与延迟边界见 [2026-10-13 压测报告](docs/performance/2026-10-13-1000-websocket.md)。测试包含群消息发送、全员顺序补拉和接收确认，不把短时本机测试等同于生产容量承诺。
+
 ```powershell
 Set-Location backend
 go test ./...

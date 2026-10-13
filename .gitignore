@@ -11,3 +11,4 @@ coverage/
 backend/bin/
 .DS_Store
 Thumbs.db
+credentials.json
