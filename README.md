@@ -1,71 +1,58 @@
 # websocket_chat_go
 
-完全重构的暖色即时通讯前端。旧 Go / MySQL / Redis 实现、静态页面、配置和生成文件已移除；保留 Git 历史及原许可证。新的数据库目标为 PostgreSQL，后端源码已全部删除，由你独立编写。
+Go + PostgreSQL + Redis + Vue 的开源即时通讯项目。当前版本聚焦**可运行的单体 IM 基础闭环**：账号、单聊/群聊、WebSocket、离线存储、消息漫游、接收游标与已读回执。目标是逐步发展为团队沟通平台；组织架构等企业功能尚未实现。
 
-## 当前交付边界
+## 已实现
 
-- 前端：原生 HTML、CSS、JavaScript，零构建依赖、无第三方远程资源。
-- 配色：奶油白、陶土红、杏色，辅以低饱和鼠尾草绿。
-- 交互：邮箱密码注册/登录演示、退出账号、会话切换、联系人/群组列表、未读/群聊筛选、消息搜索、文本/表情发送、附件预览、本地群组创建、资料编辑、置顶、静音偏好、清空、导出与重置。
-- 界面：左侧导航和联系人，右侧聊天记录与输入框；没有全局顶部栏、右侧详情栏、公告、装饰卡片或页脚。手机采用联系人/聊天切换。
-- 数据：全部为演示数据；账号摘要、登录会话、本地消息、会话、资料和偏好使用浏览器 localStorage。真实环境必须改为服务端会话，不能把浏览器本地认证当作生产安全方案。不同浏览器或不同访问地址的数据不共享。
-- 后端：所有 Go 源码、模块文件和可运行服务文件均已删除；`backend/` 仅保留接口参考文档，不包含可运行代码。
-- 数据库：提供 PostgreSQL 开发配置和空 SQL 迁移文件。未创建业务表、未迁移旧数据。
+- HTTP API 与 WebSocket 共用业务逻辑；按用户/设备管理长连接，心跳、同设备重连替换、慢连接断开，最多 8 个设备/用户。
+- 单聊唯一会话、最多 50 人群聊；按会话成员向所有在线设备推送，非成员不能读写该会话。
+- 消息、会话序号和待推送事件在 PostgreSQL 同一事务提交；`(sender_id, client_msg_id)` 幂等。每个会话内 `seq` 连续递增，不承诺跨会话全局顺序。
+- 不在线的消息仍持久化；`/sync` 按升序分批补拉并返回游标。推送是低延迟提示，断线、慢消费或进程异常时以数据库补拉为准。
+- 每位成员的已读位置与每台设备的接收位置分离，位置只前进不后退。接收不等于已读；已读变更推送给会话成员。
+- Vue 客户端支持重连、定期补拉、多页漫游、已读状态与同 ID 安全重试；旧 `frontend/` 是不连服务的视觉演示。
 
-## 立即预览
+## 本地运行
 
-在项目根目录执行：
-
-```powershell
-python -m http.server 4173 --bind 127.0.0.1 --directory frontend
-```
-
-浏览器访问 `http://127.0.0.1:4173`。也可直接双击 `frontend/index.html`，但推荐使用本地 HTTP 地址，以获得稳定的存储和浏览器能力支持。
-
-快捷键：Ctrl / ⌘ + K 搜索会话；Enter 发送、Shift + Enter 换行。设置里关闭 Enter 发送后，使用 Ctrl / ⌘ + Enter。中文输入法确认选词不会直接发送消息。
-
-图片支持 PNG、JPEG、WebP、GIF，最多 2 MB，实际图片保存到浏览器本地。其他附件最多 5 MB，仅保存文件名和大小，不上传、不保留文件内容；页面不会提供虚假的下载入口。浏览器空间已满会提示，请导出备份或移除大图片。
-
-演示里的在线状态、预置消息是静态样例，不代表真实用户活动。会话菜单中的静音操作只保存偏好，没有真实推送或通知。没有自动回复、真正的登录和多端同步。
-
-## 文件结构
-
-```text
-frontend/
-  index.html                    页面布局
-  styles.css                    暖色主题与响应式布局
-  app.js                        前端本地演示交互
-  assets/favicon.svg            标识
-  assets/sunset.svg              本地日落插画
-backend/
-  README.md                     后端重写说明
-  API.md                        后续对接契约建议
-database/
-  README.md
-  migrations/000001_initial.up.sql    空建表迁移
-  migrations/000001_initial.down.sql  空回滚迁移
-infra/compose.yaml              仅 PostgreSQL 开发环境
-.env.example                    环境模板
-```
-
-## PostgreSQL 开发环境
-
-先复制环境模板，替换示例密码；不要把真实 `.env` 提交到仓库。
+需要 Go 1.26、Node.js 22+、PostgreSQL 17 和 Redis 7。可以使用 Docker Compose 启动依赖：
 
 ```powershell
 Copy-Item .env.example .env
+# 修改 .env 内 POSTGRES_PASSWORD
 docker compose --env-file .env -f infra/compose.yaml up -d
-docker compose --env-file .env -f infra/compose.yaml ps
 ```
 
-开发实例只绑定本机 `127.0.0.1:5433`，避免与本地默认端口冲突。数据库和用户默认为 `websocket_chat_go`。已有的 PostgreSQL 数据卷不会因修改环境变量自动重建账号或密码。
+在两个终端分别运行：
 
-如果不用 Docker，可以自行在本机 PostgreSQL 创建开发账号与数据库，并相应调整环境模板。当前前端不需要数据库，代码也不会替你读取 `.env` 或自动连接。
+```powershell
+Set-Location backend
+go run ./cmd/server
+```
 
-迁移 SQL 当前为空，由你填写之后再手动执行或接入迁移工具。`PGSSLMODE=disable` 仅用于本机；生产环境应验证证书、限制权限并独立管理凭据。
+```powershell
+Set-Location web
+npm ci
+npm run dev
+```
 
-## 你编写后端时
+打开 `http://127.0.0.1:4173`。后端监听 `127.0.0.1:8080`，`GET /healthz` 检查依赖。服务在启动时读取根目录 `.env`，执行版本化迁移；已有最初版本的数据库也可升级。生产环境应由独立迁移任务执行 DDL，并关闭服务账号的 DDL 权限。
 
-可按 `backend/README.md` 与 `backend/API.md` 自行初始化 Go 服务，再替换 `frontend/app.js` 中的 `people`、`conversations`、`baseMessages`、`persist()`、`sendMessage()` 等本地数据入口。当前没有隐藏的远程接口调用，也没有需要沿用的旧项目框架。
+接口示例见 [backend/API.md](backend/API.md)，运行和架构说明见 [backend/README.md](backend/README.md)，数据表见 [database/README.md](database/README.md)。
 
-真实消息发送成功必须以服务端 ACK 为准；不能把当前“仅本地”状态当作已送达、已读。群组权限、接收者校验、上传校验、幂等和事务必须在 Go 后端实现。
+## 开发验证
+
+```powershell
+Set-Location backend
+go test ./...
+go vet ./...
+Set-Location ../web
+node --test src/realtime.test.js
+npm run build
+```
+
+集成测试需要独立 PostgreSQL 数据库和 Redis：设置 `IM_TEST_DATABASE_URL`、`IM_TEST_REDIS_ADDR` 后运行 `go test ./...`；每个测试创建自己的 schema 并清理。CI 会运行完整测试。
+
+## 当前边界
+
+**只能部署一个服务实例。** Redis 仅维护短期连接在线标记，**不负责跨实例广播**；持久化 outbox 与进程内分发也不代表客户端已经收到。还没有组织/租户、RBAC、文件、搜索、推送通知、音视频、端到端加密、审计、登录限流和完整 CSRF 防护，不应直接作为企业生产系统暴露到公网。扩容前需设计跨网关事件投递及其监控、保留策略和安全治理。
+
+参与贡献见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全反馈见 [SECURITY.md](SECURITY.md)。

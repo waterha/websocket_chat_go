@@ -1,9 +1,34 @@
-# Go 后端：由你从零编写
+# 后端开发说明
 
-所有 Go 源码（包括仅有包声明的占位文件）及 `go.mod` 已删除。
+当前是一个进程内的单体服务，参考 go-zero 的 API/业务逻辑分层，但**未引入 go-zero RPC 框架、gRPC 或服务发现**：
 
-本目录仅保留本说明及 `API.md` 接口契约建议，不包含可运行的后端。你可以自行初始化 Go 模块，选择目录结构、框架和 PostgreSQL 驱动，不需要遵循之前的占位结构。
+```text
+cmd/server → internal/api（HTTP 与 WebSocket 适配）
+                   ↓
+             internal/logic（Auth、Chat 用例）
+                   ↓
+             internal/model（DTO、PostgreSQL 与迁移）
 
-保留的 `../infra/compose.yaml` 与 `../.env.example` 仅用于 PostgreSQL 开发环境；`../database/migrations/` 下的 SQL 文件为空，业务表由你设计。
+internal/svc（依赖组合）  internal/realtime（设备连接 Hub、outbox 分发）
+```
 
-前端独立运行；注册和登录目前只在浏览器本地演示，尚未请求接口或建立 WebSocket 连接。你完成后端后，再替换 `../frontend/app.js` 中的本地演示数据与发送逻辑。`API.md` 是参考文档，不代表接口已实现。
+`api` 只解析身份、协议和输入；HTTP 和 WS 共用 `logic.Chat`。将来若拆分 RPC，业务用例是候选边界；现在避免引入额外的分布式部署成本。
+
+## 消息生命周期
+
+1. 认证发送者与会话成员，依据 `(sender_id, client_msg_id)` 处理重试。
+2. 在事务中锁定会话行，分配 `next_seq`，写入消息与 outbox 事件，一起提交。ACK 仅表示持久化成功，不表示接收者已收。
+3. 单实例 dispatcher 扫描未发布 outbox 并向本地 Hub 的会话成员设备推送。若发送通道已满，关闭慢连接；用户仍可补拉。
+4. 客户端收到提示或重连后按 `/sync` 的 `next_seq` 连续补拉；每页处理后上报设备接收游标。用户在可见聊天窗口确认阅读时，再单独上报已读游标。
+
+Outbox 是服务端在断点后的推送恢复机制；`published_at` 仅代表提交给本进程队列，不是网络成功投递，崩溃时可能重复推送。客户端应以数据库补拉修复遗漏并对消息去重。每个会话有序，跨会话没有全局顺序保证。Redis 只记录带 TTL 的连接在线标记，重连时不同连接采用不同 key 以避免旧连接清掉新状态。
+
+Vue 初版只在内存保存本次会话的消息缓存，页面重载从 `seq=0` 分页恢复，不把服务端设备游标误当作本地持久缓存。聊天窗口展示最新 100 条，可逐次显示更早记录；长期使用和大历史量应增加 IndexedDB 缓存、按需漫游与保留策略。
+
+## 本地运行和验证
+
+复制根目录 `.env.example` 为 `.env` 并填写密码，启动 PostgreSQL/Redis，然后在 `backend/` 运行 `go run ./cmd/server`。服务启动时检查依赖并运行 `database/migrations` 中的版本化迁移。`MIGRATIONS_DIR` 可覆盖目录。数据库 TLS 使用 pgx 支持的标准 `PGSSLMODE` 等设置。
+
+`go test ./...` 运行单元测试；设置 `IM_TEST_DATABASE_URL` 和 `IM_TEST_REDIS_ADDR` 后会额外运行真实数据库/WebSocket 测试，使用临时 schema，**不要**指向无法创建/删除临时 schema 的生产数据库。可用 `go test -race ./...` 排查并发问题。
+
+生产部署前需要 TLS、独立迁移账号、限流、CSRF 防护、访问审计与监控；此版本不支持多实例横向扩容。
