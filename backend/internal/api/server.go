@@ -36,6 +36,7 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/conversations", server.auth(server.conversations))
 	mux.HandleFunc("POST /api/v1/conversations", server.auth(server.create))
 	mux.HandleFunc("GET /api/v1/conversations/{id}/messages", server.auth(server.history))
+	mux.HandleFunc("GET /api/v1/conversations/{id}/messages/{seq}/delivery", server.auth(server.deliveryStatus))
 	mux.HandleFunc("GET /api/v1/conversations/{id}/sync", server.auth(server.sync))
 	mux.HandleFunc("POST /api/v1/conversations/{id}/messages", server.auth(server.send))
 	mux.HandleFunc("POST /api/v1/conversations/{id}/read", server.auth(server.read))
@@ -319,6 +320,20 @@ func (server *Server) received(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	respond(writer, 200, cursor)
+}
+
+func (server *Server) deliveryStatus(writer http.ResponseWriter, request *http.Request, caller identity) {
+	seq, err := strconv.ParseInt(request.PathValue("seq"), 10, 64)
+	if err != nil {
+		fail(writer, model.Fail(404, "not_found"))
+		return
+	}
+	status, err := server.Services.Chat.DeliveryStatus(request.Context(), caller.account.ID, request.PathValue("id"), seq)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, status)
 }
 
 func (server *Server) cursors(writer http.ResponseWriter, request *http.Request, caller identity) {

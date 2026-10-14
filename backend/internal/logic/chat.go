@@ -6,6 +6,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"websocket_chat_go/backend/internal/model"
@@ -196,6 +197,24 @@ func (chat *Chat) MarkReceived(ctx context.Context, userID, conversationID, devi
 	err = chat.Store.DB.QueryRow(ctx, `INSERT INTO device_cursors(user_id,conversation_id,device_id,received_seq) VALUES($1,$2,$3,$4)
 		ON CONFLICT(user_id,conversation_id,device_id) DO UPDATE SET received_seq=GREATEST(device_cursors.received_seq,EXCLUDED.received_seq),updated_at=now() RETURNING received_seq`, userID, conversationID, deviceID, seq).Scan(&cursor.ReceivedSeq)
 	return cursor, err
+}
+
+func (chat *Chat) DeliveryStatus(ctx context.Context, senderID, conversationID string, seq int64) (model.DeliveryStatus, error) {
+	status := model.DeliveryStatus{ConversationID: conversationID, Seq: seq}
+	if seq < 1 {
+		return status, model.Fail(404, "not_found")
+	}
+	err := chat.Store.DB.QueryRow(ctx, `SELECT
+		(SELECT count(*) FROM conversation_members cm WHERE cm.conversation_id=m.conversation_id AND cm.user_id<>m.sender_id),
+		(SELECT count(*) FROM conversation_members cm WHERE cm.conversation_id=m.conversation_id AND cm.user_id<>m.sender_id
+			AND EXISTS (SELECT 1 FROM device_cursors dc WHERE dc.conversation_id=cm.conversation_id
+				AND dc.user_id=cm.user_id AND dc.received_seq>=m.seq))
+		FROM messages m WHERE m.conversation_id=$1 AND m.seq=$2 AND m.sender_id=$3`, conversationID, seq, senderID).Scan(&status.TotalMembers, &status.ConfirmedMembers)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return status, model.Fail(404, "not_found")
+	}
+	status.AsOf = time.Now().UTC()
+	return status, err
 }
 
 func ValidDeviceID(deviceID string) bool {

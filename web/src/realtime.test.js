@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { appendPage, Requests, SyncTasks } from './realtime.js'
+import { appendPage, PendingSends, Requests, SyncTasks } from './realtime.js'
 
 const message = seq => ({ id: String(seq), conversation_id: 'chat', seq })
 
@@ -70,4 +70,30 @@ test('sync failure is retryable; clearing tasks preserves a new session task', a
   finishNew(2)
   await current
   assert.equal(tasks.pending.size, 0)
+})
+
+test('uncertain send retains its id across reload and cannot silently change content', () => {
+  const values = new Map()
+  const storage = {
+    getItem: key => values.get(key) || null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: key => values.delete(key),
+  }
+  const firstTab = new PendingSends(storage, 'alice')
+  const pending = firstTab.save('chat', 'important')
+  const reloaded = new PendingSends(storage, 'alice')
+  assert.deepEqual(reloaded.get('chat'), pending)
+  assert.deepEqual(reloaded.save('chat', 'important'), pending)
+  assert.throws(() => reloaded.save('chat', 'changed'), /未确认/)
+  assert.deepEqual(reloaded.get('chat'), pending)
+  assert.equal(new PendingSends(storage, 'bob').get('chat'), null)
+  assert.equal(reloaded.get('other'), null)
+  reloaded.clear('chat', 'stale-id')
+  assert.deepEqual(reloaded.get('chat'), pending)
+  reloaded.clear('chat', pending.client_msg_id)
+  assert.equal(reloaded.get('chat'), null)
+  const next = reloaded.save('other', 'other message')
+  assert.notEqual(next.client_msg_id, pending.client_msg_id)
+  reloaded.forget()
+  assert.equal(reloaded.get('other'), null)
 })

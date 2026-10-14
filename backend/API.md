@@ -16,9 +16,12 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | GET | `/conversations/{id}/sync?after_seq=0&limit=100` | 返回 `messages,last_seq,next_seq,has_more`；按 `seq` 正序取 `after_seq` 之后最多 100 条；下一页用 `next_seq` |
 | POST | `/conversations/{id}/read` | `{"seq":42}`；更新成员已读，返回 `conversation_id,user_id,seq,read_at` |
 | POST | `/conversations/{id}/received` | `{"device_id":"设备ID","seq":42}`；更新设备接收游标，与已读无关 |
+| GET | `/conversations/{id}/messages/{seq}/delivery` | 仅消息发送者可查：返回其他成员中至少一台设备确认到该序号的人数、其他成员总数及查询时间；找不到或无权查看返回 404 |
 | GET | `/devices/{device_id}/cursors` | 当前设备对每个会话的 `conversation_id,device_id,received_seq,last_seq`；用最新序号对账 |
 
 `client_msg_id` 长度 8–100，同一发送者全局唯一；重复提交相同会话及内容返回原消息，内容或会话不同返回 409。`seq` 在单个会话内连续；未提交的事务不会消耗序号。游标只前进；超过会话最新序号会返回 400。所有历史与同步接口都检查会话成员资格。`received_seq` 是客户端声明已经连续处理到该位置的应用层接收确认，并**不是**服务端写入网络成功或用户已读；不得跳过缺失序号确认。
+
+`/delivery` 示例：`{"conversation_id":"...","seq":42,"confirmed_members":3,"total_members":9,"as_of":"..."}`。统计排除发送者，同一成员多台设备只计一次；某成员任意一台设备的接收游标达到该 `seq` 就计入。它是**查询时客户端所声明的应用层接收进度**，不是设备在线、用户已读或用户实际看到了消息；未确认也不能推断一定没收到。结果只对查询时的成员集合有效，返回时间后可能变化。服务端不为恶意或错误客户端的虚假确认提供物理收包证明。
 
 ## WebSocket
 

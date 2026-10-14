@@ -79,6 +79,59 @@ func TestWebsocketReceiveCompensationWithoutRead(t *testing.T) {
 	}
 }
 
+func TestDeliveryStatusCountsDistinctMembersNotReadsOrPushes(t *testing.T) {
+	services := fixture(t, false)
+	server := httptest.NewServer((&Server{Services: services}).Handler())
+	t.Cleanup(server.Close)
+	alice, aliceToken := account(t, services, "status-alice")
+	bob, bobToken := account(t, services, "status-bob")
+	charlie, charlieToken := account(t, services, "status-charlie")
+	_, outsiderToken := account(t, services, "status-outsider")
+	group, err := services.Chat.Create(t.Context(), alice.ID, model.CreateInput{Kind: "group", Name: "status", MemberIDs: []string{bob.ID, charlie.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	message, _, err := services.Chat.Send(t.Context(), alice.ID, model.SendInput{ConversationID: group, ClientMsgID: "status-message", Content: "hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := fmt.Sprintf("/api/v1/conversations/%s/messages/%d/delivery", group, message.Seq)
+	check := func(confirmed, total int) {
+		t.Helper()
+		var result model.DeliveryStatus
+		if err := json.Unmarshal(httpCall(t, server, aliceToken, http.MethodGet, path, nil, 200), &result); err != nil {
+			t.Fatal(err)
+		}
+		if result.ConversationID != group || result.Seq != message.Seq || result.ConfirmedMembers != confirmed || result.TotalMembers != total || result.AsOf.IsZero() {
+			t.Fatalf("untrustworthy delivery status: %+v", result)
+		}
+	}
+	check(0, 2)
+	if _, err := services.Chat.MarkRead(t.Context(), charlie.ID, group, message.Seq); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := services.Chat.MarkReceived(t.Context(), alice.ID, group, "desktop", message.Seq); err != nil {
+		t.Fatal(err)
+	}
+	check(0, 2)
+	for _, device := range []string{"desktop", "phone"} {
+		if _, err := services.Chat.MarkReceived(t.Context(), bob.ID, group, device, message.Seq); err != nil {
+			t.Fatal(err)
+		}
+	}
+	check(1, 2)
+	if _, err := services.Chat.MarkReceived(t.Context(), charlie.ID, group, "desktop", message.Seq); err != nil {
+		t.Fatal(err)
+	}
+	check(2, 2)
+	for _, token := range []string{bobToken, charlieToken, outsiderToken} {
+		httpCall(t, server, token, http.MethodGet, path, nil, 404)
+	}
+	httpCall(t, server, aliceToken, http.MethodGet, fmt.Sprintf("/api/v1/conversations/%s/messages/%d/delivery", group, message.Seq+1), nil, 404)
+	httpCall(t, server, aliceToken, http.MethodGet, "/api/v1/conversations/unknown/messages/1/delivery", nil, 404)
+	httpCall(t, server, aliceToken, http.MethodGet, "/api/v1/conversations/"+group+"/messages/invalid/delivery", nil, 404)
+}
+
 func TestThousandMemberDeliveryRecovery(t *testing.T) {
 	services := fixture(t, false)
 	ctx := t.Context()
@@ -195,12 +248,20 @@ func TestThousandMemberDeliveryRecovery(t *testing.T) {
 		}
 	}
 	assertHints(500)
+	progress, err := services.Chat.DeliveryStatus(ctx, "member-0", group, 3)
+	if err != nil || progress.TotalMembers != 999 || progress.ConfirmedMembers != 499 {
+		t.Fatalf("partial thousand-member delivery status: %+v %v", progress, err)
+	}
 	for index := 500; index < len(clients); index++ {
 		if _, err = services.Chat.MarkReceived(ctx, fmt.Sprintf("member-%d", index), group, "desktop", 3); err != nil {
 			t.Fatal(err)
 		}
 	}
 	assertHints(1000)
+	progress, err = services.Chat.DeliveryStatus(ctx, "member-0", group, 3)
+	if err != nil || progress.TotalMembers != 999 || progress.ConfirmedMembers != 999 {
+		t.Fatalf("completed thousand-member delivery status: %+v %v", progress, err)
+	}
 	var readMembers int
 	if err = services.Store.DB.QueryRow(ctx, "SELECT count(*) FROM conversation_members WHERE conversation_id=$1 AND last_read_seq<>0", group).Scan(&readMembers); err != nil || readMembers != 0 {
 		t.Fatalf("receive ACK changed read state: %d %v", readMembers, err)

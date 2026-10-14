@@ -59,6 +59,14 @@ type DeviceCursor struct {
 	LastSeq        int64  `json:"last_seq"`
 }
 
+type DeliveryStatus struct {
+	ConversationID   string    `json:"conversation_id"`
+	Seq              int64     `json:"seq"`
+	ConfirmedMembers int       `json:"confirmed_members"`
+	TotalMembers     int       `json:"total_members"`
+	AsOf             time.Time `json:"as_of"`
+}
+
 type SyncPage struct {
 	Messages []Message `json:"messages"`
 	LastSeq  int64     `json:"last_seq"`
