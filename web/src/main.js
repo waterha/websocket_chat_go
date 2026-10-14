@@ -1,21 +1,7 @@
 import { createApp, ref, computed, onMounted, onUnmounted, nextTick } from 'vue/dist/vue.esm-bundler.js'
 import { appendPage, PendingSends, Requests, SyncTasks } from './realtime.js'
+import { api } from './api.js'
 import './style.css'
-
-async function api(path, options = {}) {
-  const response = await fetch(`/api/v1${path}`, {
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  })
-  const body = await response.json()
-  if (!response.ok) {
-    const error = new Error(body.error?.message || '请求失败')
-    error.status = response.status
-    throw error
-  }
-  return body.data
-}
 
 createApp({
   setup() {
