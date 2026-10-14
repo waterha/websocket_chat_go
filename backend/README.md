@@ -16,6 +16,8 @@ internal/svc（依赖组合）  internal/realtime（设备连接 Hub、outbox �
 
 文件职责、分批结构变更、等价性验证与刻意保留的问题见 [2026-10-14 结构性重构记录](../docs/refactoring/2026-10-14-structure.md)。
 
+存储、WebSocket 与集成测试的后续整理见 [同日补充记录](../docs/refactoring/2026-10-14-structure-followup.md)。
+
 ## 消息生命周期
 
 1. 认证发送者与会话成员，依据 `(sender_id, client_msg_id)` 处理重试。
