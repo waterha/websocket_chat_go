@@ -1,12 +1,8 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
-	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -14,27 +10,7 @@ import (
 	"github.com/coder/websocket"
 	"websocket_chat_go/backend/internal/logic"
 	"websocket_chat_go/backend/internal/model"
-	"websocket_chat_go/backend/internal/realtime"
 )
-
-type command struct {
-	Event     string          `json:"event"`
-	RequestID string          `json:"request_id"`
-	Data      json.RawMessage `json:"data"`
-}
-
-func parseJSON(payload []byte, target any) error {
-	decoder := json.NewDecoder(bytes.NewReader(payload))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(target); err != nil {
-		return model.Fail(400, "invalid_event")
-	}
-	var extra any
-	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
-		return model.Fail(400, "invalid_event")
-	}
-	return nil
-}
 
 func (server *Server) websocket(writer http.ResponseWriter, request *http.Request, caller identity) {
 	if request.Header.Get("Origin") != server.Services.Config.Origin {
@@ -106,88 +82,4 @@ func (server *Server) websocket(writer http.ResponseWriter, request *http.Reques
 	}
 	server.Services.Hub.Unregister(client)
 	<-writerDone
-}
-
-func (server *Server) handleCommand(ctx context.Context, client *realtime.Client, input command) (model.Event, error) {
-	switch input.Event {
-	case "message.send":
-		var body model.SendInput
-		if err := parseJSON(input.Data, &body); err != nil {
-			return model.Event{}, err
-		}
-		message, _, err := server.Services.Chat.Send(ctx, client.UserID, body)
-		return model.Event{Event: "message.ack", Data: message}, err
-	case "conversation.read":
-		var body struct {
-			ConversationID string `json:"conversation_id"`
-			Seq            int64  `json:"seq"`
-		}
-		if err := parseJSON(input.Data, &body); err != nil {
-			return model.Event{}, err
-		}
-		receipt, err := server.Services.Chat.MarkRead(ctx, client.UserID, body.ConversationID, body.Seq)
-		return model.Event{Event: "conversation.read.ack", Data: receipt}, err
-	case "message.received":
-		var body struct {
-			ConversationID string `json:"conversation_id"`
-			Seq            int64  `json:"seq"`
-		}
-		if err := parseJSON(input.Data, &body); err != nil {
-			return model.Event{}, err
-		}
-		cursor, err := server.Services.Chat.MarkReceived(ctx, client.UserID, body.ConversationID, client.DeviceID, body.Seq)
-		return model.Event{Event: "message.received.ack", Data: cursor}, err
-	case "ping":
-		return model.Event{Event: "pong", Data: map[string]any{"server_time": time.Now().UTC()}}, nil
-	default:
-		return model.Event{}, model.Fail(400, "unknown_event")
-	}
-}
-
-func (server *Server) presence(ctx context.Context, client *realtime.Client) {
-	key := "im:presence:" + client.UserID + ":" + client.DeviceID + ":" + client.ID
-	if err := server.Services.Redis.Set(ctx, key, client.ID, 3*server.Services.Config.Heartbeat).Err(); err != nil {
-		log.Printf("presence refresh: %v", err)
-	}
-}
-
-func (server *Server) writeLoop(connection *websocket.Conn, client *realtime.Client) {
-	defer connection.CloseNow()
-	defer func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = server.Services.Redis.Del(ctx, "im:presence:"+client.UserID+":"+client.DeviceID+":"+client.ID).Err()
-	}()
-	server.presence(client.Context, client)
-	timer := time.NewTicker(server.Services.Config.Heartbeat)
-	defer timer.Stop()
-	for {
-		select {
-		case <-client.Context.Done():
-			return
-		case event := <-client.Outbound:
-			ctx, cancel := context.WithTimeout(client.Context, 5*time.Second)
-			payload, err := json.Marshal(event)
-			if err == nil {
-				err = connection.Write(ctx, websocket.MessageText, payload)
-			}
-			cancel()
-			if err != nil {
-				return
-			}
-		case <-timer.C:
-			ctx, cancel := context.WithTimeout(client.Context, server.Services.Config.HeartbeatTimeout)
-			_, err := server.Services.Auth.Authenticate(ctx, client.SessionHash)
-			if err == nil {
-				err = connection.Ping(ctx)
-			}
-			if err == nil {
-				server.presence(ctx, client)
-			}
-			cancel()
-			if err != nil {
-				return
-			}
-		}
-	}
 }
