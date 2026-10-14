@@ -1,0 +1,96 @@
+package logic
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"github.com/jackc/pgx/v5"
+	"slices"
+	"strings"
+	"websocket_chat_go/backend/internal/model"
+)
+
+func (chat *Chat) ConversationSeq(ctx context.Context, userID, conversationID string) (int64, error) {
+	var seq int64
+	err := chat.Store.DB.QueryRow(ctx, `SELECT c.next_seq FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id WHERE c.id=$1 AND cm.user_id=$2`, conversationID, userID).Scan(&seq)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, model.Fail(404, "not_found")
+	}
+	return seq, err
+}
+
+func (chat *Chat) Conversations(ctx context.Context, userID string) ([]model.Conversation, error) {
+	rows, err := chat.Store.DB.Query(ctx, `SELECT c.id,c.name,c.kind,c.next_seq,cm.last_read_seq,
+		(SELECT jsonb_agg(jsonb_build_object('id',u.id,'name',u.name,'email',u.email,'last_read_seq',members.last_read_seq,'read_at',members.read_at) ORDER BY u.name,u.id) FROM conversation_members members JOIN users u ON u.id=members.user_id WHERE members.conversation_id=c.id)
+		FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id WHERE cm.user_id=$1 ORDER BY c.created_at DESC,c.id`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	conversations := []model.Conversation{}
+	for rows.Next() {
+		var item model.Conversation
+		var members []byte
+		if err := rows.Scan(&item.ID, &item.Name, &item.Kind, &item.LastSeq, &item.LastReadSeq, &members); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(members, &item.Members); err != nil {
+			return nil, err
+		}
+		conversations = append(conversations, item)
+	}
+	return conversations, rows.Err()
+}
+
+func (chat *Chat) Create(ctx context.Context, userID string, input model.CreateInput) (string, error) {
+	input.Name = strings.TrimSpace(input.Name)
+	if (input.Kind != "direct" && input.Kind != "group") || (input.Kind == "direct" && len(input.MemberIDs) != 1) || (input.Kind == "group" && (len(input.MemberIDs) < 1 || len(input.MemberIDs) >= MaxGroupMembers || len([]rune(input.Name)) < 1 || len([]rune(input.Name)) > 100)) {
+		return "", model.Fail(400, "invalid_conversation")
+	}
+	ids := append([]string{userID}, input.MemberIDs...)
+	slices.Sort(ids)
+	for index, memberID := range ids {
+		if memberID == "" || index > 0 && memberID == ids[index-1] {
+			return "", model.Fail(400, "invalid_members")
+		}
+	}
+	tx, err := chat.Store.DB.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+	var count int
+	if err = tx.QueryRow(ctx, "SELECT count(*) FROM users WHERE id=ANY($1)", ids).Scan(&count); err != nil {
+		return "", err
+	}
+	if count != len(ids) {
+		return "", model.Fail(400, "invalid_members")
+	}
+	conversationID := model.NewID()
+	var directKey any
+	if input.Kind == "direct" {
+		directKey = strings.Join(ids, ":")
+		input.Name = ""
+		if _, err = tx.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1,0))", "direct:"+directKey.(string)); err != nil {
+			return "", err
+		}
+		var existing string
+		err = tx.QueryRow(ctx, "SELECT id FROM conversations WHERE direct_key=$1", directKey).Scan(&existing)
+		if err == nil {
+			return existing, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return "", err
+		}
+	}
+	if _, err = tx.Exec(ctx, "INSERT INTO conversations(id,name,kind,direct_key) VALUES($1,$2,$3,$4)", conversationID, input.Name, input.Kind, directKey); err != nil {
+		return "", err
+	}
+	if _, err = tx.Exec(ctx, "INSERT INTO conversation_members(conversation_id,user_id) SELECT $1,unnest($2::text[])", conversationID, ids); err != nil {
+		return "", err
+	}
+	if err = chat.appendEvent(ctx, tx, conversationID, model.Event{Event: "conversation.created", Data: map[string]string{"id": conversationID}}); err != nil {
+		return "", err
+	}
+	return conversationID, tx.Commit(ctx)
+}
