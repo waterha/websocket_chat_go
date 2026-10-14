@@ -14,6 +14,8 @@ internal/svc（依赖组合）  internal/realtime（设备连接 Hub、outbox �
 
 `api` 只解析身份、协议和输入；HTTP 和 WS 共用 `logic.Chat`。将来若拆分 RPC，业务用例是候选边界；现在避免引入额外的分布式部署成本。
 
+文件职责、分批结构变更、等价性验证与刻意保留的问题见 [2026-10-14 结构性重构记录](../docs/refactoring/2026-10-14-structure.md)。
+
 ## 消息生命周期
 
 1. 认证发送者与会话成员，依据 `(sender_id, client_msg_id)` 处理重试。
