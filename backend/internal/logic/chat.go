@@ -11,11 +11,11 @@ type Chat struct{ Store *model.Store }
 
 const MaxGroupMembers = 1000
 
-const messageColumns = "id,conversation_id,sender_id,client_msg_id,seq,content,created_at"
+const messageColumns = "id,conversation_id,sender_id,client_msg_id,seq,content,kind,created_at"
 
 func scanMessage(row pgx.Row) (model.Message, error) {
 	var message model.Message
-	err := row.Scan(&message.ID, &message.ConversationID, &message.SenderID, &message.ClientMsgID, &message.Seq, &message.Content, &message.CreatedAt)
+	err := row.Scan(&message.ID, &message.ConversationID, &message.SenderID, &message.ClientMsgID, &message.Seq, &message.Content, &message.Kind, &message.CreatedAt)
 	return message, err
 }
 

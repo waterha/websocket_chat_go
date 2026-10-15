@@ -302,11 +302,11 @@ func TestGroupCreationAndMemberInvites(t *testing.T) {
 	}
 	status(t, services.Chat.AddMembers(ctx, alice.ID, group, model.AddMembersInput{MemberIDs: []string{alice.ID, alice.ID}}), 400)
 	page, err := services.Chat.Sync(ctx, bob.ID, group, 0, 100)
-	if err != nil || len(page.Messages) != 1 || page.Messages[0].ID != beforeInvite.ID {
+	if err != nil || len(page.Messages) != 3 || page.Messages[0].ID != beforeInvite.ID || page.Messages[1].Content != "alice邀请bob进入群聊" || page.Messages[2].Content != "bob邀请charlie进入群聊" || page.Messages[1].Kind != "system" || page.Messages[2].Kind != "system" {
 		t.Fatalf("invited member cannot sync group history: %+v %v", page, err)
 	}
 	afterInvite, _, err := services.Chat.Send(ctx, bob.ID, model.SendInput{ConversationID: group, ClientMsgID: "after-invite", Content: "joined"})
-	if err != nil || afterInvite.Seq != 2 {
+	if err != nil || afterInvite.Seq != 4 || afterInvite.Kind != "user" {
 		t.Fatalf("invited member cannot send in sequence: %+v %v", afterInvite, err)
 	}
 	direct, err := services.Chat.Create(ctx, alice.ID, model.CreateInput{Kind: "direct", MemberIDs: []string{bob.ID}})

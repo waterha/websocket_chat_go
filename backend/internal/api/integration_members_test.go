@@ -41,15 +41,22 @@ func TestGroupMemberInvitationHTTPAndWebsocket(t *testing.T) {
 		if err := json.Unmarshal(event.Data, &updated); err != nil || updated.ID != created.ID {
 			t.Fatalf("membership refresh event: %+v %v", updated, err)
 		}
+		var notice model.Message
+		if err := json.Unmarshal(await(t, client, "message.created", "").Data, &notice); err != nil || notice.Seq != 2 || notice.Kind != "system" || notice.Content != "alice邀请bob进入群聊" {
+			t.Fatalf("invitation notification: %+v %v", notice, err)
+		}
 	}
 	var page model.SyncPage
-	if err := json.Unmarshal(httpCall(t, server, bobToken, "GET", path+"/sync?after_seq=0", nil, 200), &page); err != nil || len(page.Messages) != 1 || page.Messages[0].Content != "before invite" {
+	if err := json.Unmarshal(httpCall(t, server, bobToken, "GET", path+"/sync?after_seq=0", nil, 200), &page); err != nil || len(page.Messages) != 2 || page.Messages[0].Content != "before invite" || page.Messages[1].Kind != "system" {
 		t.Fatalf("invited member history: %+v %v", page, err)
 	}
 	httpCall(t, server, aliceToken, "POST", path+"/members", model.AddMembersInput{MemberIDs: []string{bob.ID}}, 200)
+	if err := json.Unmarshal(httpCall(t, server, bobToken, "GET", path+"/sync?after_seq=0", nil, 200), &page); err != nil || len(page.Messages) != 2 {
+		t.Fatalf("retry duplicated invitation: %+v %v", page, err)
+	}
 	httpCall(t, server, aliceToken, "POST", path+"/messages", map[string]string{"client_msg_id": "invited-message", "content": "after invite"}, 201)
 	var pushed model.Message
-	if err := json.Unmarshal(await(t, receiver, "message.created", "").Data, &pushed); err != nil || pushed.Seq != 2 || pushed.Content != "after invite" {
+	if err := json.Unmarshal(await(t, receiver, "message.created", "").Data, &pushed); err != nil || pushed.Seq != 3 || pushed.Content != "after invite" || pushed.Kind != "user" {
 		t.Fatalf("invited member push: %+v %v", pushed, err)
 	}
 	httpCall(t, server, bobToken, "POST", path+"/members", model.AddMembersInput{MemberIDs: []string{charlie.ID}}, 200)
@@ -57,7 +64,7 @@ func TestGroupMemberInvitationHTTPAndWebsocket(t *testing.T) {
 	if err := json.Unmarshal(httpCall(t, server, charlieToken, "GET", "/api/v1/conversations", nil, 200), &groups); err != nil || len(groups) != 1 || len(groups[0].Members) != 3 {
 		t.Fatalf("offline invited member discovery: %+v %v", groups, err)
 	}
-	if err := json.Unmarshal(httpCall(t, server, charlieToken, "GET", path+"/sync?after_seq=0", nil, 200), &page); err != nil || len(page.Messages) != 2 {
+	if err := json.Unmarshal(httpCall(t, server, charlieToken, "GET", path+"/sync?after_seq=0", nil, 200), &page); err != nil || len(page.Messages) != 4 || page.Messages[3].Content != "bob邀请charlie进入群聊" || page.Messages[3].Kind != "system" {
 		t.Fatalf("offline invited member history: %+v %v", page, err)
 	}
 	_ = alice
@@ -133,7 +140,41 @@ func TestConcurrentGroupInvitationsRespectCapacityAndRetries(t *testing.T) {
 	if err = services.Store.DB.QueryRow(ctx, "SELECT count(*) FROM conversation_members WHERE conversation_id=$1", retryGroup).Scan(&total); err != nil || total != 2 {
 		t.Fatalf("duplicate members: %d %v", total, err)
 	}
-	if err = services.Store.DB.QueryRow(ctx, "SELECT count(*) FROM message_outbox WHERE conversation_id=$1", retryGroup).Scan(&total); err != nil || total != 2 {
+	if err = services.Store.DB.QueryRow(ctx, "SELECT count(*) FROM message_outbox WHERE conversation_id=$1", retryGroup).Scan(&total); err != nil || total != 3 {
 		t.Fatalf("retry emitted additional membership events: %d %v", total, err)
+	}
+}
+
+func TestBatchInvitationCreatesOneNoticePerNewMember(t *testing.T) {
+	services := fixture(t, false)
+	ctx := t.Context()
+	owner, _ := account(t, services, "owner")
+	alice, _ := account(t, services, "alice")
+	bob, _ := account(t, services, "bob")
+	group, err := services.Chat.Create(ctx, owner.ID, model.CreateInput{Kind: "group", Name: "team"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := services.Chat.AddMembers(ctx, owner.ID, group, model.AddMembersInput{MemberIDs: []string{bob.ID, alice.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	page, err := services.Chat.Sync(ctx, bob.ID, group, 0, 100)
+	if err != nil || len(page.Messages) != 2 || page.LastSeq != 2 {
+		t.Fatalf("missing batch notices: %+v %v", page, err)
+	}
+	for _, message := range page.Messages {
+		if message.Kind != "system" || message.SenderID != owner.ID || message.Seq < 1 || message.Seq > 2 || message.Content != "owner邀请alice进入群聊" && message.Content != "owner邀请bob进入群聊" {
+			t.Fatalf("invalid batch notice: %+v", message)
+		}
+	}
+	if page.Messages[0].Content == page.Messages[1].Content {
+		t.Fatal("batch notices were duplicated")
+	}
+	if err := services.Chat.AddMembers(ctx, owner.ID, group, model.AddMembersInput{MemberIDs: []string{bob.ID, alice.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	page, err = services.Chat.Sync(ctx, alice.ID, group, 0, 100)
+	if err != nil || len(page.Messages) != 2 || page.LastSeq != 2 {
+		t.Fatalf("retry duplicated batch notices: %+v %v", page, err)
 	}
 }

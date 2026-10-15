@@ -333,9 +333,10 @@ createApp({
            <section ref="stream" class="stream" aria-label="聊天记录">
             <button v-if="messages[0]?.seq > 1" class="older" @click="loadOlder">加载更早的消息</button>
             <div v-if="!messages.length" class="empty-chat">说声你好，开始这段对话。</div>
-            <div v-for="item in messages" :key="item.id" class="message-row" :class="{ mine: item.sender_id === me.id }">
-              <span v-if="item.sender_id !== me.id" class="avatar tiny">{{ sender(item.sender_id).slice(0,1) }}</span>
-               <div><div class="message-meta">{{ sender(item.sender_id) }} · {{ time(item.created_at) }}</div><div class="bubble">{{ item.content }}</div></div>
+            <div v-for="item in messages" :key="item.id" class="message-row" :class="{ mine: item.sender_id === me.id, system: item.kind === 'system' }">
+              <template v-if="item.kind === 'system'"><span class="system-notice">{{ item.content }}</span></template>
+              <template v-else><span v-if="item.sender_id !== me.id" class="avatar tiny">{{ sender(item.sender_id).slice(0,1) }}</span>
+              <div><div class="message-meta">{{ sender(item.sender_id) }} · {{ time(item.created_at) }}</div><div class="bubble">{{ item.content }}</div></div></template>
             </div>
           </section>
           <form class="composer" @submit.prevent="send"><p v-if="pendingSend?.conversation_id === active" class="pending-notice">发送结果未确认，消息可能已保存。<button type="button" @click="draft = pendingSend.content">恢复原文安全重试</button><button type="button" @click="discardPending">放弃确认</button></p><textarea v-model="draft" maxlength="4000" placeholder="输入消息…" @keydown.enter.exact="onEnter"></textarea><div><span>Enter 发送 · Shift + Enter 换行</span><button class="primary" :disabled="!draft.trim() || sending">{{ sending ? '发送中…' : '发送 ↗' }}</button></div></form>

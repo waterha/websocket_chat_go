@@ -11,6 +11,7 @@ type Message struct {
 	ClientMsgID    string    `json:"client_msg_id"`
 	Seq            int64     `json:"seq"`
 	Content        string    `json:"content"`
+	Kind           string    `json:"kind"`
 	CreatedAt      time.Time `json:"created_at"`
 }
 

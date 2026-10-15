@@ -138,12 +138,50 @@ func (chat *Chat) AddMembers(ctx context.Context, userID, conversationID string,
 	if total+len(ids)-existing > MaxGroupMembers {
 		return model.Fail(400, "invalid_members")
 	}
+	var inviterName string
+	if err = tx.QueryRow(ctx, "SELECT name FROM users WHERE id=$1", userID).Scan(&inviterName); err != nil {
+		return err
+	}
+	rows, err := tx.Query(ctx, "SELECT u.id,u.name FROM users u WHERE u.id=ANY($1) AND NOT EXISTS (SELECT 1 FROM conversation_members cm WHERE cm.conversation_id=$2 AND cm.user_id=u.id) ORDER BY u.id", ids, conversationID)
+	if err != nil {
+		return err
+	}
+	type invitedMember struct{ id, name string }
+	invited := []invitedMember{}
+	for rows.Next() {
+		var member invitedMember
+		if err = rows.Scan(&member.id, &member.name); err != nil {
+			break
+		}
+		invited = append(invited, member)
+	}
+	if err == nil {
+		err = rows.Err()
+	}
+	rows.Close()
+	if err != nil {
+		return err
+	}
 	if _, err = tx.Exec(ctx, "INSERT INTO conversation_members(conversation_id,user_id) SELECT $1,unnest($2::text[]) ON CONFLICT DO NOTHING", conversationID, ids); err != nil {
 		return err
 	}
-	if len(ids) != existing {
+	if len(invited) > 0 {
 		if err = chat.appendEvent(ctx, tx, conversationID, model.Event{Event: "conversation.created", Data: map[string]string{"id": conversationID}}); err != nil {
 			return err
+		}
+		for _, member := range invited {
+			var seq int64
+			if err = tx.QueryRow(ctx, "UPDATE conversations SET next_seq=next_seq+1 WHERE id=$1 RETURNING next_seq", conversationID).Scan(&seq); err != nil {
+				return err
+			}
+			content := inviterName + "邀请" + member.name + "进入群聊"
+			message, insertErr := scanMessage(tx.QueryRow(ctx, `INSERT INTO messages(id,conversation_id,sender_id,client_msg_id,seq,content,kind) VALUES($1,$2,$3,$4,$5,$6,'system') RETURNING `+messageColumns, model.NewID(), conversationID, userID, "system:"+model.NewID(), seq, content))
+			if insertErr != nil {
+				return insertErr
+			}
+			if err = chat.appendEvent(ctx, tx, conversationID, model.Event{Event: "message.created", Data: message}); err != nil {
+				return err
+			}
 		}
 	}
 	return tx.Commit(ctx)
