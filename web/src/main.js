@@ -15,7 +15,6 @@ createApp({
     const conversations = ref([])
     const active = ref(null)
     const messages = ref([])
-    const deliveryStatuses = ref({})
     const pendingSend = ref(null)
     const draft = ref('')
     const groupName = ref('')
@@ -61,34 +60,11 @@ createApp({
     const showError = cause => { error.value = cause?.message || '操作失败'; clearTimeout(errorTimer); errorTimer = setTimeout(() => { error.value = '' }, 5000) }
     const atBottom = () => !stream.value || stream.value.scrollHeight - stream.value.scrollTop - stream.value.clientHeight < 64
     const showMessages = id => { if (id === active.value) messages.value = (cache.get(id) || []).slice(-visibleCount.value) }
-    const readLabel = item => {
-      const others = current.value?.members.filter(member => member.id !== me.value?.id) || []
-      const count = others.filter(member => member.last_read_seq >= item.seq).length
-      return current.value?.kind === 'direct' ? (count ? '已读' : '未读') : `${count}/${others.length} 已读`
-    }
-    async function checkDelivery(item) {
-      const version = epoch
-      try {
-        const status = await api(`/conversations/${item.conversation_id}/messages/${item.seq}/delivery`)
-        if (version === epoch) deliveryStatuses.value = { ...deliveryStatuses.value, [item.id]: status }
-      } catch (cause) { if (version === epoch) showError(cause) }
-    }
-    const deliveryLabel = item => {
-      const status = deliveryStatuses.value[item.id]
-      return status ? `${status.confirmed_members}/${status.total_members} 成员设备确认接收（上次查询 ${time(status.as_of)}，点击刷新）` : '查看接收确认'
-    }
     function discardPending() {
       if (!pendingSend.value || !confirm('放弃确认不等于撤回：消息可能已经保存在服务器。请先检查聊天记录，确定仍要放弃吗？')) return
       pendingStore.clear(pendingSend.value.conversation_id, pendingSend.value.client_msg_id)
       pendingSend.value = null
     }
-    function applyReceipt(receipt) {
-      const conversation = conversations.value.find(item => item.id === receipt.conversation_id)
-      const member = conversation?.members.find(item => item.id === receipt.user_id)
-      if (member && receipt.seq > member.last_read_seq) { member.last_read_seq = receipt.seq; member.read_at = receipt.read_at }
-      if (conversation && receipt.user_id === me.value?.id) conversation.last_read_seq = Math.max(conversation.last_read_seq, receipt.seq)
-    }
-
     async function refresh() {
       if (refreshTask) return refreshTask
       const version = epoch
@@ -103,7 +79,6 @@ createApp({
           if (!me.value || version !== epoch) return
           await syncConversation(item.id)
         }
-        await markRead()
       })()
       refreshTask = task
       try { await task } finally { if (refreshTask === task) refreshTask = null }
@@ -129,8 +104,8 @@ createApp({
           showMessages(id)
           const conversation = conversations.value.find(item => item.id === id)
           if (conversation) conversation.last_seq = Math.max(conversation.last_seq, page.last_seq)
-          if (page.next_seq > 0) await api(`/conversations/${id}/received`, { method: 'POST', body: JSON.stringify({ device_id: deviceID, seq: page.next_seq }) })
-          if (id === active.value && stick) await scroll()
+           if (page.next_seq > 0) await api(`/conversations/${id}/received`, { method: 'POST', body: JSON.stringify({ device_id: deviceID, seq: page.next_seq }) })
+           if (id === active.value && stick) await scroll()
           hasMore = page.has_more
         }
         if (version === epoch && me.value) return cache.get(id)?.at(-1)?.seq || 0
@@ -146,7 +121,6 @@ createApp({
         const localSeq = cache.get(cursor.conversation_id)?.at(-1)?.seq || 0
         if (cursor.last_seq > localSeq || cursor.received_seq < localSeq) await syncConversation(cursor.conversation_id, cursor.last_seq)
       }
-      if (version === epoch) await markRead()
     }
     async function reconcile() {
       const version = epoch
@@ -160,20 +134,10 @@ createApp({
       showMessages(id)
       try {
         await syncConversation(id)
-        if (active.value === id) { await scroll(); await markRead() }
+        if (active.value === id) await scroll()
       } catch (cause) { showError(cause) }
     }
-    async function markRead() {
-      if (!me.value || !active.value || !messages.value.length || document.visibilityState !== 'visible' || !document.hasFocus() || !atBottom()) return
-      const id = active.value
-      const version = epoch
-      const seq = messages.value.at(-1).seq
-      if (seq <= (current.value?.last_read_seq || 0)) return
-      const receipt = await api(`/conversations/${id}/read`, { method: 'POST', body: JSON.stringify({ seq }) })
-      if (version === epoch) applyReceipt(receipt)
-    }
     const onVisible = () => { if (me.value) reconcile().catch(showError) }
-    const onScroll = () => { markRead().catch(showError) }
     function connect() {
       if (disposed || !me.value) return
       const connection = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws?device_id=${deviceID}`)
@@ -189,11 +153,9 @@ createApp({
           if (envelope.event === 'message.created') {
             if (!conversations.value.some(item => item.id === envelope.data.conversation_id)) await refresh()
             await syncConversation(envelope.data.conversation_id, envelope.data.seq)
-            await markRead()
           }
           if (envelope.event === 'message.sync_required') await catchUp(envelope.data.cursors)
           if (envelope.event === 'conversation.created') await refresh()
-          if (envelope.event === 'conversation.read') applyReceipt(envelope.data)
           if (envelope.event === 'error') throw new Error(envelope.error.message)
         } catch (cause) { showError(cause) }
       }
@@ -224,7 +186,7 @@ createApp({
       pendingStore?.forget()
       epoch++; me.value = null; connected.value = false
       clearTimeout(reconnectTimer); requests?.close(); socket?.close(); socket = null
-      cache.clear(); syncing.clear(); refreshTask = null; pendingStore = null; pendingSend.value = null; deliveryStatuses.value = {}
+      cache.clear(); syncing.clear(); refreshTask = null; pendingStore = null; pendingSend.value = null
       active.value = null; messages.value = []; conversations.value = []; users.value = []; draft.value = ''
       showCreate.value = false; showInvite.value = false; conversationFilter.value = 'all'
       try { await api('/auth/logout', { method: 'POST' }) } catch (cause) { showError(cause) }
@@ -299,7 +261,7 @@ createApp({
         pendingStore.clear(id, input.client_msg_id)
         if (pendingSend.value?.client_msg_id === input.client_msg_id) pendingSend.value = null
         if (active.value === id && draft.value.trim() === content) draft.value = ''
-        await syncConversation(id); await markRead()
+        await syncConversation(id)
       } catch (cause) { showError(cause) }
       finally { sending.value = false }
     }
@@ -331,7 +293,7 @@ createApp({
       window.addEventListener('focus', onVisible)
     })
     onUnmounted(() => { disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { me, mode, email, password, name, error, users, conversations, visibleConversations, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, showCreate, showInvite, connected, loading, sending, stream, current, title, sender, time, authenticate, logout, openCreate, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, readLabel, deliveryLabel, checkDelivery, discardPending, onScroll, onEnter }
+    return { me, mode, email, password, name, error, users, conversations, visibleConversations, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, showCreate, showInvite, connected, loading, sending, stream, current, title, sender, time, authenticate, logout, openCreate, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter }
   },
   template: `
     <div v-if="!me" class="auth-layout">
@@ -359,7 +321,7 @@ createApp({
            </button>
            <div class="contact-title">会话</div>
            <button v-for="item in visibleConversations" :key="item.id" class="conversation" :class="{ active: active === item.id }" @click="select(item.id)">
-            <span class="avatar">{{ title(item).slice(0, 1) }}</span><span class="conversation-text"><strong>{{ title(item) }}</strong><small>{{ item.kind === 'group' ? item.members.length + ' 位成员' : '私聊' }}</small></span><span v-if="item.last_seq > item.last_read_seq" class="dot"></span>
+             <span class="avatar">{{ title(item).slice(0, 1) }}</span><span class="conversation-text"><strong>{{ title(item) }}</strong><small>{{ item.kind === 'group' ? item.members.length + ' 位成员' : '私聊' }}</small></span>
           </button>
           <p v-if="!visibleConversations.length" class="empty-side">还没有{{ conversationFilter === 'group' ? '群聊' : conversationFilter === 'direct' ? '私聊' : '会话' }}，点击＋开始。</p>
         </div>
@@ -368,12 +330,12 @@ createApp({
       <main class="chat">
         <template v-if="current">
           <header class="chat-head"><span class="avatar">{{ title(current).slice(0,1) }}</span><div><h2>{{ title(current) }}</h2><p>{{ current.kind === 'group' ? current.members.length + ' 位成员' : '私聊' }} · {{ current.members.slice(0,5).map(member => member.name).join('、') }}{{ current.members.length > 5 ? ' 等 ' + current.members.length + ' 人' : '' }}</p></div><button v-if="current.kind === 'group'" class="outline-button" @click="openInvite">邀请成员</button></header>
-          <section ref="stream" class="stream" aria-label="聊天记录" @scroll.passive="onScroll">
+           <section ref="stream" class="stream" aria-label="聊天记录">
             <button v-if="messages[0]?.seq > 1" class="older" @click="loadOlder">加载更早的消息</button>
             <div v-if="!messages.length" class="empty-chat">说声你好，开始这段对话。</div>
             <div v-for="item in messages" :key="item.id" class="message-row" :class="{ mine: item.sender_id === me.id }">
               <span v-if="item.sender_id !== me.id" class="avatar tiny">{{ sender(item.sender_id).slice(0,1) }}</span>
-              <div><div class="message-meta">{{ sender(item.sender_id) }} · {{ time(item.created_at) }}</div><div class="bubble">{{ item.content }}</div><small v-if="item.sender_id === me.id" class="message-meta">{{ readLabel(item) }} · <button type="button" class="delivery-check" @click="checkDelivery(item)">{{ deliveryLabel(item) }}</button></small></div>
+               <div><div class="message-meta">{{ sender(item.sender_id) }} · {{ time(item.created_at) }}</div><div class="bubble">{{ item.content }}</div></div>
             </div>
           </section>
           <form class="composer" @submit.prevent="send"><p v-if="pendingSend?.conversation_id === active" class="pending-notice">发送结果未确认，消息可能已保存。<button type="button" @click="draft = pendingSend.content">恢复原文安全重试</button><button type="button" @click="discardPending">放弃确认</button></p><textarea v-model="draft" maxlength="4000" placeholder="输入消息…" @keydown.enter.exact="onEnter"></textarea><div><span>Enter 发送 · Shift + Enter 换行</span><button class="primary" :disabled="!draft.trim() || sending">{{ sending ? '发送中…' : '发送 ↗' }}</button></div></form>
