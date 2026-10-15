@@ -28,6 +28,7 @@ createApp({
     const stream = ref(null)
     const sending = ref(false)
     const visibleCount = ref(100)
+    const unreadCounts = ref({})
     const deviceID = sessionStorage.getItem('im.device') || crypto.randomUUID()
     sessionStorage.setItem('im.device', deviceID)
     const cache = new Map()
@@ -56,6 +57,24 @@ createApp({
       : item.name
     const sender = id => current.value?.members.find(member => member.id === id)?.name || '成员'
     const time = value => new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    const latestMessage = item => cache.get(item.id)?.at(-1)
+    const preview = item => latestMessage(item)?.content || '暂无消息'
+    const directConversation = userID => conversations.value.find(item => item.kind === 'direct' && item.members.some(member => member.id === userID))
+    const contactPreview = person => { const conversation = directConversation(person.id); return conversation ? preview(conversation) : '暂无消息' }
+    const unreadLabel = id => { const count = unreadCounts.value[id] || 0; return count > 99 ? '99+' : String(count) }
+    const hasUnread = id => (unreadCounts.value[id] || 0) > 0
+    const seenKey = id => `im.seen.${me.value?.id}.${id}`
+    const seenSeq = id => Number(localStorage.getItem(seenKey(id)) || 0)
+    const markSeen = (id, seq) => {
+      if (!me.value || !seq) return
+      const previous = seenSeq(id)
+      if (seq > previous) localStorage.setItem(seenKey(id), String(seq))
+      if (unreadCounts.value[id]) unreadCounts.value = { ...unreadCounts.value, [id]: 0 }
+    }
+    const addUnread = (id, count) => {
+      if (id === active.value || count < 1) return
+      unreadCounts.value = { ...unreadCounts.value, [id]: (unreadCounts.value[id] || 0) + count }
+    }
     const scroll = async () => { await nextTick(); if (stream.value) stream.value.scrollTop = stream.value.scrollHeight }
     const showError = cause => { error.value = cause?.message || '操作失败'; clearTimeout(errorTimer); errorTimer = setTimeout(() => { error.value = '' }, 5000) }
     const atBottom = () => !stream.value || stream.value.scrollHeight - stream.value.scrollTop - stream.value.clientHeight < 64
@@ -90,9 +109,13 @@ createApp({
         while (hasMore && me.value && version === epoch) {
           const existing = cache.get(id) || []
           const after = existing.at(-1)?.seq || 0
-          const page = await api(`/conversations/${id}/sync?after_seq=${after}&limit=100`)
-          if (version !== epoch || !me.value) return
-          const stick = atBottom()
+           const page = await api(`/conversations/${id}/sync?after_seq=${after}&limit=100`)
+           if (version !== epoch || !me.value) return
+           const seen = seenSeq(id)
+           const incoming = page.messages.filter(message => message.seq > seen && message.sender_id !== me.value.id).length
+           if (id === active.value) markSeen(id, page.next_seq)
+           else addUnread(id, incoming)
+           const stick = atBottom()
           const merged = appendPage(existing, page, id)
           cache.set(id, merged)
           const pending = pendingStore?.get(id)
@@ -129,6 +152,7 @@ createApp({
     }
     async function select(id) {
       active.value = id
+      markSeen(id, cache.get(id)?.at(-1)?.seq || 0)
       pendingSend.value = pendingStore?.get(id) || null
       visibleCount.value = 100
       showMessages(id)
@@ -186,7 +210,7 @@ createApp({
       pendingStore?.forget()
       epoch++; me.value = null; connected.value = false
       clearTimeout(reconnectTimer); requests?.close(); socket?.close(); socket = null
-      cache.clear(); syncing.clear(); refreshTask = null; pendingStore = null; pendingSend.value = null
+      cache.clear(); syncing.clear(); refreshTask = null; pendingStore = null; pendingSend.value = null; unreadCounts.value = {}
       active.value = null; messages.value = []; conversations.value = []; users.value = []; draft.value = ''
       showCreate.value = false; showInvite.value = false; conversationFilter.value = 'all'
       try { await api('/auth/logout', { method: 'POST' }) } catch (cause) { showError(cause) }
@@ -293,7 +317,7 @@ createApp({
       window.addEventListener('focus', onVisible)
     })
     onUnmounted(() => { disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { me, mode, email, password, name, error, users, conversations, visibleConversations, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, showCreate, showInvite, connected, loading, sending, stream, current, title, sender, time, authenticate, logout, openCreate, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter }
+    return { me, mode, email, password, name, error, users, conversations, visibleConversations, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, showCreate, showInvite, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter }
   },
   template: `
     <div v-if="!me" class="auth-layout">
@@ -316,12 +340,12 @@ createApp({
         <div class="conversation-tabs"><button :class="{ active: conversationFilter === 'all' }" @click="conversationFilter = 'all'">全部</button><button :class="{ active: conversationFilter === 'direct' }" @click="conversationFilter = 'direct'">私聊</button><button :class="{ active: conversationFilter === 'group' }" @click="conversationFilter = 'group'">群聊</button></div>
          <div class="conversation-list">
            <div class="contact-title">联系人</div>
-           <button v-for="person in users" :key="person.id" class="conversation contact" @click="openDirect(person.id)">
-             <span class="avatar">{{ person.name.slice(0, 1) }}</span><span class="conversation-text"><strong>{{ person.name }}</strong><small>{{ person.email }}</small></span>
-           </button>
+             <button v-for="person in users" :key="person.id" class="conversation contact" @click="openDirect(person.id)">
+              <span class="avatar">{{ person.name.slice(0, 1) }}</span><span class="conversation-text"><strong>{{ person.name }}</strong><small>{{ contactPreview(person) }}</small></span><span v-if="directConversation(person.id) && hasUnread(directConversation(person.id).id)" class="unread-badge">{{ unreadLabel(directConversation(person.id).id) }}</span>
+            </button>
            <div class="contact-title">会话</div>
            <button v-for="item in visibleConversations" :key="item.id" class="conversation" :class="{ active: active === item.id }" @click="select(item.id)">
-             <span class="avatar">{{ title(item).slice(0, 1) }}</span><span class="conversation-text"><strong>{{ title(item) }}</strong><small>{{ item.kind === 'group' ? item.members.length + ' 位成员' : '私聊' }}</small></span>
+              <span class="avatar">{{ title(item).slice(0, 1) }}</span><span class="conversation-text"><strong>{{ title(item) }}</strong><small>{{ preview(item) }}</small></span><span v-if="hasUnread(item.id)" class="unread-badge">{{ unreadLabel(item.id) }}</span>
           </button>
           <p v-if="!visibleConversations.length" class="empty-side">还没有{{ conversationFilter === 'group' ? '群聊' : conversationFilter === 'direct' ? '私聊' : '会话' }}，点击＋开始。</p>
         </div>
