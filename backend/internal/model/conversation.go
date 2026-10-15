@@ -24,3 +24,7 @@ type CreateInput struct {
 	Name      string   `json:"name"`
 	MemberIDs []string `json:"member_ids"`
 }
+
+type AddMembersInput struct {
+	MemberIDs []string `json:"member_ids"`
+}

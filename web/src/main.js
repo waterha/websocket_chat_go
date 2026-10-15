@@ -20,7 +20,12 @@ createApp({
     const draft = ref('')
     const groupName = ref('')
     const selectedUsers = ref([])
+    const inviteUsers = ref([])
+    const createMode = ref('direct')
+    const conversationFilter = ref('all')
     const showCreate = ref(false)
+    const showInvite = ref(false)
+    const conversationBusy = ref(false)
     const connected = ref(false)
     const loading = ref(false)
     const stream = ref(null)
@@ -42,6 +47,13 @@ createApp({
     let disposed = false
 
     const current = computed(() => conversations.value.find(item => item.id === active.value))
+    const visibleConversations = computed(() => conversationFilter.value === 'all'
+      ? conversations.value
+      : conversations.value.filter(item => item.kind === conversationFilter.value))
+    const inviteCandidates = computed(() => {
+      const memberIDs = new Set(current.value?.members.map(member => member.id) || [])
+      return users.value.filter(person => !memberIDs.has(person.id))
+    })
     const title = item => item.kind === 'direct'
       ? item.members.find(member => member.id !== me.value?.id)?.name || '私聊'
       : item.name
@@ -216,17 +228,48 @@ createApp({
       clearTimeout(reconnectTimer); requests?.close(); socket?.close(); socket = null
       cache.clear(); syncing.clear(); refreshTask = null; pendingStore = null; pendingSend.value = null; deliveryStatuses.value = {}
       active.value = null; messages.value = []; conversations.value = []; users.value = []; draft.value = ''
+      showCreate.value = false; showInvite.value = false; conversationFilter.value = 'all'
       try { await api('/auth/logout', { method: 'POST' }) } catch (cause) { showError(cause) }
     }
-    async function create(kind, memberIDs) {
+    function openCreate(kind) {
+      createMode.value = kind
+      selectedUsers.value = []
+      groupName.value = ''
+      showCreate.value = true
+    }
+    function chooseCreateUser(id) {
+      selectedUsers.value = selectedUsers.value.includes(id) ? [] : [id]
+    }
+    function openInvite() {
+      inviteUsers.value = []
+      showInvite.value = true
+    }
+    async function addMembers() {
+      if (conversationBusy.value || !inviteUsers.value.length || current.value?.kind !== 'group') return
       const version = epoch
+      conversationBusy.value = true
+      try {
+        await api(`/conversations/${active.value}/members`, { method: 'POST', body: JSON.stringify({ member_ids: inviteUsers.value }) })
+        if (version !== epoch) return
+        showInvite.value = false
+        inviteUsers.value = []
+        await refresh()
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { conversationBusy.value = false }
+    }
+    async function create(kind, memberIDs) {
+      if (conversationBusy.value) return
+      const version = epoch
+      conversationBusy.value = true
       try {
         const created = await api('/conversations', { method: 'POST', body: JSON.stringify({ kind, name: kind === 'group' ? groupName.value : '', member_ids: memberIDs }) })
         if (version !== epoch) return
         showCreate.value = false; groupName.value = ''; selectedUsers.value = []
+        conversationFilter.value = kind
         await refresh()
         if (version === epoch) await select(created.id)
-      } catch (cause) { showError(cause) }
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { conversationBusy.value = false }
     }
     async function send() {
       const content = draft.value.trim()
@@ -281,7 +324,7 @@ createApp({
       window.addEventListener('focus', onVisible)
     })
     onUnmounted(() => { disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { me, mode, email, password, name, error, users, conversations, active, messages, pendingSend, draft, groupName, selectedUsers, showCreate, connected, loading, sending, stream, current, title, sender, time, authenticate, logout, create, select, send, loadOlder, readLabel, deliveryLabel, checkDelivery, discardPending, onScroll, onEnter }
+    return { me, mode, email, password, name, error, users, conversations, visibleConversations, conversationFilter, active, messages, pendingSend, draft, groupName, selectedUsers, inviteUsers, inviteCandidates, createMode, conversationBusy, showCreate, showInvite, connected, loading, sending, stream, current, title, sender, time, authenticate, logout, openCreate, chooseCreateUser, openInvite, addMembers, create, select, send, loadOlder, readLabel, deliveryLabel, checkDelivery, discardPending, onScroll, onEnter }
   },
   template: `
     <div v-if="!me" class="auth-layout">
@@ -300,18 +343,19 @@ createApp({
     <div v-else class="layout">
       <aside class="sidebar">
         <header class="sidebar-head"><span class="brand-mark small">✦</span><div><strong>websocket_chat_go</strong><small>让团队更靠近</small></div></header>
-        <div class="side-title"><span>消息</span><button @click="showCreate = true" title="发起聊天">＋</button></div>
+        <div class="side-title"><span>消息</span><button @click="openCreate('direct')" title="发起聊天">＋</button></div>
+        <div class="conversation-tabs"><button :class="{ active: conversationFilter === 'all' }" @click="conversationFilter = 'all'">全部</button><button :class="{ active: conversationFilter === 'direct' }" @click="conversationFilter = 'direct'">私聊</button><button :class="{ active: conversationFilter === 'group' }" @click="conversationFilter = 'group'">群聊</button></div>
         <div class="conversation-list">
-          <button v-for="item in conversations" :key="item.id" class="conversation" :class="{ active: active === item.id }" @click="select(item.id)">
+          <button v-for="item in visibleConversations" :key="item.id" class="conversation" :class="{ active: active === item.id }" @click="select(item.id)">
             <span class="avatar">{{ title(item).slice(0, 1) }}</span><span class="conversation-text"><strong>{{ title(item) }}</strong><small>{{ item.kind === 'group' ? item.members.length + ' 位成员' : '私聊' }}</small></span><span v-if="item.last_seq > item.last_read_seq" class="dot"></span>
           </button>
-          <p v-if="!conversations.length" class="empty-side">还没有会话，点击＋开始。</p>
+          <p v-if="!visibleConversations.length" class="empty-side">还没有{{ conversationFilter === 'group' ? '群聊' : conversationFilter === 'direct' ? '私聊' : '会话' }}，点击＋开始。</p>
         </div>
         <footer class="sidebar-footer"><span class="avatar self">{{ me.name.slice(0,1) }}</span><span class="identity"><strong>{{ me.name }}</strong><small>{{ connected ? '实时连接已建立' : '正在重连 · 历史可用' }}</small></span><button @click="logout" title="退出登录">退出</button></footer>
       </aside>
       <main class="chat">
         <template v-if="current">
-          <header class="chat-head"><span class="avatar">{{ title(current).slice(0,1) }}</span><div><h2>{{ title(current) }}</h2><p>{{ current.members.slice(0,5).map(member => member.name).join('、') }}{{ current.members.length > 5 ? ' 等 ' + current.members.length + ' 人' : '' }}</p></div></header>
+          <header class="chat-head"><span class="avatar">{{ title(current).slice(0,1) }}</span><div><h2>{{ title(current) }}</h2><p>{{ current.kind === 'group' ? current.members.length + ' 位成员' : '私聊' }} · {{ current.members.slice(0,5).map(member => member.name).join('、') }}{{ current.members.length > 5 ? ' 等 ' + current.members.length + ' 人' : '' }}</p></div><button v-if="current.kind === 'group'" class="outline-button" @click="openInvite">邀请成员</button></header>
           <section ref="stream" class="stream" aria-label="聊天记录" @scroll.passive="onScroll">
             <button v-if="messages[0]?.seq > 1" class="older" @click="loadOlder">加载更早的消息</button>
             <div v-if="!messages.length" class="empty-chat">说声你好，开始这段对话。</div>
@@ -322,9 +366,22 @@ createApp({
           </section>
           <form class="composer" @submit.prevent="send"><p v-if="pendingSend?.conversation_id === active" class="pending-notice">发送结果未确认，消息可能已保存。<button type="button" @click="draft = pendingSend.content">恢复原文安全重试</button><button type="button" @click="discardPending">放弃确认</button></p><textarea v-model="draft" maxlength="4000" placeholder="输入消息…" @keydown.enter.exact="onEnter"></textarea><div><span>Enter 发送 · Shift + Enter 换行</span><button class="primary" :disabled="!draft.trim() || sending">{{ sending ? '发送中…' : '发送 ↗' }}</button></div></form>
         </template>
-        <div v-else class="welcome"><span class="brand-mark">✦</span><h2>开启一段新对话</h2><p>与同伴即时沟通，让想法流动起来。</p><button class="primary" @click="showCreate = true">发起聊天</button></div>
+        <div v-else class="welcome"><span class="brand-mark">✦</span><h2>开启一段新对话</h2><p>与同伴即时沟通，让想法流动起来。</p><div class="welcome-actions"><button class="primary" @click="openCreate('direct')">发起私聊</button><button class="outline-button" @click="openCreate('group')">创建群聊</button></div></div>
       </main>
-      <div v-if="showCreate" class="modal-backdrop" @click.self="showCreate = false"><div class="modal"><div class="modal-head"><h2>发起聊天</h2><button @click="showCreate = false">×</button></div><p class="subtle">选择一位成员开始私聊，或邀请多人创建群聊。含自己最多 1000 人，已选择 {{ selectedUsers.length }} 位。</p><div class="user-list"><label v-for="person in users" :key="person.id"><input v-model="selectedUsers" type="checkbox" :value="person.id" :disabled="selectedUsers.length >= 999 && !selectedUsers.includes(person.id)" /><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>{{ person.email }}</small></span></label><p v-if="!users.length">暂无其他用户，邀请朋友注册后再试。</p></div><input v-if="selectedUsers.length > 1" v-model="groupName" maxlength="100" placeholder="群聊名称" /><button class="primary" :disabled="!selectedUsers.length || selectedUsers.length > 999 || (selectedUsers.length > 1 && !groupName.trim())" @click="create(selectedUsers.length === 1 ? 'direct' : 'group', selectedUsers)">创建会话</button></div></div>
+      <div v-if="showCreate" class="modal-backdrop" @click.self="showCreate = false">
+        <div class="modal">
+          <div class="modal-head"><h2>{{ createMode === 'group' ? '创建群聊' : '发起私聊' }}</h2><button @click="showCreate = false">×</button></div>
+          <div class="modal-tabs"><button :class="{ active: createMode === 'direct' }" @click="openCreate('direct')">私聊</button><button :class="{ active: createMode === 'group' }" @click="openCreate('group')">群聊</button></div>
+          <p class="subtle">{{ createMode === 'group' ? '创建后群内只有你自己，之后可在群内按需邀请其他用户。含自己最多 1000 人。' : '选择一位用户开始私聊。' }}</p>
+          <input v-if="createMode === 'group'" v-model="groupName" maxlength="100" placeholder="群聊名称" />
+          <div v-else class="user-list">
+            <label v-for="person in users" :key="person.id"><input :checked="selectedUsers.includes(person.id)" type="checkbox" @change="chooseCreateUser(person.id)" /><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>{{ person.email }}</small></span></label>
+            <p v-if="!users.length">暂无其他用户，邀请朋友注册后再试。</p>
+          </div>
+          <button class="primary" :disabled="conversationBusy || (createMode === 'direct' ? selectedUsers.length !== 1 : !groupName.trim())" @click="create(createMode, createMode === 'group' ? [] : selectedUsers)">{{ conversationBusy ? '处理中…' : createMode === 'group' ? '创建群聊' : '开始私聊' }}</button>
+        </div>
+      </div>
+      <div v-if="showInvite" class="modal-backdrop" @click.self="showInvite = false"><div class="modal"><div class="modal-head"><h2>邀请成员</h2><button @click="showInvite = false">×</button></div><p class="subtle">选择要加入“{{ current?.name }}”的用户，群聊最多容纳 1000 人，当前 {{ current?.members.length }} 人。</p><div class="user-list"><label v-for="person in inviteCandidates" :key="person.id"><input v-model="inviteUsers" type="checkbox" :value="person.id" :disabled="(current?.members.length || 0) + inviteUsers.length >= 1000 && !inviteUsers.includes(person.id)" /><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>{{ person.email }}</small></span></label><p v-if="!inviteCandidates.length">暂无可邀请的用户。</p></div><button class="primary" :disabled="conversationBusy || !inviteUsers.length || (current?.members.length || 0) + inviteUsers.length > 1000" @click="addMembers">{{ conversationBusy ? '邀请中…' : '邀请加入群聊' }}</button></div></div>
     </div>
     <div v-if="error" class="toast" role="alert">{{ error }}</div>
   `,

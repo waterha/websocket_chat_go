@@ -255,3 +255,63 @@ func TestMessagingPersistenceOrderingAndCursors(t *testing.T) {
 		t.Fatal("migration not repeatable", err)
 	}
 }
+
+func TestGroupCreationAndMemberInvites(t *testing.T) {
+	services := fixture(t, false)
+	ctx := t.Context()
+	alice, _ := account(t, services, "alice")
+	bob, _ := account(t, services, "bob")
+	charlie, _ := account(t, services, "charlie")
+
+	group, err := services.Chat.Create(ctx, alice.ID, model.CreateInput{Kind: "group", Name: "solo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := services.Chat.Conversations(ctx, alice.ID)
+	if err != nil || len(items) != 1 || len(items[0].Members) != 1 || items[0].Members[0].ID != alice.ID {
+		t.Fatalf("expected creator-only group: %+v %v", items, err)
+	}
+	beforeInvite, _, err := services.Chat.Send(ctx, alice.ID, model.SendInput{ConversationID: group, ClientMsgID: "before-invite", Content: "solo history"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status(t, services.Chat.AddMembers(ctx, bob.ID, group, model.AddMembersInput{MemberIDs: []string{charlie.ID}}), 404)
+	status(t, services.Chat.AddMembers(ctx, alice.ID, "missing", model.AddMembersInput{MemberIDs: []string{bob.ID}}), 404)
+	status(t, services.Chat.AddMembers(ctx, alice.ID, group, model.AddMembersInput{}), 400)
+	status(t, services.Chat.AddMembers(ctx, alice.ID, group, model.AddMembersInput{MemberIDs: []string{""}}), 400)
+	status(t, services.Chat.AddMembers(ctx, alice.ID, group, model.AddMembersInput{MemberIDs: []string{bob.ID, "missing"}}), 400)
+	var total int
+	if err = services.Store.DB.QueryRow(ctx, "SELECT count(*) FROM conversation_members WHERE conversation_id=$1", group).Scan(&total); err != nil || total != 1 {
+		t.Fatalf("failed invitation changed membership: %d %v", total, err)
+	}
+	if err = services.Chat.AddMembers(ctx, alice.ID, group, model.AddMembersInput{MemberIDs: []string{bob.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	if err = services.Chat.AddMembers(ctx, bob.ID, group, model.AddMembersInput{MemberIDs: []string{charlie.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	items, err = services.Chat.Conversations(ctx, alice.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Kind != "group" || len(items[0].Members) != 3 {
+		t.Fatalf("unexpected group membership: %+v", items)
+	}
+	if err = services.Chat.AddMembers(ctx, alice.ID, group, model.AddMembersInput{MemberIDs: []string{bob.ID}}); err != nil {
+		t.Fatal(err)
+	}
+	status(t, services.Chat.AddMembers(ctx, alice.ID, group, model.AddMembersInput{MemberIDs: []string{alice.ID, alice.ID}}), 400)
+	page, err := services.Chat.Sync(ctx, bob.ID, group, 0, 100)
+	if err != nil || len(page.Messages) != 1 || page.Messages[0].ID != beforeInvite.ID {
+		t.Fatalf("invited member cannot sync group history: %+v %v", page, err)
+	}
+	afterInvite, _, err := services.Chat.Send(ctx, bob.ID, model.SendInput{ConversationID: group, ClientMsgID: "after-invite", Content: "joined"})
+	if err != nil || afterInvite.Seq != 2 {
+		t.Fatalf("invited member cannot send in sequence: %+v %v", afterInvite, err)
+	}
+	direct, err := services.Chat.Create(ctx, alice.ID, model.CreateInput{Kind: "direct", MemberIDs: []string{bob.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status(t, services.Chat.AddMembers(ctx, alice.ID, direct, model.AddMembersInput{MemberIDs: []string{charlie.ID}}), 400)
+}

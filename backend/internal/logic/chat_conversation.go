@@ -44,7 +44,7 @@ func (chat *Chat) Conversations(ctx context.Context, userID string) ([]model.Con
 
 func (chat *Chat) Create(ctx context.Context, userID string, input model.CreateInput) (string, error) {
 	input.Name = strings.TrimSpace(input.Name)
-	if (input.Kind != "direct" && input.Kind != "group") || (input.Kind == "direct" && len(input.MemberIDs) != 1) || (input.Kind == "group" && (len(input.MemberIDs) < 1 || len(input.MemberIDs) >= MaxGroupMembers || len([]rune(input.Name)) < 1 || len([]rune(input.Name)) > 100)) {
+	if (input.Kind != "direct" && input.Kind != "group") || (input.Kind == "direct" && len(input.MemberIDs) != 1) || (input.Kind == "group" && (len(input.MemberIDs) >= MaxGroupMembers || len([]rune(input.Name)) < 1 || len([]rune(input.Name)) > 100)) {
 		return "", model.Fail(400, "invalid_conversation")
 	}
 	ids := append([]string{userID}, input.MemberIDs...)
@@ -93,4 +93,58 @@ func (chat *Chat) Create(ctx context.Context, userID string, input model.CreateI
 		return "", err
 	}
 	return conversationID, tx.Commit(ctx)
+}
+
+func (chat *Chat) AddMembers(ctx context.Context, userID, conversationID string, input model.AddMembersInput) error {
+	if len(input.MemberIDs) < 1 || len(input.MemberIDs) >= MaxGroupMembers {
+		return model.Fail(400, "invalid_members")
+	}
+	ids := append([]string(nil), input.MemberIDs...)
+	slices.Sort(ids)
+	for index, memberID := range ids {
+		if memberID == "" || index > 0 && memberID == ids[index-1] {
+			return model.Fail(400, "invalid_members")
+		}
+	}
+	tx, err := chat.Store.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	var kind string
+	if err = tx.QueryRow(ctx, `SELECT c.kind FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id WHERE c.id=$1 AND cm.user_id=$2 FOR UPDATE OF c`, conversationID, userID).Scan(&kind); errors.Is(err, pgx.ErrNoRows) {
+		return model.Fail(404, "not_found")
+	} else if err != nil {
+		return err
+	}
+	if kind != "group" {
+		return model.Fail(400, "invalid_conversation")
+	}
+	var count int
+	if err = tx.QueryRow(ctx, "SELECT count(*) FROM users WHERE id=ANY($1)", ids).Scan(&count); err != nil {
+		return err
+	}
+	if count != len(ids) {
+		return model.Fail(400, "invalid_members")
+	}
+	var existing int
+	if err = tx.QueryRow(ctx, "SELECT count(*) FROM conversation_members WHERE conversation_id=$1 AND user_id=ANY($2)", conversationID, ids).Scan(&existing); err != nil {
+		return err
+	}
+	var total int
+	if err = tx.QueryRow(ctx, "SELECT count(*) FROM conversation_members WHERE conversation_id=$1", conversationID).Scan(&total); err != nil {
+		return err
+	}
+	if total+len(ids)-existing > MaxGroupMembers {
+		return model.Fail(400, "invalid_members")
+	}
+	if _, err = tx.Exec(ctx, "INSERT INTO conversation_members(conversation_id,user_id) SELECT $1,unnest($2::text[]) ON CONFLICT DO NOTHING", conversationID, ids); err != nil {
+		return err
+	}
+	if len(ids) != existing {
+		if err = chat.appendEvent(ctx, tx, conversationID, model.Event{Event: "conversation.created", Data: map[string]string{"id": conversationID}}); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
