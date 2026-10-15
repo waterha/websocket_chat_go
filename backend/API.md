@@ -10,7 +10,7 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | GET | `/me` | 当前用户 |
 | GET | `/users` | 用户列表（当前最多 1000 条） |
 | GET | `/conversations` | 当前用户的会话、成员与已读游标 |
-| POST | `/conversations` | `{"kind":"direct","member_ids":["另一用户ID"]}`；群聊用 `group`、`name` 和可选的最多 999 个其他成员，创建者可以先单独建群，含创建者最多 1000 人 |
+| POST | `/conversations` | 私聊由联系人点击时用 `{"kind":"direct","member_ids":["另一用户ID"]}` 自动获取或创建唯一会话；群聊用 `group`、`name` 和可选的最多 999 个其他成员，创建者可以先单独建群，含创建者最多 1000 人 |
 | POST | `/conversations/{id}/members` | 群成员邀请用户：`{"member_ids":["用户ID"]}`；重复成员幂等，含现有成员最多 1000 人 |
 | POST | `/conversations/{id}/messages` | `{"client_msg_id":"客户端稳定ID","content":"你好"}`；新消息 201，幂等重复 200 |
 | GET | `/conversations/{id}/messages?before_seq=100&limit=30` | 从 `before_seq` 之前倒序取页，返回按 `seq` 正序；默认最新 30，最多 100 |
