@@ -18,6 +18,21 @@ Go + PostgreSQL + Redis + Vue 的开源即时通讯项目。当前版本聚焦**
 
 需要 Go 1.26、Node.js 22+、PostgreSQL 17 和 Redis 7。可以使用 Docker Compose 启动依赖：
 
+Windows 本机也可以使用一键启动脚本（默认识别当前项目使用的便携版 PostgreSQL 和 Redis）：
+
+```powershell
+Set-Location C:\Sofware\Go_proj\websocket_chat_go
+.\scripts\start.ps1
+```
+
+脚本会自动跳过已经运行的服务，并在新窗口启动后端和前端。若 PowerShell 禁止执行脚本，可使用：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start.ps1
+```
+
+如 PostgreSQL 或 Redis 安装在其他位置，可在启动前设置 `IM_POSTGRES_BIN`、`IM_POSTGRES_DATA`、`IM_REDIS_DIR`。
+
 ```powershell
 Copy-Item .env.example .env
 # 修改 .env 内 POSTGRES_PASSWORD
