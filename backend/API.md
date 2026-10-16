@@ -9,6 +9,8 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | POST | `/auth/logout` | 当前会话注销并断开其 WebSocket |
 | GET | `/me` | 当前用户 |
 | GET | `/users` | 用户列表（当前最多 1000 条） |
+| GET | `/friends` | 当前用户已添加的好友 |
+| POST | `/friends` | 添加好友：`{"user_id":"用户ID"}`；重复添加幂等 |
 | GET | `/conversations` | 当前用户的会话、成员与已读游标 |
 | POST | `/conversations` | 私聊由联系人点击时用 `{"kind":"direct","member_ids":["另一用户ID"]}` 自动获取或创建唯一会话；群聊用 `group`、`name` 和可选的最多 999 个其他成员，创建者可以先单独建群，含创建者最多 1000 人 |
 | POST | `/conversations/{id}/members` | 群成员邀请用户：`{"member_ids":["用户ID"]}`；重复成员幂等，含现有成员最多 1000 人；新成员加入时按人写入一条可漫游的群聊系统消息 |

@@ -25,3 +25,24 @@ func (server *Server) users(writer http.ResponseWriter, request *http.Request, c
 	}
 	respond(writer, 200, users)
 }
+
+func (server *Server) friends(writer http.ResponseWriter, request *http.Request, caller identity) {
+	friends, err := server.Services.Auth.Friends(request.Context(), caller.account.ID)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, friends)
+}
+
+func (server *Server) addFriend(writer http.ResponseWriter, request *http.Request, caller identity) {
+	var input model.AddFriendInput
+	if !decode(writer, request, &input) {
+		return
+	}
+	if err := server.Services.Auth.AddFriend(request.Context(), caller.account.ID, input); err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, map[string]string{"user_id": input.UserID})
+}
