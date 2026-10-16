@@ -56,13 +56,30 @@ createApp({
     let disposed = false
 
     const current = computed(() => conversations.value.find(item => item.id === active.value))
+    const latestMessage = item => item && cache.get(item.id)?.at(-1)
+    const latestTime = item => Date.parse(latestMessage(item)?.created_at || '') || 0
+    const sortByLatestTime = items => items.sort((left, right) => {
+      const difference = latestTime(right) - latestTime(left)
+      if (difference) return difference
+      return (left.name || '').localeCompare(right.name || '', 'zh-CN')
+    })
+    const directConversation = userID => conversations.value.find(item => item.kind === 'direct' && item.members.some(member => member.id === userID))
     const recentConversations = computed(() => {
       cacheVersion.value
-      return conversations.value
-        .filter(item => cache.get(item.id)?.length)
-        .sort((left, right) => (cache.get(right.id)?.at(-1)?.seq || 0) - (cache.get(left.id)?.at(-1)?.seq || 0))
+      return sortByLatestTime(conversations.value.filter(item => latestMessage(item)))
     })
-    const groupConversations = computed(() => conversations.value.filter(item => item.kind === 'group'))
+    const groupConversations = computed(() => {
+      cacheVersion.value
+      return sortByLatestTime(conversations.value.filter(item => item.kind === 'group'))
+    })
+    const sortedFriends = computed(() => {
+      cacheVersion.value
+      return [...friends.value].sort((left, right) => {
+        const difference = latestTime(directConversation(right.id)) - latestTime(directConversation(left.id))
+        if (difference) return difference
+        return left.name.localeCompare(right.name, 'zh-CN')
+      })
+    })
     const friendCandidates = computed(() => {
       const friendIDs = new Set(friends.value.map(friend => friend.id))
       const query = friendQuery.value.trim().toLowerCase()
@@ -81,9 +98,7 @@ createApp({
       : item.name
     const sender = id => current.value?.members.find(member => member.id === id)?.name || '成员'
     const time = value => new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    const latestMessage = item => cache.get(item.id)?.at(-1)
     const preview = item => latestMessage(item)?.content || '暂无消息'
-    const directConversation = userID => conversations.value.find(item => item.kind === 'direct' && item.members.some(member => member.id === userID))
     const contactPreview = person => { const conversation = directConversation(person.id); return conversation ? preview(conversation) : '暂无消息' }
     const unreadLabel = id => { const count = unreadCounts.value[id] || 0; return count > 99 ? '99+' : String(count) }
     const hasUnread = id => (unreadCounts.value[id] || 0) > 0
@@ -375,7 +390,7 @@ createApp({
       window.addEventListener('focus', onVisible)
     })
     onUnmounted(() => { disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, profileEditing, profileBusy, profileName, profileEmail, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openProfile, updateProfile, openDirect, openInvite, addFriend, addMembers, createGroup, select, send, loadOlder, onEnter }
+    return { me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, profileEditing, profileBusy, profileName, profileEmail, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openProfile, updateProfile, openDirect, openInvite, addFriend, addMembers, createGroup, select, send, loadOlder, onEnter }
   },
   template: `
     <div v-if="!me" class="auth-layout">
@@ -398,7 +413,7 @@ createApp({
           <div class="conversation-tabs"><button :class="{ active: conversationFilter === 'current' }" @click="conversationFilter = 'current'">当前</button><button :class="{ active: conversationFilter === 'friends' }" @click="conversationFilter = 'friends'">好友</button><button :class="{ active: conversationFilter === 'group' }" @click="conversationFilter = 'group'">群聊</button></div>
           <div class="conversation-list">
             <template v-if="conversationFilter === 'friends'">
-              <button v-for="person in friends" :key="person.id" class="conversation contact" @click="openDirect(person.id)">
+              <button v-for="person in sortedFriends" :key="person.id" class="conversation contact" @click="openDirect(person.id)">
                 <span class="avatar">{{ person.name.slice(0, 1) }}</span><span class="conversation-text"><strong>{{ person.name }}</strong><small>{{ contactPreview(person) }}</small></span><span v-if="directConversation(person.id) && hasUnread(directConversation(person.id).id)" class="unread-badge">{{ unreadLabel(directConversation(person.id).id) }}</span>
               </button>
             </template>
