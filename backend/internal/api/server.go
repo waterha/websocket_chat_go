@@ -19,6 +19,7 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/register", server.register)
 	mux.HandleFunc("POST /api/v1/auth/login", server.login)
 	mux.HandleFunc("POST /api/v1/auth/logout", server.auth(server.logout))
+	mux.HandleFunc("PATCH /api/v1/me", server.auth(server.updateMe))
 	mux.HandleFunc("GET /api/v1/me", server.auth(func(writer http.ResponseWriter, request *http.Request, caller identity) {
 		respond(writer, 200, caller.account)
 	}))

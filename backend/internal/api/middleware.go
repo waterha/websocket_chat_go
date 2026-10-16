@@ -19,7 +19,7 @@ func (server *Server) cors(next http.Handler) http.Handler {
 			writer.Header().Set("Access-Control-Allow-Origin", origin)
 			writer.Header().Set("Access-Control-Allow-Credentials", "true")
 			writer.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-			writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, OPTIONS")
 		}
 		if request.Method == "OPTIONS" {
 			writer.WriteHeader(http.StatusNoContent)

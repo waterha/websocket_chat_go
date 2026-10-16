@@ -27,6 +27,10 @@ createApp({
     const showInvite = ref(false)
     const showSettings = ref(false)
     const showProfile = ref(false)
+    const profileEditing = ref(false)
+    const profileBusy = ref(false)
+    const profileName = ref('')
+    const profileEmail = ref('')
     const conversationBusy = ref(false)
     const friendBusy = ref(false)
     const connected = ref(false)
@@ -247,7 +251,21 @@ createApp({
     }
     function openProfile() {
       showSettings.value = false
+      profileName.value = me.value?.name || ''
+      profileEmail.value = me.value?.email || ''
+      profileEditing.value = false
       showProfile.value = true
+    }
+    async function updateProfile() {
+      if (profileBusy.value) return
+      profileBusy.value = true
+      try {
+        const account = await api('/me', { method: 'PATCH', body: JSON.stringify({ email: profileEmail.value, name: profileName.value }) })
+        me.value = account
+        profileEditing.value = false
+        await refresh()
+      } catch (cause) { showError(cause) }
+      finally { profileBusy.value = false }
     }
     async function addFriend(userID) {
       if (friendBusy.value) return
@@ -357,7 +375,7 @@ createApp({
       window.addEventListener('focus', onVisible)
     })
     onUnmounted(() => { disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openProfile, openDirect, openInvite, addFriend, addMembers, createGroup, select, send, loadOlder, onEnter }
+    return { me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, profileEditing, profileBusy, profileName, profileEmail, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openProfile, updateProfile, openDirect, openInvite, addFriend, addMembers, createGroup, select, send, loadOlder, onEnter }
   },
   template: `
     <div v-if="!me" class="auth-layout">
@@ -426,7 +444,7 @@ createApp({
        </div>
       <div v-if="showAddUser" class="modal-backdrop" @click.self="showAddUser = false"><div class="modal"><div class="modal-head"><h2>添加用户</h2><button @click="showAddUser = false">×</button></div><p class="subtle">通过用户名或用户账号搜索，选择用户添加为好友。</p><input v-model="friendQuery" type="search" placeholder="搜索用户名或账号" aria-label="搜索用户名或账号" /><div class="user-list"><label v-for="person in friendCandidates" :key="person.id"><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>账号：{{ person.email }}</small></span><button type="button" class="small-button" :disabled="friendBusy" @click="addFriend(person.id)">{{ friendBusy ? '处理中…' : '添加' }}</button></label><p v-if="!friendCandidates.length">没有匹配的用户。</p></div></div></div>
       <div v-if="showInvite" class="modal-backdrop" @click.self="showInvite = false"><div class="modal"><div class="modal-head"><h2>邀请成员</h2><button @click="showInvite = false">×</button></div><p class="subtle">选择要加入“{{ current?.name }}”的用户，群聊最多容纳 1000 人，当前 {{ current?.members.length }} 人。</p><div class="user-list"><label v-for="person in inviteCandidates" :key="person.id"><input v-model="inviteUsers" type="checkbox" :value="person.id" :disabled="(current?.members.length || 0) + inviteUsers.length >= 1000 && !inviteUsers.includes(person.id)" /><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>{{ person.email }}</small></span></label><p v-if="!inviteCandidates.length">暂无可邀请的用户。</p></div><button class="primary" :disabled="conversationBusy || !inviteUsers.length || (current?.members.length || 0) + inviteUsers.length > 1000" @click="addMembers">{{ conversationBusy ? '邀请中…' : '邀请加入群聊' }}</button></div></div>
-      <div v-if="showProfile" class="modal-backdrop" @click.self="showProfile = false"><div class="modal profile-modal" role="dialog" aria-modal="true" aria-label="个人信息"><div class="modal-head"><h2>个人信息</h2><button @click="showProfile = false" aria-label="关闭">×</button></div><div class="profile-header"><span class="avatar profile-avatar self">{{ me.name.slice(0,1) }}</span><div><h3>{{ me.name }}</h3><p class="subtle">个人资料</p></div></div><dl class="profile-details"><div><dt>用户名</dt><dd>{{ me.name }}</dd></div><div><dt>用户账号</dt><dd>{{ me.email }}</dd></div><div><dt>用户 ID</dt><dd>{{ me.id }}</dd></div></dl></div></div>
+      <div v-if="showProfile" class="modal-backdrop" @click.self="showProfile = false"><div class="modal profile-modal" role="dialog" aria-modal="true" aria-label="个人信息"><div class="modal-head"><h2>个人信息</h2><button @click="showProfile = false" aria-label="关闭">×</button></div><div class="profile-header"><span class="avatar profile-avatar self">{{ (profileEditing ? profileName : me.name).slice(0,1) }}</span><div><h3>{{ me.name }}</h3><p class="subtle">个人资料</p></div></div><template v-if="profileEditing"><div class="profile-form"><label>用户名<input v-model="profileName" maxlength="64" autocomplete="name" /></label><label>用户账号<input v-model="profileEmail" type="email" maxlength="254" autocomplete="email" /></label></div><div class="profile-actions"><button class="outline-button" type="button" :disabled="profileBusy" @click="profileEditing = false">取消</button><button class="primary" type="button" :disabled="profileBusy || !profileName.trim() || !profileEmail.trim()" @click="updateProfile">{{ profileBusy ? "保存中…" : "保存修改" }}</button></div></template><template v-else><dl class="profile-details"><div><dt>用户名</dt><dd>{{ me.name }}</dd></div><div><dt>用户账号</dt><dd>{{ me.email }}</dd></div><div><dt>用户 ID</dt><dd>{{ me.id }}</dd></div></dl><button class="primary profile-edit-button" type="button" @click="profileEditing = true">编辑个人信息</button></template></div></div>
     </div>
     <div v-if="error" class="toast" role="alert">{{ error }}</div>
   `,

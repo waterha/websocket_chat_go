@@ -46,3 +46,16 @@ func (server *Server) addFriend(writer http.ResponseWriter, request *http.Reques
 	}
 	respond(writer, 200, map[string]string{"user_id": input.UserID})
 }
+
+func (server *Server) updateMe(writer http.ResponseWriter, request *http.Request, caller identity) {
+	var input model.ProfileInput
+	if !decode(writer, request, &input) {
+		return
+	}
+	account, err := server.Services.Auth.UpdateProfile(request.Context(), caller.account.ID, input)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, account)
+}

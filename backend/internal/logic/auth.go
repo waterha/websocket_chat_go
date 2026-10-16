@@ -77,6 +77,25 @@ func (auth *Auth) Authenticate(ctx context.Context, sessionHash string) (model.U
 	return account, err
 }
 
+func (auth *Auth) UpdateProfile(ctx context.Context, userID string, input model.ProfileInput) (model.User, error) {
+	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
+	input.Name = strings.TrimSpace(input.Name)
+	address, err := mail.ParseAddress(input.Email)
+	if err != nil || address.Address != input.Email || len(input.Email) > 254 || len(input.Name) < 1 || len([]rune(input.Name)) > 64 {
+		return model.User{}, model.Fail(400, "invalid_profile")
+	}
+	var account model.User
+	err = auth.Store.DB.QueryRow(ctx, "UPDATE users SET email=$1,name=$2 WHERE id=$3 RETURNING id,email,name", input.Email, input.Name, userID).Scan(&account.ID, &account.Email, &account.Name)
+	if err != nil {
+		var databaseError *pgconn.PgError
+		if errors.As(err, &databaseError) && databaseError.Code == "23505" {
+			return model.User{}, model.Fail(409, "email_exists")
+		}
+		return model.User{}, err
+	}
+	return account, nil
+}
+
 func (auth *Auth) Logout(ctx context.Context, sessionHash string) error {
 	_, err := auth.Store.DB.Exec(ctx, "DELETE FROM sessions WHERE token_hash=$1", sessionHash)
 	return err

@@ -8,6 +8,7 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | POST | `/auth/login` | `{"email":"...","password":"..."}` |
 | POST | `/auth/logout` | 当前会话注销并断开其 WebSocket |
 | GET | `/me` | 当前用户 |
+| PATCH | `/me` | 修改当前用户的用户名和用户账号：`{"name":"新用户名","email":"new@example.com"}`；用户 ID 不变，账号重复返回 `email_exists` |
 | GET | `/users` | 用户列表（当前最多 1000 条） |
 | GET | `/friends` | 当前用户已添加的好友 |
 | POST | `/friends` | 添加好友：`{"user_id":"用户ID"}`；重复添加幂等 |
