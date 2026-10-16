@@ -319,7 +319,6 @@ createApp({
         showRequestComposer.value = false
         requestTarget.value = null
         requestMessage.value = ''
-        showAddUser.value = false
         await refresh()
       } catch (cause) { showError(cause) }
       finally { friendBusy.value = false }
