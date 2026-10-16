@@ -11,7 +11,10 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | PATCH | `/me` | 修改当前用户的用户名和用户账号：`{"name":"新用户名","email":"new@example.com"}`；用户 ID 不变，账号重复返回 `email_exists` |
 | GET | `/users` | 用户列表（当前最多 1000 条） |
 | GET | `/friends` | 当前用户已添加的好友 |
-| POST | `/friends` | 添加好友：`{"user_id":"用户ID"}`；重复添加幂等 |
+| POST | `/friends` | 发送好友申请：`{"user_id":"用户ID","message":"可选申请信息"}`；同一对用户的待处理申请重复提交返回原申请 |
+| GET | `/friends/requests` | 返回当前用户收到的待处理申请，以及自己发出的全部申请及状态 |
+| POST | `/friends/requests/{id}/accept` | 同意收到的好友申请，建立双向好友关系 |
+| POST | `/friends/requests/{id}/reject` | 拒绝收到的好友申请；发起方可在发出申请列表看到 `rejected` |
 | GET | `/conversations` | 当前用户的会话、成员与已读游标 |
 | POST | `/conversations` | 私聊由联系人点击时用 `{"kind":"direct","member_ids":["另一用户ID"]}` 自动获取或创建唯一会话；群聊用 `group`、`name` 和可选的最多 999 个其他成员，创建者可以先单独建群，含创建者最多 1000 人 |
 | POST | `/conversations/{id}/members` | 群成员邀请用户：`{"member_ids":["用户ID"]}`；重复成员幂等，含现有成员最多 1000 人；新成员加入时按人写入一条可漫游的群聊系统消息 |

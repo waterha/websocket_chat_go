@@ -7,7 +7,7 @@ import (
 func TestMigrationAdoptsLegacyDatabase(t *testing.T) {
 	services := fixture(t, false)
 	ctx := t.Context()
-	_, err := services.Store.DB.Exec(ctx, `DROP TABLE friendships,message_outbox,device_cursors,schema_migrations; ALTER TABLE messages DROP COLUMN kind; ALTER TABLE conversation_members DROP COLUMN read_at; ALTER TABLE conversation_members DROP CONSTRAINT read_cursor_nonnegative; DROP INDEX sessions_expiry_idx`)
+	_, err := services.Store.DB.Exec(ctx, `DROP TABLE friend_requests,friendships,message_outbox,device_cursors,schema_migrations; ALTER TABLE messages DROP COLUMN kind; ALTER TABLE conversation_members DROP COLUMN read_at; ALTER TABLE conversation_members DROP CONSTRAINT read_cursor_nonnegative; DROP INDEX sessions_expiry_idx`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -19,7 +19,7 @@ func TestMigrationAdoptsLegacyDatabase(t *testing.T) {
 	if err := services.Store.DB.QueryRow(ctx, "SELECT count(*) FROM users").Scan(&count); err != nil || count != 1 {
 		t.Fatal("legacy data lost", err)
 	}
-	if err := services.Store.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 4 {
+	if err := services.Store.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 5 {
 		t.Fatal("bad migration versions", err)
 	}
 }

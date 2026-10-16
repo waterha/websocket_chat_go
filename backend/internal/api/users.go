@@ -40,11 +40,36 @@ func (server *Server) addFriend(writer http.ResponseWriter, request *http.Reques
 	if !decode(writer, request, &input) {
 		return
 	}
-	if err := server.Services.Auth.AddFriend(request.Context(), caller.account.ID, input); err != nil {
+	friendRequest, err := server.Services.Auth.CreateFriendRequest(request.Context(), caller.account.ID, input)
+	if err != nil {
 		fail(writer, err)
 		return
 	}
-	respond(writer, 200, map[string]string{"user_id": input.UserID})
+	respond(writer, 201, friendRequest)
+}
+
+func (server *Server) friendRequests(writer http.ResponseWriter, request *http.Request, caller identity) {
+	requests, err := server.Services.Auth.FriendRequests(request.Context(), caller.account.ID)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, requests)
+}
+
+func (server *Server) decideFriendRequest(writer http.ResponseWriter, request *http.Request, caller identity) {
+	status := request.PathValue("action")
+	if status == "accept" {
+		status = "accepted"
+	} else if status == "reject" {
+		status = "rejected"
+	}
+	friendRequest, err := server.Services.Auth.DecideFriendRequest(request.Context(), caller.account.ID, request.PathValue("id"), status)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, friendRequest)
 }
 
 func (server *Server) updateMe(writer http.ResponseWriter, request *http.Request, caller identity) {

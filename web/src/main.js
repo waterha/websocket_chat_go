@@ -27,6 +27,10 @@ createApp({
     const showInvite = ref(false)
     const showSettings = ref(false)
     const showProfile = ref(false)
+    const showFriendRequests = ref(false)
+    const friendRequests = ref({ incoming: [], outgoing: [] })
+    const friendRequestBusy = ref(false)
+    const requestMessage = ref('')
     const profileEditing = ref(false)
     const profileBusy = ref(false)
     const profileName = ref('')
@@ -72,6 +76,9 @@ createApp({
       cacheVersion.value
       return sortByLatestTime(conversations.value.filter(item => item.kind === 'group'))
     })
+    const pendingIncomingRequests = computed(() => friendRequests.value.incoming.filter(item => item.status === 'pending'))
+    const friendRequestFor = userID => friendRequests.value.outgoing.find(item => item.recipient_id === userID && item.status === 'pending')
+    const friendRequestStatus = status => ({ pending: '等待对方处理', accepted: '已同意', rejected: '已拒绝' }[status] || status)
     const sortedFriends = computed(() => {
       cacheVersion.value
       return [...friends.value].sort((left, right) => {
@@ -127,11 +134,12 @@ createApp({
       if (refreshTask) return refreshTask
       const version = epoch
       const task = (async () => {
-        const [list, people, friendList] = await Promise.all([api('/conversations'), api('/users'), api('/friends')])
+        const [list, people, friendList, requestList] = await Promise.all([api('/conversations'), api('/users'), api('/friends'), api('/friends/requests')])
         if (version !== epoch || !me.value) return
         conversations.value = list
         users.value = people
         friends.value = friendList
+        friendRequests.value = requestList
         if (!active.value && list.length) active.value = list[0].id
         if (active.value && !list.some(item => item.id === active.value)) active.value = null
         for (const item of list) {
@@ -253,7 +261,7 @@ createApp({
       clearTimeout(reconnectTimer); requests?.close(); socket?.close(); socket = null
       cache.clear(); syncing.clear(); refreshTask = null; pendingStore = null; pendingSend.value = null; unreadCounts.value = {}
       active.value = null; messages.value = []; conversations.value = []; users.value = []; friends.value = []; draft.value = ''
-      showCreate.value = false; showAddUser.value = false; showInvite.value = false; showSettings.value = false; showProfile.value = false; conversationFilter.value = 'current'
+      showCreate.value = false; showAddUser.value = false; showInvite.value = false; showSettings.value = false; showProfile.value = false; showFriendRequests.value = false; friendRequests.value = { incoming: [], outgoing: [] }; conversationFilter.value = 'current'
       try { await api('/auth/logout', { method: 'POST' }) } catch (cause) { showError(cause) }
     }
     function openCreate() {
@@ -262,7 +270,15 @@ createApp({
     }
     function openAddUser() {
       friendQuery.value = ''
+      requestMessage.value = ''
       showAddUser.value = true
+    }
+    async function openFriendRequests() {
+      showFriendRequests.value = true
+      try { await loadFriendRequests() } catch (cause) { showError(cause) }
+    }
+    async function loadFriendRequests() {
+      friendRequests.value = await api('/friends/requests')
     }
     function openProfile() {
       showSettings.value = false
@@ -283,14 +299,23 @@ createApp({
       finally { profileBusy.value = false }
     }
     async function addFriend(userID) {
-      if (friendBusy.value) return
+      if (friendBusy.value || friendRequestFor(userID)) return
       friendBusy.value = true
       try {
-        await api('/friends', { method: 'POST', body: JSON.stringify({ user_id: userID }) })
-        showAddUser.value = false
+        await api('/friends', { method: 'POST', body: JSON.stringify({ user_id: userID, message: requestMessage.value }) })
+        requestMessage.value = ''
         await refresh()
       } catch (cause) { showError(cause) }
       finally { friendBusy.value = false }
+    }
+    async function decideFriendRequest(requestID, action) {
+      if (friendRequestBusy.value) return
+      friendRequestBusy.value = true
+      try {
+        await api(`/friends/requests/${requestID}/${action}`, { method: 'POST' })
+        await refresh()
+      } catch (cause) { showError(cause) }
+      finally { friendRequestBusy.value = false }
     }
     async function openDirect(userID) {
       if (conversationBusy.value || !userID || userID === me.value?.id) return
@@ -383,14 +408,14 @@ createApp({
         try {
           refreshTicks++
           if (refreshTicks % 12 === 0) await refresh()
-          else await reconcile()
+          else { await reconcile(); await loadFriendRequests() }
         } catch (cause) { showError(cause) }
       }, 5000)
       document.addEventListener('visibilitychange', onVisible)
       window.addEventListener('focus', onVisible)
     })
     onUnmounted(() => { disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, profileEditing, profileBusy, profileName, profileEmail, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openProfile, updateProfile, openDirect, openInvite, addFriend, addMembers, createGroup, select, send, loadOlder, onEnter }
+    return { me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, friendRequests, pendingIncomingRequests, friendRequestBusy, requestMessage, profileEditing, profileBusy, profileName, profileEmail, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter }
   },
   template: `
     <div v-if="!me" class="auth-layout">
@@ -409,7 +434,7 @@ createApp({
     <div v-else class="layout">
       <aside class="sidebar">
         <header class="sidebar-head"><span class="brand-mark small">✦</span><div><strong>websocket_chat_go</strong><small>让团队更靠近</small></div></header>
-          <div class="side-title"><span>{{ conversationFilter === 'current' ? '当前会话' : conversationFilter === 'friends' ? '好友' : '群聊' }}</span><div class="side-actions"><button @click="openAddUser" title="添加用户">添加</button><button @click="openCreate" title="创建群聊">建群</button></div></div>
+          <div class="side-title"><span>{{ conversationFilter === 'current' ? '当前会话' : conversationFilter === 'friends' ? '好友' : '群聊' }}</span><div class="side-actions"><button @click="openAddUser" title="添加用户">添加</button><button @click="openFriendRequests" title="好友申请">申请<span v-if="pendingIncomingRequests.length" class="request-count">{{ pendingIncomingRequests.length > 99 ? '99+' : pendingIncomingRequests.length }}</span></button><button @click="openCreate" title="创建群聊">建群</button></div></div>
           <div class="conversation-tabs"><button :class="{ active: conversationFilter === 'current' }" @click="conversationFilter = 'current'">当前</button><button :class="{ active: conversationFilter === 'friends' }" @click="conversationFilter = 'friends'">好友</button><button :class="{ active: conversationFilter === 'group' }" @click="conversationFilter = 'group'">群聊</button></div>
           <div class="conversation-list">
             <template v-if="conversationFilter === 'friends'">
@@ -457,8 +482,9 @@ createApp({
            <button class="primary" :disabled="conversationBusy || !groupName.trim()" @click="createGroup">{{ conversationBusy ? '处理中…' : '创建群聊' }}</button>
          </div>
        </div>
-      <div v-if="showAddUser" class="modal-backdrop" @click.self="showAddUser = false"><div class="modal"><div class="modal-head"><h2>添加用户</h2><button @click="showAddUser = false">×</button></div><p class="subtle">通过用户名或用户账号搜索，选择用户添加为好友。</p><input v-model="friendQuery" type="search" placeholder="搜索用户名或账号" aria-label="搜索用户名或账号" /><div class="user-list"><label v-for="person in friendCandidates" :key="person.id"><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>账号：{{ person.email }}</small></span><button type="button" class="small-button" :disabled="friendBusy" @click="addFriend(person.id)">{{ friendBusy ? '处理中…' : '添加' }}</button></label><p v-if="!friendCandidates.length">没有匹配的用户。</p></div></div></div>
-      <div v-if="showInvite" class="modal-backdrop" @click.self="showInvite = false"><div class="modal"><div class="modal-head"><h2>邀请成员</h2><button @click="showInvite = false">×</button></div><p class="subtle">选择要加入“{{ current?.name }}”的用户，群聊最多容纳 1000 人，当前 {{ current?.members.length }} 人。</p><div class="user-list"><label v-for="person in inviteCandidates" :key="person.id"><input v-model="inviteUsers" type="checkbox" :value="person.id" :disabled="(current?.members.length || 0) + inviteUsers.length >= 1000 && !inviteUsers.includes(person.id)" /><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>{{ person.email }}</small></span></label><p v-if="!inviteCandidates.length">暂无可邀请的用户。</p></div><button class="primary" :disabled="conversationBusy || !inviteUsers.length || (current?.members.length || 0) + inviteUsers.length > 1000" @click="addMembers">{{ conversationBusy ? '邀请中…' : '邀请加入群聊' }}</button></div></div>
+      <div v-if="showAddUser" class="modal-backdrop" @click.self="showAddUser = false"><div class="modal"><div class="modal-head"><h2>添加用户</h2><button @click="showAddUser = false">×</button></div><p class="subtle">通过用户名或用户账号搜索，填写可选申请信息后发送好友申请。</p><input v-model="friendQuery" type="search" placeholder="搜索用户名或账号" aria-label="搜索用户名或账号" /><textarea v-model="requestMessage" class="request-message" maxlength="500" placeholder="申请信息（可选）"></textarea><div class="user-list"><label v-for="person in friendCandidates" :key="person.id"><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>账号：{{ person.email }}</small></span><button type="button" class="small-button" :disabled="friendBusy || friendRequestFor(person.id)" @click="addFriend(person.id)">{{ friendRequestFor(person.id) ? '已发送申请' : friendBusy ? '处理中…' : '发送申请' }}</button></label><p v-if="!friendCandidates.length">没有匹配的用户。</p></div></div></div>
+<div v-if="showFriendRequests" class="modal-backdrop" @click.self="showFriendRequests = false"><div class="modal friend-requests-modal"><div class="modal-head"><h2>好友申请</h2><button @click="showFriendRequests = false">×</button></div><section><h3 class="request-section-title">收到的申请</h3><div class="request-list"><div v-for="item in friendRequests.incoming" :key="item.id" class="request-item"><div class="request-main"><strong>{{ item.requester.name }}</strong><small>{{ item.message || '请求添加你为好友' }}</small><time>{{ time(item.created_at) }}</time></div><div class="request-actions"><button class="small-button" :disabled="friendRequestBusy" @click="decideFriendRequest(item.id, 'accept')">同意</button><button class="small-button reject-button" :disabled="friendRequestBusy" @click="decideFriendRequest(item.id, 'reject')">拒绝</button></div></div><p v-if="!friendRequests.incoming.length" class="empty-request">暂无新的好友申请。</p></div></section><section><h3 class="request-section-title">发出的申请</h3><div class="request-list"><div v-for="item in friendRequests.outgoing" :key="item.id" class="request-item"><div class="request-main"><strong>{{ item.recipient.name }}</strong><small>{{ item.message || '未填写申请信息' }}</small><time>{{ time(item.updated_at) }}</time></div><span class="request-status" :class="'status-' + item.status">{{ friendRequestStatus(item.status) }}</span></div><p v-if="!friendRequests.outgoing.length" class="empty-request">暂无发出的申请。</p></div></section></div></div>
+            <div v-if="showInvite" class="modal-backdrop" @click.self="showInvite = false"><div class="modal"><div class="modal-head"><h2>邀请成员</h2><button @click="showInvite = false">×</button></div><p class="subtle">选择要加入“{{ current?.name }}”的用户，群聊最多容纳 1000 人，当前 {{ current?.members.length }} 人。</p><div class="user-list"><label v-for="person in inviteCandidates" :key="person.id"><input v-model="inviteUsers" type="checkbox" :value="person.id" :disabled="(current?.members.length || 0) + inviteUsers.length >= 1000 && !inviteUsers.includes(person.id)" /><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>{{ person.email }}</small></span></label><p v-if="!inviteCandidates.length">暂无可邀请的用户。</p></div><button class="primary" :disabled="conversationBusy || !inviteUsers.length || (current?.members.length || 0) + inviteUsers.length > 1000" @click="addMembers">{{ conversationBusy ? '邀请中…' : '邀请加入群聊' }}</button></div></div>
       <div v-if="showProfile" class="modal-backdrop" @click.self="showProfile = false"><div class="modal profile-modal" role="dialog" aria-modal="true" aria-label="个人信息"><div class="modal-head"><h2>个人信息</h2><button @click="showProfile = false" aria-label="关闭">×</button></div><div class="profile-header"><span class="avatar profile-avatar self">{{ (profileEditing ? profileName : me.name).slice(0,1) }}</span><div><h3>{{ me.name }}</h3><p class="subtle">个人资料</p></div></div><template v-if="profileEditing"><div class="profile-form"><label>用户名<input v-model="profileName" maxlength="64" autocomplete="name" /></label><label>用户账号<input v-model="profileEmail" type="email" maxlength="254" autocomplete="email" /></label></div><div class="profile-actions"><button class="outline-button" type="button" :disabled="profileBusy" @click="profileEditing = false">取消</button><button class="primary" type="button" :disabled="profileBusy || !profileName.trim() || !profileEmail.trim()" @click="updateProfile">{{ profileBusy ? "保存中…" : "保存修改" }}</button></div></template><template v-else><dl class="profile-details"><div><dt>用户名</dt><dd>{{ me.name }}</dd></div><div><dt>用户账号</dt><dd>{{ me.email }}</dd></div><div><dt>用户 ID</dt><dd>{{ me.id }}</dd></div></dl><button class="primary profile-edit-button" type="button" @click="profileEditing = true">编辑个人信息</button></template></div></div>
     </div>
     <div v-if="error" class="toast" role="alert">{{ error }}</div>

@@ -26,6 +26,8 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/users", server.auth(server.users))
 	mux.HandleFunc("GET /api/v1/friends", server.auth(server.friends))
 	mux.HandleFunc("POST /api/v1/friends", server.auth(server.addFriend))
+	mux.HandleFunc("GET /api/v1/friends/requests", server.auth(server.friendRequests))
+	mux.HandleFunc("POST /api/v1/friends/requests/{id}/{action}", server.auth(server.decideFriendRequest))
 	mux.HandleFunc("GET /api/v1/conversations", server.auth(server.conversations))
 	mux.HandleFunc("POST /api/v1/conversations", server.auth(server.create))
 	mux.HandleFunc("POST /api/v1/conversations/{id}/members", server.auth(server.addMembers))
