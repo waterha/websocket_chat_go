@@ -19,7 +19,7 @@ func TestMigrationAdoptsLegacyDatabase(t *testing.T) {
 	if err := services.Store.DB.QueryRow(ctx, "SELECT count(*) FROM users").Scan(&count); err != nil || count != 1 {
 		t.Fatal("legacy data lost", err)
 	}
-	if err := services.Store.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 5 {
+	if err := services.Store.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 6 {
 		t.Fatal("bad migration versions", err)
 	}
 }

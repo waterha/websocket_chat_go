@@ -56,7 +56,7 @@ npm run dev
 
 打开 `http://127.0.0.1:4173`。后端监听 `127.0.0.1:8080`，`GET /healthz` 检查依赖。服务在启动时读取根目录 `.env`，执行版本化迁移；已有最初版本的数据库也可升级。生产环境应由独立迁移任务执行 DDL，并关闭服务账号的 DDL 权限。
 
-接口示例见 [backend/API.md](backend/API.md)，运行和架构说明见 [backend/README.md](backend/README.md)，数据表见 [database/README.md](database/README.md)。
+接口示例见 [backend/API.md](backend/API.md)，运行和架构说明见 [backend/README.md](backend/README.md)，数据表见 [database/README.md](database/README.md)。历史消息存储的技术比较、保留 PostgreSQL 的依据及本轮索引优化验证见 [存储调研](docs/research/2026-10-18-message-history-storage.md)。
 
 ## 群消息防漏收
 
