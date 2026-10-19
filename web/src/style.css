@@ -80,5 +80,24 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
   .message-search-field { gap: 6px; padding: 0 8px; }
   .message-search-field input { font-size: 12px; }
   .search-result-meta { flex-wrap: wrap; gap: 4px 10px; }
+  .member-list { max-height: 40vh; }
 }
 .request-composer { width: min(420px, 100%); }.request-recipient { display: flex; align-items: center; gap: 10px; margin: 20px 0 4px; }.request-recipient div { display: grid; gap: 3px; }.request-recipient small { color: var(--muted); }
+
+.member-modal { width: min(420px, 100%); }
+.member-count-button { padding: 0; border: 0; color: var(--muted); background: none; font: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.member-count-button:hover { color: var(--accent-dark); }
+.member-total { margin-left: 8px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.member-search { display: flex; align-items: center; gap: 8px; margin: 16px 0 12px; padding: 0 10px; min-height: 38px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: #fffdf9; }
+.member-search:focus-within { border-color: var(--accent); }
+.member-search > svg { flex: none; }
+.member-search input { min-width: 0; padding: 8px 0; border: 0; border-radius: 0; background: transparent; font-size: 13px; }
+.member-search input:focus { box-shadow: none; }
+.member-list { display: grid; gap: 6px; max-height: min(46vh, 420px); overflow-y: auto; overscroll-behavior: contain; }
+.member-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; }
+.member-text { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.member-text strong { display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.member-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-weight: 400; }
+.member-self { flex: none; padding: 1px 6px; border-radius: 4px; color: var(--accent-dark); background: #f1e6da; font-size: 10px; font-weight: 800; }
+.empty-member { margin: 0; padding: 14px 10px; color: var(--muted); font-size: 13px; text-align: center; }
+.member-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
