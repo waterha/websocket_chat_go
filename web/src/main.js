@@ -2,6 +2,7 @@ import { createApp, ref, computed, watch, onMounted, onUnmounted, nextTick } fro
 import { Search, X, ArrowRight, RotateCw } from 'lucide-vue-next'
 import { highlightMatches } from './message-search.js'
 import { filterDirectory, friendSearchFields, conversationSearchFields } from './directory-search.js'
+import { toggleConversationSelection } from './conversation-selection.js'
 import { appendPage, PendingSends, Requests, SyncTasks } from './realtime.js'
 import { api } from './api.js'
 import './style.css'
@@ -19,6 +20,7 @@ createApp({
     const friends = ref([])
     const conversations = ref([])
     const active = ref(null)
+    const chatVisible = ref(false)
     const messages = ref([])
     const pendingSend = ref(null)
     const draft = ref('')
@@ -318,14 +320,20 @@ createApp({
       }
     }
     async function select(id) {
-      active.value = id
+      const selection = toggleConversationSelection(active.value, chatVisible.value, id)
+      active.value = selection.activeID
+      chatVisible.value = selection.chatVisible
+      if (!selection.chatVisible) {
+        closeSearch()
+        return
+      }
       markSeen(id, cache.get(id)?.at(-1)?.seq || 0)
       pendingSend.value = pendingStore?.get(id) || null
       visibleCount.value = 100
       showMessages(id)
       try {
         await syncConversation(id)
-        if (active.value === id) await scroll()
+        if (active.value === id && chatVisible.value) await scroll()
       } catch (cause) { showError(cause) }
     }
     const onVisible = () => { if (me.value) reconcile().catch(showError) }
