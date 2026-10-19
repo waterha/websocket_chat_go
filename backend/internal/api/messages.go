@@ -42,6 +42,32 @@ func (server *Server) history(writer http.ResponseWriter, request *http.Request,
 	respond(writer, 200, items)
 }
 
+func (server *Server) searchMessages(writer http.ResponseWriter, request *http.Request, caller identity) {
+	values := request.URL.Query()
+	before, limit := int64(math.MaxInt64), int64(30)
+	var err error
+	if values.Has("before_seq") {
+		before, err = strconv.ParseInt(values.Get("before_seq"), 10, 64)
+		if err != nil || before < 1 {
+			fail(writer, model.Fail(400, "invalid_cursor"))
+			return
+		}
+	}
+	if values.Has("limit") {
+		limit, err = strconv.ParseInt(values.Get("limit"), 10, 64)
+		if err != nil || limit < 1 || limit > 100 {
+			fail(writer, model.Fail(400, "invalid_limit"))
+			return
+		}
+	}
+	page, err := server.Services.Chat.SearchMessages(request.Context(), caller.account.ID, request.PathValue("id"), values.Get("q"), before, int(limit))
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, page)
+}
+
 func (server *Server) sync(writer http.ResponseWriter, request *http.Request, caller identity) {
 	after, err := integer(request, "after_seq", 0)
 	if err != nil {

@@ -32,6 +32,7 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/conversations", server.auth(server.create))
 	mux.HandleFunc("POST /api/v1/conversations/{id}/members", server.auth(server.addMembers))
 	mux.HandleFunc("GET /api/v1/conversations/{id}/messages", server.auth(server.history))
+	mux.HandleFunc("GET /api/v1/conversations/{id}/messages/search", server.auth(server.searchMessages))
 	mux.HandleFunc("GET /api/v1/conversations/{id}/messages/{seq}/delivery", server.auth(server.deliveryStatus))
 	mux.HandleFunc("GET /api/v1/conversations/{id}/sync", server.auth(server.sync))
 	mux.HandleFunc("POST /api/v1/conversations/{id}/messages", server.auth(server.send))

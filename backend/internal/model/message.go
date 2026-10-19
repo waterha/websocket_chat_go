@@ -15,6 +15,12 @@ type Message struct {
 	CreatedAt      time.Time `json:"created_at"`
 }
 
+type SearchPage struct {
+	Messages      []Message `json:"messages"`
+	HasMore       bool      `json:"has_more"`
+	NextBeforeSeq int64     `json:"next_before_seq"`
+}
+
 type SendInput struct {
 	ConversationID string `json:"conversation_id"`
 	ClientMsgID    string `json:"client_msg_id"`
