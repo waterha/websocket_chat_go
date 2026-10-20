@@ -23,6 +23,9 @@ type options struct {
 type credentials struct {
 	UserID string `json:"user_id"`
 	Token  string `json:"token"`
+	// CSRFToken must accompany every state-changing HTTP request; the seeded
+	// session stores the same value.
+	CSRFToken string `json:"csrf_token"`
 }
 
 type fixture struct {

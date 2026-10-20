@@ -53,5 +53,7 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
-      - run: node --test src/realtime.test.js
+      # Run every unit test file. Naming one file here previously let later
+      # suites go unverified in CI.
+      - run: node --test src/*.test.js
       - run: npm run build

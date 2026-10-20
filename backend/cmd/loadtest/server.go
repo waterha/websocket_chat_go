@@ -54,7 +54,14 @@ func serve(parent context.Context, settings options) error {
 	postgres.ConnConfig.RuntimeParams["search_path"] = schema
 	postgres.MaxConns = 16
 	data := fixture{URL: "http://" + settings.address, Origin: "http://im.load.test", AdminToken: model.NewID(), Accounts: make([]credentials, settings.members)}
-	services, err := svc.New(ctx, config.Config{Postgres: postgres, RedisAddr: redisAddress, Origin: data.Origin, MigrationsDir: settings.migrations, Heartbeat: 20 * time.Second, HeartbeatTimeout: 8 * time.Second})
+	// Media storage must be set because the service refuses an empty directory.
+	// A per-run directory keeps load-test uploads out of any real deployment.
+	mediaDirectory, err := os.MkdirTemp("", "im-loadtest-media-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(mediaDirectory)
+	services, err := svc.New(ctx, config.Config{Postgres: postgres, RedisAddr: redisAddress, Origin: data.Origin, MigrationsDir: settings.migrations, MediaDir: mediaDirectory, Heartbeat: 20 * time.Second, HeartbeatTimeout: 8 * time.Second})
 	if err != nil {
 		return err
 	}
@@ -63,10 +70,12 @@ func serve(parent context.Context, settings options) error {
 	users, sessions := make([][]any, settings.members), make([][]any, settings.members)
 	memberIDs := make([]string, settings.members-1)
 	for index := range data.Accounts {
-		account := credentials{UserID: model.NewID(), Token: model.NewID() + model.NewID()}
+		account := credentials{UserID: model.NewID(), Token: model.NewID() + model.NewID(), CSRFToken: model.NewID()}
 		data.Accounts[index] = account
 		users[index] = []any{account.UserID, fmt.Sprintf("load-%04d@example.test", index), fmt.Sprintf("load-%04d", index), "not-a-login-password"}
-		sessions[index] = []any{model.TokenHash(account.Token), account.UserID, time.Now().Add(time.Hour)}
+		// A session without a CSRF token is refused on every state-changing
+		// request, so the seeded session carries the token the client echoes.
+		sessions[index] = []any{model.TokenHash(account.Token), account.UserID, time.Now().Add(time.Hour), account.CSRFToken}
 		if index > 0 {
 			memberIDs[index-1] = account.UserID
 		}
@@ -74,7 +83,7 @@ func serve(parent context.Context, settings options) error {
 	if _, err = services.Store.DB.CopyFrom(ctx, pgx.Identifier{"users"}, []string{"id", "email", "name", "password_hash"}, pgx.CopyFromRows(users)); err != nil {
 		return err
 	}
-	if _, err = services.Store.DB.CopyFrom(ctx, pgx.Identifier{"sessions"}, []string{"token_hash", "user_id", "expires_at"}, pgx.CopyFromRows(sessions)); err != nil {
+	if _, err = services.Store.DB.CopyFrom(ctx, pgx.Identifier{"sessions"}, []string{"token_hash", "user_id", "expires_at", "csrf_token"}, pgx.CopyFromRows(sessions)); err != nil {
 		return err
 	}
 	data.Group, err = services.Chat.Create(ctx, data.Accounts[0].UserID, model.CreateInput{Kind: "group", Name: "isolated websocket load test", MemberIDs: memberIDs})

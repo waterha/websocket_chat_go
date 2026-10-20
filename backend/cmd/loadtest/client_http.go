@@ -23,6 +23,9 @@ func (peer *client) request(ctx context.Context, method, path string, input, res
 	request.Header.Set("Cookie", "session="+peer.account.Token)
 	request.Header.Set("Origin", peer.fixture.Origin)
 	request.Header.Set("Content-Type", "application/json")
+	// Safe methods ignore this header; setting it always keeps the helper simple
+	// and mirrors what the browser client does.
+	request.Header.Set("X-CSRF-Token", peer.account.CSRFToken)
 	started := time.Now()
 	response, err := peer.http.Do(request)
 	if err == nil {
