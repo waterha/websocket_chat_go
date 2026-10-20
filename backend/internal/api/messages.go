@@ -4,6 +4,7 @@ import (
 	"math"
 	"net/http"
 	"strconv"
+	"time"
 	"websocket_chat_go/backend/internal/model"
 )
 
@@ -40,6 +41,45 @@ func (server *Server) history(writer http.ResponseWriter, request *http.Request,
 		return
 	}
 	respond(writer, 200, items)
+}
+
+// searchAll searches every conversation the caller belongs to. Pagination uses a
+// (created_at, id) cursor because message seq is only contiguous per
+// conversation and therefore cannot order results across conversations.
+func (server *Server) searchAll(writer http.ResponseWriter, request *http.Request, caller identity) {
+	values := request.URL.Query()
+	limit := int64(20)
+	var err error
+	if values.Has("limit") {
+		limit, err = strconv.ParseInt(values.Get("limit"), 10, 64)
+		if err != nil || limit < 1 || limit > 50 {
+			fail(writer, model.Fail(400, "invalid_limit"))
+			return
+		}
+	}
+	var before *time.Time
+	beforeID := values.Get("before_id")
+	if values.Has("before_time") {
+		parsed, err := time.Parse(time.RFC3339Nano, values.Get("before_time"))
+		if err != nil {
+			fail(writer, model.Fail(400, "invalid_cursor"))
+			return
+		}
+		if beforeID == "" {
+			fail(writer, model.Fail(400, "invalid_cursor"))
+			return
+		}
+		before = &parsed
+	} else if beforeID != "" {
+		fail(writer, model.Fail(400, "invalid_cursor"))
+		return
+	}
+	page, err := server.Services.Chat.SearchAll(request.Context(), caller.account.ID, values.Get("q"), before, beforeID, int(limit))
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, page)
 }
 
 func (server *Server) searchMessages(writer http.ResponseWriter, request *http.Request, caller identity) {

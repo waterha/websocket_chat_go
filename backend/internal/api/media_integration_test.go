@@ -120,8 +120,14 @@ func TestMediaRejectsInvalidUploads(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	uploadMedia(t, server, aliceToken, conversation, "notes.txt", "text/plain", []byte("plain"), 415)
+	// A text file is now accepted as a generic file attachment rather than
+	// rejected; only a non-positive size or a malformed type is refused.
+	textFile, _ := uploadMedia(t, server, aliceToken, conversation, "notes.txt", "text/plain", []byte("plain"), 201)
+	if textFile.MediaType != "file" {
+		t.Fatalf("text upload should be stored as a file: %+v", textFile)
+	}
 	uploadMedia(t, server, aliceToken, conversation, "empty.png", "image/png", nil, 400)
+	uploadMedia(t, server, aliceToken, conversation, "bad.bin", "not a type", []byte("plain"), 415)
 	uploadMedia(t, server, outsiderToken, conversation, "photo.png", "image/png", []byte("no access"), 404)
 
 	// An image larger than the per-type limit is refused before storage.

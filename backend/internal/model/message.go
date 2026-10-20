@@ -57,6 +57,22 @@ type SearchPage struct {
 	NextBeforeSeq int64     `json:"next_before_seq"`
 }
 
+// GlobalSearchHit is one match in the caller's conversations, carrying enough
+// conversation context to render and navigate without further requests.
+type GlobalSearchHit struct {
+	Message          Message `json:"message"`
+	ConversationName string  `json:"conversation_name"`
+	ConversationKind string  `json:"conversation_kind"`
+	MemberCount      int     `json:"member_count"`
+}
+
+type GlobalSearchPage struct {
+	Results       []GlobalSearchHit `json:"results"`
+	HasMore       bool              `json:"has_more"`
+	NextBeforeTime time.Time        `json:"next_before_time"`
+	NextBeforeID   string           `json:"next_before_id"`
+}
+
 type SendInput struct {
 	ConversationID string `json:"conversation_id"`
 	ClientMsgID    string `json:"client_msg_id"`

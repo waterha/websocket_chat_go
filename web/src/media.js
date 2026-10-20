@@ -3,22 +3,32 @@
 
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024
+export const MAX_FILE_BYTES = 50 * 1024 * 1024
 
-// The upload endpoint trusts the declared Content-Type as the media type; it
-// does not sniff the bytes, so the client must send the file's real type.
+// The upload endpoint trusts the declared Content-Type as the message kind; it
+// does not sniff the bytes, so the client must send the file's real type. Any
+// other type becomes a downloadable file instead of inline media.
 export function mediaKind(contentType) {
   const type = String(contentType || '').toLowerCase().split(';')[0].trim()
   if (type.startsWith('image/')) return 'image'
   if (type.startsWith('video/')) return 'video'
-  return ''
+  return 'file'
 }
 
 export function validateMediaFile(file) {
-  const kind = mediaKind(file?.type)
-  if (!kind) return { ok: false, error: '只支持图片或视频文件' }
+  if (!file) return { ok: false, error: '请选择文件' }
+  const type = String(file.type || '').toLowerCase().split(';')[0].trim()
+  // A browser may report an empty type; the server would refuse it, so reject it
+  // here with a clearer message.
+  if (!type || type.split('/').length !== 2 || !type.split('/')[0] || !type.split('/')[1]) {
+    return { ok: false, error: '无法识别文件类型，请更换文件' }
+  }
   if (!file.size) return { ok: false, error: '文件为空，请重新选择' }
-  const limit = kind === 'video' ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES
-  if (file.size > limit) return { ok: false, error: kind === 'video' ? '视频最大 100 MB' : '图片最大 10 MB' }
+  const kind = mediaKind(type)
+  const limit = kind === 'video' ? MAX_VIDEO_BYTES : kind === 'image' ? MAX_IMAGE_BYTES : MAX_FILE_BYTES
+  if (file.size > limit) {
+    return { ok: false, error: kind === 'video' ? '视频最大 100 MB' : kind === 'image' ? '图片最大 10 MB' : '文件最大 50 MB' }
+  }
   return { ok: true, kind }
 }
 
@@ -35,5 +45,6 @@ export const mediaURL = id => `/api/v1/media/${encodeURIComponent(id)}`
 export function mediaPreview(message) {
   if (message?.kind === 'image') return '[图片]'
   if (message?.kind === 'video') return '[视频]'
+  if (message?.kind === 'file') return '[文件]'
   return ''
 }

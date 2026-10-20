@@ -17,10 +17,12 @@ import (
 const (
 	MaxImageBytes = 10 << 20
 	MaxVideoBytes = 100 << 20
+	MaxFileBytes  = 50 << 20
 )
 
-// allowedMedia maps a sniffed or declared content type to the message kind it
-// produces. Only these types may be stored and served back.
+// allowedMedia maps a declared content type to the message kind it produces.
+// Images and videos are inline kinds; anything else becomes a downloadable
+// file, which is why the set is not a strict allow-list of media types.
 var allowedMedia = map[string]string{
 	"image/jpeg": "image",
 	"image/png":  "image",
@@ -36,16 +38,54 @@ type MediaService struct {
 	Files *media.Store
 }
 
+// MediaKind resolves the message kind for a declared content type. Known image
+// and video types keep their inline kind; a syntactically valid other type is
+// stored as a generic file, so documents and archives can be shared. A malformed
+// type (empty, too long, control characters, or not `type/subtype`) is refused.
 func MediaKind(contentType string) (string, bool) {
-	kind, ok := allowedMedia[strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))]
-	return kind, ok
+	cleaned := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	if !validContentType(cleaned) {
+		return "", false
+	}
+	if kind, known := allowedMedia[cleaned]; known {
+		return kind, true
+	}
+	return "file", true
+}
+
+// validContentType accepts only the `type/subtype` shape with the restricted
+// token alphabet from RFC 9110, which keeps stored values free of whitespace,
+// parameters and control characters.
+func validContentType(value string) bool {
+	if value == "" || len(value) > 128 || strings.Count(value, "/") != 1 {
+		return false
+	}
+	for _, part := range strings.Split(value, "/") {
+		if part == "" {
+			return false
+		}
+		for _, digit := range part {
+			switch {
+			case digit >= 'a' && digit <= 'z':
+			case digit >= '0' && digit <= '9':
+			case digit == '!' || digit == '#' || digit == '$' || digit == '&' || digit == '\'' || digit == '*' || digit == '+' || digit == '-' || digit == '.' || digit == '^' || digit == '_' || digit == '`' || digit == '|' || digit == '~':
+			default:
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func MediaLimit(kind string) int64 {
-	if kind == "video" {
+	switch kind {
+	case "video":
 		return MaxVideoBytes
+	case "file":
+		return MaxFileBytes
+	default:
+		return MaxImageBytes
 	}
-	return MaxImageBytes
 }
 
 func cleanFileName(name string) string {

@@ -28,6 +28,7 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | POST | `/conversations/{id}/media?file_name=photo.png` | 上传图片或视频：请求体为文件原始字节，`Content-Length` 必填，`Content-Type` 决定类型；成功 201 返回附件元数据，见下文 |
 | GET | `/media/{media_id}` | 下载附件原始字节；仅该会话成员可访问，返回 `Content-Type`、`Content-Disposition: inline`，见下文 |
 | GET | `/conversations/{id}/messages?before_seq=100&limit=30` | 从 `before_seq` 之前倒序取页，返回按 `seq` 正序；默认最新 30，最多 100 |
+| GET | `/messages/search?q=hello&limit=20&before_time=...&before_id=...` | 跨会话全局搜索：搜索当前用户参与的全部会话，按时间倒序分页，见下文 |
 | GET | `/conversations/{id}/messages/search?q=hello&before_seq=100&limit=30` | 仅当前会话成员可搜索，按 `seq` 倒序返回 `messages,has_more,next_before_seq`，详见下文 |
 | GET | `/conversations/{id}/sync?after_seq=0&limit=100` | 返回 `messages,last_seq,next_seq,has_more`；按 `seq` 正序取 `after_seq` 之后最多 100 条；下一页用 `next_seq` |
 | POST | `/conversations/{id}/read` | `{"seq":42}`；更新成员已读，返回 `conversation_id,user_id,seq,read_at` |
@@ -82,17 +83,28 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 
 
 
-## 图片与视频
+## 附件：图片、视频与文件
 
-消息支持 `kind` 为 `image` 或 `video` 的附件消息。附件先上传再发送：`POST /conversations/{id}/media` 只接受图片或视频，`GET /media/{media_id}` 只在调用者是所属会话成员时返回字节。**上传者与发送者必须是同一人**，且附件必须属于目标会话，因此上传凭证不能被借用。
+消息支持 `kind` 为 `image`、`video` 或 `file` 的附件消息。附件先上传再发送：`POST /conversations/{id}/media` 接受图片、视频或任意类型的文件，`GET /media/{media_id}` 只在调用者是所属会话成员时返回字节。**上传者与发送者必须是同一人**，且附件必须属于目标会话，因此上传凭证不能被借用。
 
-- 支持的类型由 `Content-Type` 决定：`image/jpeg`、`image/png`、`image/gif`、`image/webp` 以及 `video/mp4`、`video/webm`、`video/ogg`；其他类型返回 415 `unsupported_media_type`。请求体是原始字节，不是 multipart，也不是 JSON。服务端**不嗅探文件内容**，声明的类型即存储与下载类型，因此任意字节都可以被标成图片；下载方应把返回内容视为不可信媒体。
-- 图片上限 10 MiB，视频上限 100 MiB；超限返回 413 `media_too_large`。缺失或非正的 `Content-Length` 返回 400 `invalid_upload`；写入长度与声明不一致同样返回 400。
+- 类型由 `Content-Type` 决定并**原样存储与回传**：`image/jpeg`、`image/png`、`image/gif`、`image/webp` 与 `video/mp4`、`video/webm`、`video/ogg` 作为内联媒体；其他**语法合法**的 `type/subtype`（例如 `application/pdf`、`application/zip`、`text/plain`）作为通用文件。空值、超过 128 字符、含空白或控制字符、缺少 `type/subtype` 结构的值返回 415 `unsupported_media_type`。服务端**不嗅探文件内容**，声明的类型即存储与下载类型；下载方必须把返回内容视为不可信数据。
+- 大小上限：图片 10 MiB、视频 100 MiB、其他文件 50 MiB；超限返回 413 `media_too_large`。缺失或非正的 `Content-Length` 返回 400 `invalid_upload`。
 - 上传非成员会话返回 404 `not_found`。成功 201 返回 `{"id","conversation_id","file_name","media_type","content_type","byte_size","created_at"}`；`file_name` 已去除路径部分并截断到 255 个字符。存储键不出现在任何响应中。
-- 发送附件消息：`{"client_msg_id":"...","content":"可选说明","media_id":"上传返回的 id"}`。`kind` 由附件类型推导，不读取客户端声明；`content` 可以为空字符串（最多 4000 字符）作为说明。引用不存在、不属于该会话或非本人上传的 `media_id` 返回 404；`content` 为空且没有 `media_id` 仍返回 400。重试的幂等比较同时包含 `content` 与 `media_id`，两者任一不同返回 409 `message_conflict`。
-- `GET /media/{media_id}` 对非成员或不存在返回 404 `not_found`。响应带 `nosniff` 与私有缓存头，`Content-Disposition` 为 `inline`。附件字节不参与 `/sync`、历史与搜索：这些接口只返回元数据，客户端按需再取字节。
+- 发送附件消息：`{"client_msg_id":"...","content":"可选说明","media_id":"上传返回的 id"}`。`kind` 由附件类型推导，不读取客户端声明；`content` 可为空字符串（最多 4000 字符）作为说明。引用不存在、不属于该会话或非本人上传的 `media_id` 返回 404；`content` 为空且没有 `media_id` 返回 400。
+- `GET /media/{media_id}`：`image`/`video` 以 `Content-Disposition: inline` 返回，`file` 以 `attachment` 返回并带 UTF-8 文件名，避免浏览器在应用源内渲染不可信文档。非成员或不存在返回 404 `not_found`。响应带 `nosniff` 与私有缓存头。
 
-附件字节保存在服务端 `MEDIA_DIR`（默认相对后端目录的 `../media`），数据库只记录归属与元数据。删除消息与会话不会删除磁盘文件，清理策略尚未实现；当前也不支持上传进度、断点续传、缩略图与视频转码。
+附件字节保存在服务端 `MEDIA_DIR`（默认相对后端目录的 `../media`），数据库只记录归属与元数据。删除消息与会话不会删除磁盘文件，清理策略尚未实现；当前也不支持上传进度、断点续传、缩略图、视频转码与病毒扫描。
+
+## 全局搜索
+
+`GET /api/v1/messages/search?q=预算&limit=20` 搜索**当前用户参与的全部会话**，包含系统提示，排除已撤回的消息。非成员的消息永远不会出现，因此结果不会泄露他人会话。
+
+- `q` 必填，去除首尾空白后为 1–100 个 Unicode 字符；大小写不敏感，`%`、`_` 与反斜杠均按字面处理。非法返回 400 `invalid_query`。
+- `limit` 可省略，默认 20，必须为 1–50，否则 400 `invalid_limit`。
+- 分页游标是 `(created_at, id)` 对：`before_time` 为 RFC 3339 时间，`before_id` 为消息 ID，**两者必须同时提供**。之所以不用 `seq`，是因为 `seq` 只在单个会话内连续，无法跨会话排序。缺少其一或时间格式错误返回 400 `invalid_cursor`。首页不传游标（服务端以 SQL NULL 表示无游标）。
+- 成功返回 `{"results":[{"message":{...},"conversation_name":"...","conversation_kind":"group|direct","member_count":3}],"has_more":bool,"next_before_time":"...","next_before_id":"..."}`。结果是完整消息对象（含附件与引用元数据），按 `created_at DESC, id DESC` 排列，下一页使用返回的游标。空页固定返回 `has_more=false`，不应再翻页。
+
+会话内搜索仍是独立接口 `/conversations/{id}/messages/search`，按会话内 `seq` 分页。当前全局搜索没有：按成员或时间范围过滤、独立的全文索引排序（使用 `pg_trgm` 的 GIN 索引加速字面匹配）与结果高亮由客户端完成。
 
 ## WebSocket
 

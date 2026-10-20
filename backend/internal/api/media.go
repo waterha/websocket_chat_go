@@ -4,6 +4,7 @@ import (
 	"errors"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,13 +17,13 @@ import (
 // maxUploadBody bounds the request reader before any media type is known. The
 // per-type limits enforced afterwards are always smaller or equal.
 const maxUploadBody = logic.MaxVideoBytes + (1 << 20)
-
-// uploadMedia accepts a raw image or video body for one conversation. The media
-// type is taken from the declared Content-Type, which is the same value later
-// returned on download; it is not content sniffed, so a client could label
-// arbitrary bytes as an image. The endpoint therefore only guards size, type
-// allow-listing, conversation membership and sender ownership, and browsers
-// should treat downloaded bytes as untrusted media.
+// uploadMedia accepts a raw image, video or document body for one conversation.
+// The media type is taken from the declared Content-Type, which is the same value
+// later returned on download and stored verbatim. It is not content sniffed, so
+// a client could label arbitrary bytes as an image; the endpoint therefore only
+// guards size, type shape, conversation membership and sender ownership, and
+// browsers must treat downloaded bytes as untrusted. Unknown types are stored as
+// generic files rather than rejected.
 func (server *Server) uploadMedia(writer http.ResponseWriter, request *http.Request, caller identity) {
 	contentType := strings.ToLower(strings.TrimSpace(strings.Split(request.Header.Get("Content-Type"), ";")[0]))
 	kind, ok := logic.MediaKind(contentType)
@@ -73,7 +74,13 @@ func (server *Server) downloadMedia(writer http.ResponseWriter, request *http.Re
 	defer file.Close()
 	writer.Header().Set("Content-Type", upload.ContentType)
 	writer.Header().Set("Content-Length", strconv.FormatInt(upload.ByteSize, 10))
-	writer.Header().Set("Content-Disposition", "inline")
+	// Inline only for real media; anything else is offered as a download so the
+	// browser never renders an untrusted document in the app's origin.
+	if upload.MediaType == "file" {
+		writer.Header().Set("Content-Disposition", "attachment; filename*=UTF-8''"+url.PathEscape(upload.FileName))
+	} else {
+		writer.Header().Set("Content-Disposition", "inline")
+	}
 	writer.Header().Set("Cache-Control", "private, max-age=86400")
 	writer.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(writer, request, upload.FileName, upload.CreatedAt, file)
