@@ -20,6 +20,7 @@ type Config struct {
 	RedisAddr        string
 	RedisPassword    string
 	MigrationsDir    string
+	MediaDir         string
 	Heartbeat        time.Duration
 	HeartbeatTimeout time.Duration
 }
@@ -61,7 +62,11 @@ func Load() (Config, error) {
 	if _, err := os.Stat(directory); err != nil && os.Getenv("MIGRATIONS_DIR") == "" {
 		directory = filepath.Join("database", "migrations")
 	}
-	return Config{HTTPAddr: value("HTTP_ADDR", "127.0.0.1:8080"), Origin: value("FRONTEND_ORIGIN", "http://127.0.0.1:4173"), SecureCookie: os.Getenv("APP_ENV") == "production", Postgres: postgres, RedisAddr: value("REDIS_ADDR", "127.0.0.1:6379"), RedisPassword: os.Getenv("REDIS_PASSWORD"), MigrationsDir: directory, Heartbeat: 20 * time.Second, HeartbeatTimeout: 8 * time.Second}, nil
+	mediaDirectory := value("MEDIA_DIR", filepath.Join("..", "media"))
+	if _, err := os.Stat(filepath.Dir(mediaDirectory)); err != nil && os.Getenv("MEDIA_DIR") == "" {
+		mediaDirectory = "media"
+	}
+	return Config{HTTPAddr: value("HTTP_ADDR", "127.0.0.1:8080"), Origin: value("FRONTEND_ORIGIN", "http://127.0.0.1:4173"), SecureCookie: os.Getenv("APP_ENV") == "production", Postgres: postgres, RedisAddr: value("REDIS_ADDR", "127.0.0.1:6379"), RedisPassword: os.Getenv("REDIS_PASSWORD"), MigrationsDir: directory, MediaDir: mediaDirectory, Heartbeat: 20 * time.Second, HeartbeatTimeout: 8 * time.Second}, nil
 }
 
 func loadEnv(filename string) error {

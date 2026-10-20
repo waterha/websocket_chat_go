@@ -8,6 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"websocket_chat_go/backend/internal/config"
 	"websocket_chat_go/backend/internal/logic"
+	"websocket_chat_go/backend/internal/media"
 	"websocket_chat_go/backend/internal/model"
 	"websocket_chat_go/backend/internal/realtime"
 )
@@ -18,6 +19,7 @@ type ServiceContext struct {
 	Redis   *redis.Client
 	Auth    *logic.Auth
 	Chat    *logic.Chat
+	Media   *logic.MediaService
 	Hub     *realtime.Hub
 	workers sync.WaitGroup
 }
@@ -42,7 +44,12 @@ func New(ctx context.Context, settings config.Config) (*ServiceContext, error) {
 		cleanup()
 		return nil, err
 	}
-	return &ServiceContext{Config: settings, Store: store, Redis: redisClient, Auth: &logic.Auth{Store: store}, Chat: &logic.Chat{Store: store}, Hub: realtime.NewHub(128)}, nil
+	files, err := media.NewStore(settings.MediaDir)
+	if err != nil {
+		cleanup()
+		return nil, err
+	}
+	return &ServiceContext{Config: settings, Store: store, Redis: redisClient, Auth: &logic.Auth{Store: store}, Chat: &logic.Chat{Store: store}, Media: &logic.MediaService{Store: store, Files: files}, Hub: realtime.NewHub(128)}, nil
 }
 
 func (services *ServiceContext) Start(ctx context.Context) {

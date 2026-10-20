@@ -175,7 +175,7 @@ func (chat *Chat) AddMembers(ctx context.Context, userID, conversationID string,
 				return err
 			}
 			content := inviterName + "邀请" + member.name + "进入群聊"
-			message, insertErr := scanMessage(tx.QueryRow(ctx, `INSERT INTO messages(id,conversation_id,sender_id,client_msg_id,seq,content,kind) VALUES($1,$2,$3,$4,$5,$6,'system') RETURNING `+messageColumns, model.NewID(), conversationID, userID, "system:"+model.NewID(), seq, content))
+			message, insertErr := insertMessage(ctx, tx, model.Message{ConversationID: conversationID, SenderID: userID, ClientMsgID: "system:" + model.NewID(), Seq: seq, Content: content, Kind: "system"})
 			if insertErr != nil {
 				return insertErr
 			}

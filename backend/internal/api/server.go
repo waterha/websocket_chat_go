@@ -36,6 +36,8 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/conversations/{id}/messages/{seq}/delivery", server.auth(server.deliveryStatus))
 	mux.HandleFunc("GET /api/v1/conversations/{id}/sync", server.auth(server.sync))
 	mux.HandleFunc("POST /api/v1/conversations/{id}/messages", server.auth(server.send))
+	mux.HandleFunc("POST /api/v1/conversations/{id}/media", server.auth(server.uploadMedia))
+	mux.HandleFunc("GET /api/v1/media/{media_id}", server.auth(server.downloadMedia))
 	mux.HandleFunc("POST /api/v1/conversations/{id}/read", server.auth(server.read))
 	mux.HandleFunc("POST /api/v1/conversations/{id}/received", server.auth(server.received))
 	mux.HandleFunc("GET /api/v1/devices/{device_id}/cursors", server.auth(server.cursors))

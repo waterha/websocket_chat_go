@@ -9,6 +9,8 @@ coverage/
 *.log
 *.exe
 backend/bin/
+/media/
+.media-test-*/
 .DS_Store
 Thumbs.db
 credentials.json

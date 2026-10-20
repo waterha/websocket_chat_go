@@ -95,11 +95,12 @@ func (server *Server) send(writer http.ResponseWriter, request *http.Request, ca
 	var input struct {
 		ClientMsgID string `json:"client_msg_id"`
 		Content     string `json:"content"`
+		MediaID     string `json:"media_id"`
 	}
 	if !decode(writer, request, &input) {
 		return
 	}
-	item, duplicate, err := server.Services.Chat.Send(request.Context(), caller.account.ID, model.SendInput{ConversationID: request.PathValue("id"), ClientMsgID: input.ClientMsgID, Content: input.Content})
+	item, duplicate, err := server.Services.Chat.Send(request.Context(), caller.account.ID, model.SendInput{ConversationID: request.PathValue("id"), ClientMsgID: input.ClientMsgID, Content: input.Content, MediaID: input.MediaID})
 	if err != nil {
 		fail(writer, err)
 		return
