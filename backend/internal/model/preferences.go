@@ -6,13 +6,11 @@ type Preferences struct {
 	ConversationID string `json:"conversation_id"`
 	Pinned         bool   `json:"pinned"`
 	Muted          bool   `json:"muted"`
-	Archived       bool   `json:"archived"`
 }
 
 // PreferenceInput uses pointers so an omitted field means "leave unchanged"
 // rather than "set to false".
 type PreferenceInput struct {
-	Pinned   *bool `json:"pinned"`
-	Muted    *bool `json:"muted"`
-	Archived *bool `json:"archived"`
+	Pinned *bool `json:"pinned"`
+	Muted  *bool `json:"muted"`
 }

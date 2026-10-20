@@ -8,11 +8,11 @@ import (
 	"websocket_chat_go/backend/internal/model"
 )
 
-// Preferences updates the caller's private view of one conversation. Pinning,
-// muting and archiving are per-member, so nothing here is visible to other
-// members and no event needs to be broadcast. Each field is optional: a nil
-// pointer leaves the existing value untouched, which lets the client send only
-// what the user changed.
+// Preferences updates the caller's private view of one conversation. Pinning and
+// muting are per-member, so nothing here is visible to other members and no
+// event needs to be broadcast. Each field is optional: a nil pointer leaves the
+// existing value untouched, which lets the client send only what the user
+// changed.
 func (chat *Chat) Preferences(ctx context.Context, userID, conversationID string, input model.PreferenceInput) (model.Preferences, error) {
 	updated := model.Preferences{}
 	tx, err := chat.Store.DB.Begin(ctx)
@@ -44,18 +44,8 @@ func (chat *Chat) Preferences(ctx context.Context, userID, conversationID string
 			return updated, err
 		}
 	}
-	if input.Archived != nil {
-		if *input.Archived {
-			_, err = tx.Exec(ctx, "UPDATE conversation_members SET archived_at=now() WHERE conversation_id=$1 AND user_id=$2", conversationID, userID)
-		} else {
-			_, err = tx.Exec(ctx, "UPDATE conversation_members SET archived_at=NULL WHERE conversation_id=$1 AND user_id=$2", conversationID, userID)
-		}
-		if err != nil {
-			return updated, err
-		}
-	}
-	var pinnedAt, archivedAt *string
-	if err = tx.QueryRow(ctx, `SELECT pinned_at::text,muted,archived_at::text FROM conversation_members WHERE conversation_id=$1 AND user_id=$2`, conversationID, userID).Scan(&pinnedAt, &updated.Muted, &archivedAt); err != nil {
+	var pinnedAt *string
+	if err = tx.QueryRow(ctx, `SELECT pinned_at::text,muted FROM conversation_members WHERE conversation_id=$1 AND user_id=$2`, conversationID, userID).Scan(&pinnedAt, &updated.Muted); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return updated, model.Fail(404, "not_found")
 		}
@@ -63,6 +53,5 @@ func (chat *Chat) Preferences(ctx context.Context, userID, conversationID string
 	}
 	updated.ConversationID = conversationID
 	updated.Pinned = pinnedAt != nil
-	updated.Archived = archivedAt != nil
 	return updated, tx.Commit(ctx)
 }

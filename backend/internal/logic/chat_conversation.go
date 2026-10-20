@@ -20,7 +20,7 @@ func (chat *Chat) ConversationSeq(ctx context.Context, userID, conversationID st
 }
 
 func (chat *Chat) Conversations(ctx context.Context, userID string) ([]model.Conversation, error) {
-	rows, err := chat.Store.DB.Query(ctx, `SELECT c.id,c.name,c.kind,c.announcement,COALESCE(c.created_by,''),c.next_seq,cm.last_read_seq,cm.pinned_at IS NOT NULL,cm.muted,cm.archived_at IS NOT NULL,
+	rows, err := chat.Store.DB.Query(ctx, `SELECT c.id,c.name,c.kind,c.announcement,COALESCE(c.created_by,''),c.next_seq,cm.last_read_seq,cm.pinned_at IS NOT NULL,cm.muted,
 		(SELECT jsonb_agg(jsonb_build_object('id',u.id,'name',u.name,'email',u.email,'role',members.role,'last_read_seq',members.last_read_seq,'read_at',members.read_at) ORDER BY (members.role='owner') DESC,(members.role='admin') DESC,u.name,u.id) FROM conversation_members members JOIN users u ON u.id=members.user_id WHERE members.conversation_id=c.id)
 		FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id WHERE cm.user_id=$1
 		ORDER BY (cm.pinned_at IS NULL),cm.pinned_at DESC,c.created_at DESC,c.id`, userID)
@@ -32,7 +32,7 @@ func (chat *Chat) Conversations(ctx context.Context, userID string) ([]model.Con
 	for rows.Next() {
 		var item model.Conversation
 		var members []byte
-		if err := rows.Scan(&item.ID, &item.Name, &item.Kind, &item.Announcement, &item.OwnerID, &item.LastSeq, &item.LastReadSeq, &item.Pinned, &item.Muted, &item.Archived, &members); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.Kind, &item.Announcement, &item.OwnerID, &item.LastSeq, &item.LastReadSeq, &item.Pinned, &item.Muted, &members); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(members, &item.Members); err != nil {

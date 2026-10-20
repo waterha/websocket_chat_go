@@ -21,9 +21,8 @@ type Conversation struct {
 	LastSeq      int64    `json:"last_seq"`
 	LastReadSeq  int64    `json:"last_read_seq"`
 	// These reflect only the caller's own preferences.
-	Pinned   bool `json:"pinned"`
-	Muted    bool `json:"muted"`
-	Archived bool `json:"archived"`
+	Pinned bool `json:"pinned"`
+	Muted  bool `json:"muted"`
 }
 
 type CreateInput struct {

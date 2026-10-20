@@ -6,7 +6,7 @@ import { filterDirectory, friendSearchFields, conversationSearchFields } from '.
 import { toggleConversationSelection } from './conversation-selection.js'
 import { appendPage, PendingSends, Requests, SyncTasks } from './realtime.js'
 import { canChangeRole, canEditAnnouncement, canInvite, canLeave, canManageMembers, canRemoveMember, canTransferOwnership, roleLabel, roleOf } from './group.js'
-import { archivedConversations, groupByPin, MUTE_HINT, preferenceSummary, showsUnreadBadge } from './preferences.js'
+import { groupByPin, MUTE_HINT, preferenceSummary, showsUnreadBadge } from './preferences.js'
 import { activeMentionToken, applyMention, canRecall, mentionCandidates, messageBody, recalledLabel, replyExcerpt, replyLabel } from './reply.js'
 import { formatBytes, mediaPreview, mediaURL, validateMediaFile } from './media.js'
 import { api, uploadMedia } from './api.js'
@@ -40,7 +40,6 @@ createApp({
     const showInvite = ref(false)
     const showMembers = ref(false)
     const preferenceBusy = ref(false)
-    const showArchived = ref(false)
     const memberQuery = ref('')
     const memberBusy = ref(false)
     const announcementDraft = ref('')
@@ -130,29 +129,19 @@ createApp({
       return (left.name || '').localeCompare(right.name || '', 'zh-CN')
     })
     const directConversation = userID => conversations.value.find(item => item.kind === 'direct' && item.members.some(member => member.id === userID))
-    // Archived conversations are hidden from the working lists but remain
-    // reachable through the archive view, so nothing is deleted by archiving.
-    const activeConversations = computed(() => {
-      cacheVersion.value
-      return conversations.value.filter(item => !item.archived)
-    })
-    const archivedList = computed(() => {
-      cacheVersion.value
-      return sortByLatestTime(archivedConversations(conversations.value))
-    })
-    const recentConversations = computed(() => {
-      cacheVersion.value
-      return sortByLatestTime(activeConversations.value.filter(item => latestMessage(item)))
-    })
     // Pinned conversations are surfaced separately so they stay in view even
     // when other conversations receive newer messages.
     const pinnedConversations = computed(() => {
       cacheVersion.value
       return groupByPin(conversations.value).pinned
     })
+    const recentConversations = computed(() => {
+      cacheVersion.value
+      return sortByLatestTime(conversations.value.filter(item => latestMessage(item)))
+    })
     const groupConversations = computed(() => {
       cacheVersion.value
-      return sortByLatestTime(activeConversations.value.filter(item => item.kind === 'group'))
+      return sortByLatestTime(conversations.value.filter(item => item.kind === 'group'))
     })
     const pendingIncomingRequests = computed(() => friendRequests.value.incoming.filter(item => item.status === 'pending'))
     const friendRequestFor = userID => friendRequests.value.outgoing.find(item => item.recipient_id === userID && item.status === 'pending')
@@ -284,12 +273,6 @@ createApp({
         if (version !== epoch) return
         conversation.pinned = updated.pinned
         conversation.muted = updated.muted
-        conversation.archived = updated.archived
-        // Archiving the open conversation closes it, because it leaves the list.
-        if (updated.archived && active.value === id) {
-          active.value = null
-          chatVisible.value = false
-        }
         cacheVersion.value++
       } catch (cause) { if (version === epoch) showError(cause) }
       finally { if (version === epoch) preferenceBusy.value = false }
@@ -301,7 +284,7 @@ createApp({
     }
     const currentPinned = computed(() => Boolean(current.value?.pinned))
     const currentMuted = computed(() => Boolean(current.value?.muted))
-    const currentArchived = computed(() => Boolean(current.value?.archived))
+    const currentArchived = false
     const currentPreferenceLabels = computed(() => preferenceSummary(current.value))
     function openMembers() {
       memberQuery.value = ''
@@ -959,7 +942,7 @@ createApp({
       window.addEventListener('focus', onVisible)
     })
     onUnmounted(() => { resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, announcementDraft, announcementEditing, startAnnouncementEdit, saveAnnouncement, hasAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, archivedList, activeConversations, showArchived, unreadTotal, showsBadge, setPreference, togglePreference, currentPinned, currentMuted, currentArchived, currentPreferenceLabels, MUTE_HINT, preferenceSummary, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, draftArea, replyTarget, startReply, clearReply, replyPreview, replyAuthor, bodyOf, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
+    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, announcementDraft, announcementEditing, startAnnouncementEdit, saveAnnouncement, hasAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, unreadTotal, showsBadge, setPreference, togglePreference, currentPinned, currentMuted, currentPreferenceLabels, MUTE_HINT, preferenceSummary, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, draftArea, replyTarget, startReply, clearReply, replyPreview, replyAuthor, bodyOf, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
   },
   template: `
     <div v-if="!me" class="auth-layout">
@@ -1003,12 +986,6 @@ createApp({
                 <span class="avatar">{{ title(item).slice(0, 1) }}</span><span class="conversation-text"><strong>{{ title(item) }}<span v-if="item.muted" class="mute-mark" title="免打扰" aria-label="免打扰">免打扰</span></strong><small>{{ preview(item) }}</small></span><span v-if="showsBadge(item)" class="unread-badge">{{ unreadLabel(item.id) }}</span>
               </button>
             </template>
-            <button v-if="archivedList.length && conversationFilter === 'current'" type="button" class="text-button archived-toggle" @click="showArchived = !showArchived">{{ showArchived ? '收起已归档' : '已归档 ' + archivedList.length }}</button>
-            <template v-if="showArchived && conversationFilter === 'current'">
-              <button v-for="item in archivedList" :key="'arch-' + item.id" class="conversation archived" @click="select(item.id)">
-                <span class="avatar">{{ title(item).slice(0, 1) }}</span><span class="conversation-text"><strong>{{ title(item) }}</strong><small>已归档 · 打开后可在标题栏取消归档</small></span>
-              </button>
-            </template>
             <p v-if="conversationFilter === 'friends' && !friends.length && !directoryQuery.trim()" class="empty-side">还没有好友，点击“添加”开始。</p>
             <p v-else-if="conversationFilter === 'group' && !groupConversations.length && !directoryQuery.trim()" class="empty-side">还没有加入群聊。</p>
             <p v-else-if="conversationFilter === 'current' && !recentConversations.length && !directoryQuery.trim()" class="empty-side">还没有最近会话。</p>
@@ -1017,7 +994,7 @@ createApp({
       </aside>
       <main class="chat">
         <template v-if="current">
-          <header class="chat-head"><span class="avatar">{{ title(current).slice(0,1) }}</span><div><h2>{{ title(current) }}</h2><p v-if="current.kind === 'group'"><button type="button" class="member-count-button" @click="openMembers" :aria-haspopup="dialog" aria-label="查看群成员">{{ current.members.length }} 位成员</button> · {{ current.members.slice(0,5).map(member => member.name).join('、') }}{{ current.members.length > 5 ? ' 等 ' + current.members.length + ' 人' : '' }}</p><p v-else>私聊 · {{ current.members.slice(0,5).map(member => member.name).join('、') }}</p></div><button type="button" class="icon-button search-toggle" title="搜索聊天记录" aria-label="搜索聊天记录" :aria-expanded="showSearch" aria-controls="message-search-panel" @click="showSearch ? closeSearch() : openSearch()"><Search :size="20" aria-hidden="true" /></button><button v-if="current.kind === 'group'" type="button" class="icon-button member-toggle" title="群成员列表" aria-label="群成员列表" :aria-expanded="showMembers" @click="openMembers"><Users :size="20" aria-hidden="true" /></button><button type="button" class="icon-button" :title="currentPinned ? '取消置顶' : '置顶会话'" :aria-pressed="currentPinned" :disabled="preferenceBusy" @click="togglePreference(active, 'pinned')">{{ currentPinned ? '★' : '☆' }}</button><button type="button" class="icon-button" :title="currentMuted ? '解除免打扰' : '免打扰'" :aria-pressed="currentMuted" :disabled="preferenceBusy" @click="togglePreference(active, 'muted')">{{ currentMuted ? '🔕' : '🔔' }}</button><button type="button" class="outline-button" :disabled="preferenceBusy" @click="togglePreference(active, 'archived')">{{ currentArchived ? '取消归档' : '归档' }}</button><button v-if="canInviteMembers" class="outline-button" @click="openInvite">邀请成员</button><button v-else-if="current.kind === 'group'" class="outline-button leave-button" :disabled="groupBusy" @click="leaveGroup">退出群聊</button></header>            <section v-if="hasAnnouncement && !announcementEditing" class="announcement" role="status" aria-label="群公告"><strong>群公告</strong><p>{{ current.announcement }}</p><button v-if="canEditGroupAnnouncement" type="button" class="icon-button" title="编辑群公告" aria-label="编辑群公告" @click="startAnnouncementEdit">编辑</button></section>
+          <header class="chat-head"><span class="avatar">{{ title(current).slice(0,1) }}</span><div><h2>{{ title(current) }}</h2><p v-if="current.kind === 'group'"><button type="button" class="member-count-button" @click="openMembers" :aria-haspopup="dialog" aria-label="查看群成员">{{ current.members.length }} 位成员</button> · {{ current.members.slice(0,5).map(member => member.name).join('、') }}{{ current.members.length > 5 ? ' 等 ' + current.members.length + ' 人' : '' }}</p><p v-else>私聊 · {{ current.members.slice(0,5).map(member => member.name).join('、') }}</p></div><button type="button" class="icon-button search-toggle" title="搜索聊天记录" aria-label="搜索聊天记录" :aria-expanded="showSearch" aria-controls="message-search-panel" @click="showSearch ? closeSearch() : openSearch()"><Search :size="20" aria-hidden="true" /></button><button v-if="current.kind === 'group'" type="button" class="icon-button member-toggle" title="群成员列表" aria-label="群成员列表" :aria-expanded="showMembers" @click="openMembers"><Users :size="20" aria-hidden="true" /></button><button type="button" class="icon-button" :title="currentPinned ? '取消置顶' : '置顶会话'" :aria-pressed="currentPinned" :disabled="preferenceBusy" @click="togglePreference(active, 'pinned')">{{ currentPinned ? '★' : '☆' }}</button><button type="button" class="icon-button" :title="currentMuted ? '解除免打扰' : '免打扰'" :aria-pressed="currentMuted" :disabled="preferenceBusy" @click="togglePreference(active, 'muted')">{{ currentMuted ? '🔕' : '🔔' }}</button><button v-if="canInviteMembers" class="outline-button" @click="openInvite">邀请成员</button><button v-else-if="current.kind === 'group'" class="outline-button leave-button" :disabled="groupBusy" @click="leaveGroup">退出群聊</button></header>            <section v-if="hasAnnouncement && !announcementEditing" class="announcement" role="status" aria-label="群公告"><strong>群公告</strong><p>{{ current.announcement }}</p><button v-if="canEditGroupAnnouncement" type="button" class="icon-button" title="编辑群公告" aria-label="编辑群公告" @click="startAnnouncementEdit">编辑</button></section>
             <section v-if="announcementEditing" class="announcement editing" aria-label="编辑群公告"><strong>群公告</strong><textarea v-model="announcementDraft" maxlength="2000" placeholder="填写群公告，成员都会在会话顶部看到"></textarea><div class="announcement-actions"><button type="button" class="outline-button" :disabled="groupBusy" @click="announcementEditing = false">取消</button><button type="button" class="primary" :disabled="groupBusy" @click="saveAnnouncement">{{ groupBusy ? '保存中…' : '保存公告' }}</button></div></section>
             <section v-else-if="canEditGroupAnnouncement && !hasAnnouncement" class="announcement empty"><button type="button" class="text-button" @click="startAnnouncementEdit">+ 添加群公告</button></section>
            <section v-if="showSearch" id="message-search-panel" class="message-search" aria-label="搜索聊天记录" @keydown.esc.stop="closeSearch">

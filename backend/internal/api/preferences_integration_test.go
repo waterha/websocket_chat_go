@@ -19,13 +19,13 @@ func TestConversationPreferencesArePrivatePerMember(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Alice pins, mutes and archives; the response reflects all three.
-	raw := httpCall(t, server, aliceToken, "PATCH", "/api/v1/conversations/"+group+"/preferences", map[string]bool{"pinned": true, "muted": true, "archived": true}, 200)
+	// Alice pins and mutes; the response reflects both.
+	raw := httpCall(t, server, aliceToken, "PATCH", "/api/v1/conversations/"+group+"/preferences", map[string]bool{"pinned": true, "muted": true}, 200)
 	var result model.Preferences
 	if err := json.Unmarshal(raw, &result); err != nil {
 		t.Fatal(err)
 	}
-	if !result.Pinned || !result.Muted || !result.Archived || result.ConversationID != group {
+	if !result.Pinned || !result.Muted || result.ConversationID != group {
 		t.Fatalf("unexpected preferences: %+v", result)
 	}
 
@@ -35,17 +35,17 @@ func TestConversationPreferencesArePrivatePerMember(t *testing.T) {
 	if err := json.Unmarshal(bobList, &bobConversations); err != nil || len(bobConversations) != 1 {
 		t.Fatalf("unexpected bob list: %+v %v", bobConversations, err)
 	}
-	if bobConversations[0].Pinned || bobConversations[0].Muted || bobConversations[0].Archived {
+	if bobConversations[0].Pinned || bobConversations[0].Muted {
 		t.Fatalf("bob inherited alice's preferences: %+v", bobConversations[0])
 	}
 
-	// Alice sees her own preferences, and the pinned conversation sorts first.
+	// Alice sees her own preferences.
 	aliceList := httpCall(t, server, aliceToken, "GET", "/api/v1/conversations", nil, 200)
 	var aliceConversations []model.Conversation
 	if err := json.Unmarshal(aliceList, &aliceConversations); err != nil || len(aliceConversations) != 1 {
 		t.Fatalf("unexpected alice list: %+v %v", aliceConversations, err)
 	}
-	if !aliceConversations[0].Pinned || !aliceConversations[0].Muted || !aliceConversations[0].Archived {
+	if !aliceConversations[0].Pinned || !aliceConversations[0].Muted {
 		t.Fatalf("alice lost her preferences: %+v", aliceConversations[0])
 	}
 
@@ -55,17 +55,17 @@ func TestConversationPreferencesArePrivatePerMember(t *testing.T) {
 	if err := json.Unmarshal(raw, &updated); err != nil {
 		t.Fatal(err)
 	}
-	if updated.Muted || !updated.Pinned || !updated.Archived {
+	if updated.Muted || !updated.Pinned {
 		t.Fatalf("partial update changed unrelated fields: %+v", updated)
 	}
 
 	// Clearing is explicit.
-	raw = httpCall(t, server, aliceToken, "PATCH", "/api/v1/conversations/"+group+"/preferences", map[string]bool{"pinned": false, "archived": false}, 200)
+	raw = httpCall(t, server, aliceToken, "PATCH", "/api/v1/conversations/"+group+"/preferences", map[string]bool{"pinned": false}, 200)
 	var cleared model.Preferences
 	if err := json.Unmarshal(raw, &cleared); err != nil {
 		t.Fatal(err)
 	}
-	if cleared.Pinned || cleared.Archived {
+	if cleared.Pinned {
 		t.Fatalf("clearing failed: %+v", cleared)
 	}
 

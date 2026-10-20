@@ -35,7 +35,7 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | POST | `/conversations/{id}/roles` | 设置成员角色：`{"user_id":"用户ID","role":"admin"}` 或 `"member"`；仅群主可调用，群主身份不能通过该接口授予 |
 | POST | `/conversations/{id}/owner` | 转让群主：`{"user_id":"用户ID"}`；仅现任群主可调用，原群主变为管理员 |
 | PATCH | `/conversations/{id}/announcement` | 群公告：`{"announcement":"最多 2000 字，可清空"}`；群主与管理员可调用，空字符串表示清除 |
-| PATCH | `/conversations/{id}/preferences` | 个人会话偏好：`{"pinned":true,"muted":false,"archived":true}`，字段可省略表示不改，仅影响本人 |
+| PATCH | `/conversations/{id}/preferences` | 个人会话偏好：`{"pinned":true,"muted":false}`，字段可省略表示不改，仅影响本人 |
 | POST | `/conversations/{id}/messages` | `{"client_msg_id":"客户端稳定ID","content":"你好"}`；新消息 201，幂等重复 200。可带 `media_id`（附件）、`reply_to_id`（引用同会话消息）、`mentions`（提及成员 ID 数组） |
 | POST | `/conversations/{id}/messages/{seq}/recall` | 撤回消息；发送者本人在 2 分钟内可撤回，群主/管理员可撤回本群任意消息；已撤回的消息内容不再返回 |
 | POST | `/conversations/{id}/media?file_name=photo.png` | 上传图片或视频：请求体为文件原始字节，`Content-Length` 必填，`Content-Type` 决定类型；成功 201 返回附件元数据，见下文 |
@@ -79,14 +79,13 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 
 ## 会话偏好
 
-`PATCH /conversations/{id}/preferences` 设置**调用者本人**的置顶、免打扰与归档。三个字段都是可选的布尔值：省略表示保持不变，显式传 `false` 表示清除，因此客户端可以只提交用户改动的那一项。返回 `{"conversation_id":"...","pinned":bool,"muted":bool,"archived":bool}`。
+`PATCH /conversations/{id}/preferences` 设置**调用者本人**的置顶与免打扰。两个字段都是可选的布尔值：省略表示保持不变，显式传 `false` 表示清除，因此客户端可以只提交用户改动的那一项。返回 `{"conversation_id":"...","pinned":bool,"muted":bool}`。
 
-- 偏好保存在成员关系行上（`conversation_members.pinned_at/muted/archived_at`），**其他成员完全看不到**，也不会改变他人的会话列表或提醒；非成员或会话不存在均返回 404 `not_found`。
-- `GET /conversations` 返回每个会话的 `pinned`、`muted`、`archived`，并把置顶会话排在前面（`ORDER BY (pinned_at IS NULL), pinned_at DESC`），使多个置顶会话按置顶时间稳定排序。
-- 归档只把会话从常规列表中移出，**不删除消息、不退出会话、不影响接收**；用户仍可通过归档视图打开并取消归档。
+- 偏好保存在成员关系行上（`conversation_members.pinned_at/muted`），**其他成员完全看不到**，也不会改变他人的会话列表或提醒；非成员或会话不存在均返回 404 `not_found`。
+- `GET /conversations` 返回每个会话的 `pinned` 与 `muted`，并把置顶会话排在前面（`ORDER BY (pinned_at IS NULL), pinned_at DESC`），使多个置顶会话按置顶时间稳定排序。
 - 免打扰只影响客户端的提示与未读角标，**不影响消息投递、接收游标与已读状态**。
 
-偏好是本机可见的视图设置，因此不产生 outbox 事件，也不做广播。当前没有：按会话自定义提醒级别、免打扰时间段、批量归档与文件夹分组。
+偏好是本机可见的视图设置，因此不产生 outbox 事件，也不做广播。**归档功能已移除**（迁移 000014）：它只增加第二个生命周期，却不改变任何成员能看到或能做的事，因此不值得保留。当前也没有：按会话自定义提醒级别、免打扰时间段与文件夹分组。
 
 ## 群组治理
 
