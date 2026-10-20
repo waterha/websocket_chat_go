@@ -1,46 +1,90 @@
 package api
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"websocket_chat_go/backend/internal/model"
 )
 
+// TestMigrationAdoptsLegacyDatabase builds a database that only has the very
+// first schema version, then lets Migrate adopt and upgrade it. Building the
+// legacy schema from the migration file keeps this test independent of how many
+// later migrations exist, so it does not need editing when one is added.
 func TestMigrationAdoptsLegacyDatabase(t *testing.T) {
-	services := fixture(t, false)
+	databaseURL := os.Getenv("IM_TEST_DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("set IM_TEST_DATABASE_URL for integration tests")
+	}
 	ctx := t.Context()
-	// Remove everything the later migrations add so the adoption path can be
-	// replayed. The order matters: the rewritten content constraint references
-	// both columns, and messages.media_id references the media table.
-	_, err := services.Store.DB.Exec(ctx, `DROP INDEX conversation_members_owner_idx;
-		DROP TABLE friend_requests,friendships,message_outbox,device_cursors,schema_migrations;
-		ALTER TABLE messages DROP CONSTRAINT messages_content_check;
-		ALTER TABLE messages DROP COLUMN media_id;
-		ALTER TABLE messages DROP COLUMN kind;
-		DROP TABLE message_media;
-		ALTER TABLE conversation_members DROP CONSTRAINT conversation_members_role;
-		ALTER TABLE conversation_members DROP COLUMN role;
-		ALTER TABLE conversation_members DROP COLUMN read_at;
-		ALTER TABLE conversation_members DROP CONSTRAINT read_cursor_nonnegative;
-		ALTER TABLE conversations DROP CONSTRAINT conversations_announcement_length;
-		ALTER TABLE conversations DROP COLUMN created_by;
-		ALTER TABLE conversations DROP COLUMN announcement;
-		DROP INDEX sessions_expiry_idx`)
+	admin, err := pgxpool.New(ctx, databaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The legacy schema still required a message sender to be a current member;
-	// restoring that constraint proves migration 000008 copes with it.
-	if _, err = services.Store.DB.Exec(ctx, `ALTER TABLE messages ADD CONSTRAINT messages_conversation_id_sender_id_fkey FOREIGN KEY (conversation_id, sender_id) REFERENCES conversation_members(conversation_id, user_id)`); err != nil {
+	t.Cleanup(admin.Close)
+	schema := "im_legacy_" + model.NewID()
+	if _, err = admin.Exec(ctx, "CREATE SCHEMA "+schema); err != nil {
 		t.Fatal(err)
 	}
-	account(t, services, "legacy")
-	if err := services.Store.Migrate(ctx, services.Config.MigrationsDir); err != nil {
+	t.Cleanup(func() {
+		cleanup, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if _, err := admin.Exec(cleanup, "DROP SCHEMA "+schema+" CASCADE"); err != nil {
+			t.Error(err)
+		}
+	})
+	migrations := filepath.Join("..", "..", "..", "database", "migrations")
+	initial, err := os.ReadFile(filepath.Join(migrations, "000001_initial.up.sql"))
+	if err != nil {
 		t.Fatal(err)
+	}
+	config, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config.ConnConfig.RuntimeParams["search_path"] = schema
+	db, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(db.Close)
+	// The legacy database has the first schema but no migration ledger.
+	if _, err = db.Exec(ctx, string(initial)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(ctx, `
+		INSERT INTO users(id,email,name,password_hash) VALUES('legacy','legacy@test','legacy','unused');
+		INSERT INTO conversations(id,kind,name,next_seq) VALUES('legacy-chat','group','legacy',0);
+		INSERT INTO conversation_members(conversation_id,user_id) VALUES('legacy-chat','legacy')`); err != nil {
+		t.Fatal(err)
+	}
+	store := &model.Store{DB: db}
+	if err = store.Migrate(ctx, migrations); err != nil {
+		t.Fatalf("adopting the legacy database failed: %v", err)
 	}
 	var count int
-	if err := services.Store.DB.QueryRow(ctx, "SELECT count(*) FROM users").Scan(&count); err != nil || count != 1 {
-		t.Fatal("legacy data lost", err)
+	if err = db.QueryRow(ctx, "SELECT count(*) FROM users").Scan(&count); err != nil || count != 1 {
+		t.Fatalf("legacy data lost: %d %v", count, err)
 	}
-	if err := services.Store.DB.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count != 8 {
-		t.Fatal("bad migration versions", err)
+	if err = db.QueryRow(ctx, "SELECT count(*) FROM schema_migrations").Scan(&count); err != nil || count < 9 {
+		t.Fatalf("expected every migration to be recorded, got %d %v", count, err)
+	}
+	// The adopted database must now carry the newest columns.
+	if err = db.QueryRow(ctx, `SELECT count(*) FROM information_schema.columns
+		WHERE table_schema=current_schema() AND table_name='messages' AND column_name IN ('mentions','recalled_at','reply_to_id')`).Scan(&count); err != nil || count != 3 {
+		t.Fatalf("upgraded schema is missing columns: %d %v", count, err)
+	}
+	// The legacy group must have been given an owner during the upgrade.
+	var owner string
+	if err = db.QueryRow(ctx, "SELECT COALESCE(created_by,'') FROM conversations WHERE id='legacy-chat'").Scan(&owner); err != nil || owner != "legacy" {
+		t.Fatalf("legacy group did not receive an owner: %q %v", owner, err)
+	}
+	// Running Migrate again must be a no-op rather than an error.
+	if err = store.Migrate(ctx, migrations); err != nil {
+		t.Fatalf("re-running migrations failed: %v", err)
 	}
 }

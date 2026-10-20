@@ -6,6 +6,7 @@ import { filterDirectory, friendSearchFields, conversationSearchFields } from '.
 import { toggleConversationSelection } from './conversation-selection.js'
 import { appendPage, PendingSends, Requests, SyncTasks } from './realtime.js'
 import { canChangeRole, canEditAnnouncement, canInvite, canLeave, canManageMembers, canRemoveMember, canTransferOwnership, roleLabel, roleOf } from './group.js'
+import { activeMentionToken, applyMention, canRecall, mentionCandidates, messageBody, recalledLabel, replyExcerpt, replyLabel } from './reply.js'
 import { formatBytes, mediaPreview, mediaURL, validateMediaFile } from './media.js'
 import { api, uploadMedia } from './api.js'
 import './style.css'
@@ -42,6 +43,11 @@ createApp({
     const announcementDraft = ref('')
     const announcementEditing = ref(false)
     const groupBusy = ref(false)
+    const draftArea = ref(null)
+    const replyTarget = ref(null)
+    const mentionQuery = ref(null)
+    const mentionIndex = ref(0)
+    const mentionList = ref([])
     const showSettings = ref(false)
     const showProfile = ref(false)
     const showFriendRequests = ref(false)
@@ -313,6 +319,78 @@ createApp({
       } catch (cause) { if (version === epoch) showError(cause) }
       finally { if (version === epoch) uploadBusy.value = false }
     }
+    // Reply, mention and recall helpers.
+    const replyPreview = item => replyExcerpt(item)
+    const replyAuthor = item => replyLabel(item, sender)
+    const bodyOf = item => messageBody(item)
+    const recalledText = item => recalledLabel(item, me.value?.id)
+    const canRecallMessage = item => canRecall(item, me.value?.id, current.value)
+    // Mention list is derived from the active "@" token in the composer.
+    const showMentions = computed(() => mentionQuery.value !== null && current.value?.kind === 'group')
+    function startReply(item) {
+      replyTarget.value = item
+      nextTick(() => draftArea.value?.focus())
+    }
+    function clearReply() {
+      replyTarget.value = null
+    }
+    function updateMentionState() {
+      const area = draftArea.value
+      if (!area || current.value?.kind !== 'group') { mentionQuery.value = null; mentionList.value = []; return }
+      const token = activeMentionToken(draft.value, area.selectionStart)
+      if (!token) { mentionQuery.value = null; mentionList.value = []; return }
+      mentionQuery.value = token
+      mentionList.value = mentionCandidates(current.value?.members, me.value?.id, token.query).slice(0, 8)
+      mentionIndex.value = 0
+    }
+    function chooseMention(person) {
+      const token = mentionQuery.value
+      if (!token || !person) return
+      const applied = applyMention(draft.value, token, person.name)
+      draft.value = applied.text
+      mentionQuery.value = null
+      mentionList.value = []
+      nextTick(() => {
+        const area = draftArea.value
+        if (!area) return
+        area.focus()
+        area.setSelectionRange(applied.caret, applied.caret)
+      })
+    }
+    function mentionKeydown(event) {
+      if (!showMentions.value || !mentionList.value.length) return false
+      if (event.key === 'ArrowDown') { mentionIndex.value = (mentionIndex.value + 1) % mentionList.value.length; return true }
+      if (event.key === 'ArrowUp') { mentionIndex.value = (mentionIndex.value - 1 + mentionList.value.length) % mentionList.value.length; return true }
+      if (event.key === 'Enter' || event.key === 'Tab') { chooseMention(mentionList.value[mentionIndex.value]); return true }
+      if (event.key === 'Escape') { mentionQuery.value = null; mentionList.value = []; return true }
+      return false
+    }
+    // Mentioned user IDs are resolved from the final text so a name edited after
+    // insertion does not silently drop the notification.
+    function resolveMentions() {
+      if (current.value?.kind !== 'group') return []
+      const text = draft.value
+      const found = []
+      for (const member of current.value?.members || []) {
+        if (member.id === me.value?.id) continue
+        if (text.includes(`@${member.name}`)) found.push(member.id)
+      }
+      return found
+    }
+    async function recallMessage(item) {
+      if (!canRecallMessage(item) || sending.value) return
+      if (!confirm('撤回后消息内容将不可见，其他成员会看到撤回提示。确认撤回？')) return
+      const id = active.value
+      const version = epoch
+      sending.value = true
+      try {
+        await api(`/conversations/${id}/messages/${item.seq}/recall`, { method: 'POST' })
+        if (version !== epoch) return
+        if (replyTarget.value?.id === item.id) replyTarget.value = null
+        await syncConversation(id)
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { if (version === epoch) sending.value = false }
+    }
     async function refresh() {
       if (refreshTask) return refreshTask
       const version = epoch
@@ -408,6 +486,9 @@ createApp({
     }
     watch([active, me], () => {
       clearAttachment()
+      clearReply()
+      mentionQuery.value = null
+      mentionList.value = []
       closeSearch()
       highlightedMessage.value = null
       clearTimeout(highlightTimer)
@@ -502,6 +583,7 @@ createApp({
             if (!conversations.value.some(item => item.id === envelope.data.conversation_id)) await refresh()
             await syncConversation(envelope.data.conversation_id, envelope.data.seq)
           }
+          if (envelope.event === 'message.recalled') await syncConversation(envelope.data.conversation_id, envelope.data.seq)
           if (envelope.event === 'message.sync_required') await catchUp(envelope.data.cursors)
           if (envelope.event === 'conversation.created') await refresh()
           if (envelope.event === 'conversation.updated') await refresh()
@@ -662,7 +744,7 @@ createApp({
       try {
         const input = pendingStore.save(id, content, media?.id || '')
         pendingSend.value = input
-        const payload = { client_msg_id: input.client_msg_id, content, media_id: media?.id || '' }
+        const payload = { client_msg_id: input.client_msg_id, content, media_id: media?.id || '', reply_to_id: replyTarget.value?.id || '', mentions: resolveMentions() }
         if (connected.value) {
           try { await requests.send('message.send', input) }
           catch (cause) {
@@ -676,6 +758,7 @@ createApp({
         if (pendingSend.value?.client_msg_id === input.client_msg_id) pendingSend.value = null
         if (active.value === id && draft.value.trim() === content) draft.value = ''
         if (active.value === id) clearAttachment()
+        if (active.value === id) clearReply()
         await syncConversation(id)
       } catch (cause) { showError(cause) }
       finally { sending.value = false }
@@ -689,6 +772,7 @@ createApp({
     }
     function onEnter(event) {
       if (event.isComposing) return
+      if (event.key === 'Enter' && (showMentions.value && mentionList.value.length)) return
       event.preventDefault()
       send()
     }
@@ -708,7 +792,7 @@ createApp({
       window.addEventListener('focus', onVisible)
     })
     onUnmounted(() => { resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, announcementDraft, announcementEditing, startAnnouncementEdit, saveAnnouncement, hasAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, openMembers, closeMembers, inviteFromMembers, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment }
+    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, announcementDraft, announcementEditing, startAnnouncementEdit, saveAnnouncement, hasAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, openMembers, closeMembers, inviteFromMembers, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, draftArea, replyTarget, startReply, clearReply, replyPreview, replyAuthor, bodyOf, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
   },
   template: `
     <div v-if="!me" class="auth-layout">
@@ -780,11 +864,10 @@ createApp({
             <div v-for="item in messages" :key="item.id" class="message-row" :data-message-seq="item.seq" :class="{ mine: item.sender_id === me.id, system: item.kind === 'system', 'search-target': highlightedMessage === item.seq }">
               <template v-if="item.kind === 'system'"><span class="system-notice">{{ item.content }}</span></template>
               <template v-else><span v-if="item.sender_id !== me.id" class="avatar tiny">{{ sender(item.sender_id).slice(0,1) }}</span>
-              <div><div class="message-meta">{{ sender(item.sender_id) }} · {{ time(item.created_at) }}</div><div class="bubble" :class="{ media: item.kind === 'image' || item.kind === 'video' }"><template v-if="item.kind === 'image'"><a class="media-item" :href="mediaURL(item.media_id)" target="_blank" rel="noopener" :aria-label="'查看图片 ' + item.media.file_name"><img class="media-image" :src="mediaURL(item.media_id)" :alt="item.media.file_name" loading="lazy" /></a></template><template v-else-if="item.kind === 'video'"><video class="media-video" :src="mediaURL(item.media_id)" controls preload="metadata" :aria-label="'播放视频 ' + item.media.file_name"></video></template><p v-if="item.content" class="media-caption">{{ item.content }}</p></div></div></template>
+              <div><div class="message-meta">{{ sender(item.sender_id) }} · {{ time(item.created_at) }}</div><div v-if="item.reply" class="reply-quote"><strong>{{ replyAuthor(item.reply) }}</strong><span>{{ replyPreview(item.reply) }}</span></div><div class="bubble" :class="{ media: item.kind === 'image' || item.kind === 'video', recalled: item.recalled_at }"><template v-if="item.recalled_at"><span class="recalled">{{ recalledText(item) }}</span></template><template v-else-if="item.kind === 'image'"><a class="media-item" :href="mediaURL(item.media_id)" target="_blank" rel="noopener" :aria-label="'查看图片 ' + item.media.file_name"><img class="media-image" :src="mediaURL(item.media_id)" :alt="item.media.file_name" loading="lazy" /></a><p v-if="bodyOf(item)" class="media-caption">{{ bodyOf(item) }}</p></template><template v-else-if="item.kind === 'video'"><video class="media-video" :src="mediaURL(item.media_id)" controls preload="metadata" :aria-label="'播放视频 ' + item.media.file_name"></video><p v-if="bodyOf(item)" class="media-caption">{{ bodyOf(item) }}</p></template><template v-else>{{ bodyOf(item) }}</template></div><div v-if="canRecallMessage(item) || (item.kind !== 'system' && !item.recalled_at)" class="message-actions"><button type="button" class="text-button" @click="startReply(item)">回复</button><button v-if="canRecallMessage(item)" type="button" class="text-button danger" :disabled="sending" @click="recallMessage(item)">撤回</button></div></div></template>
             </div>
           </section>
-          <form v-show="!showSearch" class="composer" @submit.prevent="send"><p v-if="pendingSend?.conversation_id === active" class="pending-notice">发送结果未确认，消息可能已保存。<button type="button" @click="draft = pendingSend.content">恢复原文安全重试</button><button type="button" @click="discardPending">放弃确认</button></p><div v-if="uploadBusy" class="attachment-status" role="status">正在上传…</div><div v-else-if="attachment" class="attachment-preview"><img v-if="attachment.media_type === 'image'" :src="previewFile" :alt="attachment.file_name" /><video v-else :src="previewFile" muted playsinline preload="metadata"></video><span class="attachment-info"><strong>{{ attachment.file_name }}</strong><small>{{ attachment.media_type === 'video' ? '视频' : '图片' }} · {{ formatBytes(attachment.byte_size) }}</small></span><button type="button" class="icon-button" title="移除附件" aria-label="移除附件" :disabled="sending" @click="clearAttachment"><X :size="16" aria-hidden="true" /></button></div><textarea v-model="draft" maxlength="4000" :placeholder="attachment ? '添加说明（可选）…' : '输入消息…'" @keydown.enter.exact="onEnter"></textarea><div><span>Enter 发送 · Shift + Enter 换行</span><input ref="mediaInput" class="media-input" type="file" accept="image/*,video/*" @change="chooseMedia" /><button type="button" class="icon-button media-button" title="发送图片或视频" aria-label="发送图片或视频" :disabled="uploadBusy || sending" @click="openMediaPicker"><ImagePlus :size="19" aria-hidden="true" /></button><button class="primary" :disabled="(!draft.trim() && !attachment) || sending || uploadBusy">{{ sending ? '发送中…' : '发送 ↗' }}</button></div></form>
-        </template>
+          <form v-show="!showSearch" class="composer" @submit.prevent="send"><p v-if="pendingSend?.conversation_id === active" class="pending-notice">发送结果未确认，消息可能已保存。<button type="button" @click="draft = pendingSend.content">恢复原文安全重试</button><button type="button" @click="discardPending">放弃确认</button></p><div v-if="replyTarget" class="reply-banner"><span class="reply-banner-text"><strong>回复 {{ sender(replyTarget.sender_id) }}</strong><small>{{ replyPreview(replyTarget) }}</small></span><button type="button" class="icon-button" title="取消回复" aria-label="取消回复" @click="clearReply"><X :size="16" aria-hidden="true" /></button></div><div v-if="uploadBusy" class="attachment-status" role="status">正在上传…</div><div v-else-if="attachment" class="attachment-preview"><img v-if="attachment.media_type === 'image'" :src="previewFile" :alt="attachment.file_name" /><video v-else :src="previewFile" muted playsinline preload="metadata"></video><span class="attachment-info"><strong>{{ attachment.file_name }}</strong><small>{{ attachment.media_type === 'video' ? '视频' : '图片' }} · {{ formatBytes(attachment.byte_size) }}</small></span><button type="button" class="icon-button" title="移除附件" aria-label="移除附件" :disabled="sending" @click="clearAttachment"><X :size="16" aria-hidden="true" /></button></div><textarea ref="draftArea" v-model="draft" maxlength="4000" :placeholder="attachment ? '添加说明（可选）…' : current.kind === 'group' ? '输入消息，@ 可提及成员…' : '输入消息…'" @keydown.enter.exact="onEnter" @keydown="mentionKeydown($event) && $event.preventDefault()" @keyup="updateMentionState" @click="updateMentionState" @input="updateMentionState"></textarea><div v-if="showMentions && mentionList.length" class="mention-list" role="listbox" aria-label="提及成员"><button v-for="(person, index) in mentionList" :key="person.id" type="button" role="option" :aria-selected="index === mentionIndex" :class="{ active: index === mentionIndex }" @mousedown.prevent="chooseMention(person)"><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>{{ person.email }}</small></span></button><p v-if="!mentionList.length" class="empty-mention">没有匹配的成员</p></div><div><span>Enter 发送 · Shift + Enter 换行</span><input ref="mediaInput" class="media-input" type="file" accept="image/*,video/*" @change="chooseMedia" /><button type="button" class="icon-button media-button" title="发送图片或视频" aria-label="发送图片或视频" :disabled="uploadBusy || sending" @click="openMediaPicker"><ImagePlus :size="19" aria-hidden="true" /></button><button class="primary" :disabled="(!draft.trim() && !attachment) || sending || uploadBusy">{{ sending ? '发送中…' : '发送 ↗' }}</button></div></form>        </template>
          <div v-else class="welcome"><span class="brand-mark">✦</span><h2>开启一段新对话</h2><p>从左侧联系人选择用户即可开始私聊，也可以创建群聊。</p><div class="welcome-actions"><button class="outline-button" @click="openCreate()">创建群聊</button></div></div>
       </main>
       <div v-if="showCreate" class="modal-backdrop" @click.self="showCreate = false">

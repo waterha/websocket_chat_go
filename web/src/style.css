@@ -96,6 +96,22 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .role-badge.role-owner { color: #8a5a00; background: #ffe6a8; }
 .role-badge.role-admin { color: #14507a; background: #d8ecfb; }
 .member-row-actions { display: flex; flex: none; gap: 6px; align-items: center; }
+.reply-quote { display: flex; flex-direction: column; gap: 2px; max-width: min(590px, 78vw); margin-bottom: 5px; padding: 6px 10px; border-left: 3px solid var(--accent); border-radius: 8px; background: #f1e8dc; text-align: left; }
+.reply-quote strong { color: var(--accent-dark); font-size: 11px; }
+.reply-quote span { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bubble.recalled { color: var(--muted); background: #f0eee9; font-style: italic; }
+.mine .bubble.recalled { color: #fff; background: #b9a894; }
+.message-actions { display: flex; gap: 10px; margin-top: 5px; }
+.message-actions .danger { color: #a33; }
+.reply-banner { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; background: #fffaf2; }
+.reply-banner-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.reply-banner-text strong { color: var(--accent-dark); font-size: 11px; }
+.reply-banner-text small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mention-list { display: flex; flex-direction: column; max-height: 220px; overflow: auto; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.mention-list button { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 0; background: transparent; text-align: left; font-size: 13px; }
+.mention-list button.active, .mention-list button:hover { background: #f5ece0; }
+.mention-list small { display: block; color: var(--muted); font-size: 11px; }
+.empty-mention { margin: 0; padding: 10px; color: var(--muted); font-size: 12px; }
 @media (max-width: 720px) {
   .chat-head { gap: 8px; padding: 12px 16px; }
   .chat-head .outline-button { padding: 8px; font-size: 12px; flex: none; }

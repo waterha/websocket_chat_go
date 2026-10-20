@@ -23,7 +23,8 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | POST | `/conversations/{id}/roles` | 设置成员角色：`{"user_id":"用户ID","role":"admin"}` 或 `"member"`；仅群主可调用，群主身份不能通过该接口授予 |
 | POST | `/conversations/{id}/owner` | 转让群主：`{"user_id":"用户ID"}`；仅现任群主可调用，原群主变为管理员 |
 | PATCH | `/conversations/{id}/announcement` | 群公告：`{"announcement":"最多 2000 字，可清空"}`；群主与管理员可调用，空字符串表示清除 |
-| POST | `/conversations/{id}/messages` | `{"client_msg_id":"客户端稳定ID","content":"你好"}`；新消息 201，幂等重复 200。附图片或视频时再传 `media_id`，`content` 作为可选说明 |
+| POST | `/conversations/{id}/messages` | `{"client_msg_id":"客户端稳定ID","content":"你好"}`；新消息 201，幂等重复 200。可带 `media_id`（附件）、`reply_to_id`（引用同会话消息）、`mentions`（提及成员 ID 数组） |
+| POST | `/conversations/{id}/messages/{seq}/recall` | 撤回消息；发送者本人在 2 分钟内可撤回，群主/管理员可撤回本群任意消息；已撤回的消息内容不再返回 |
 | POST | `/conversations/{id}/media?file_name=photo.png` | 上传图片或视频：请求体为文件原始字节，`Content-Length` 必填，`Content-Type` 决定类型；成功 201 返回附件元数据，见下文 |
 | GET | `/media/{media_id}` | 下载附件原始字节；仅该会话成员可访问，返回 `Content-Type`、`Content-Disposition: inline`，见下文 |
 | GET | `/conversations/{id}/messages?before_seq=100&limit=30` | 从 `before_seq` 之前倒序取页，返回按 `seq` 正序；默认最新 30，最多 100 |
@@ -47,6 +48,20 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 - 成功返回 `{"data":{"messages":[...],"has_more":true,"next_before_seq":42}}`。`messages` 是标准消息对象，按 `seq DESC` 排列；`has_more` 表示同一查询还有更旧的匹配消息，下一页沿用相同 `q` 并设置 `before_seq=next_before_seq`。`next_before_seq` 为本页末条消息的 `seq`，即使 `has_more=false` 也保留；空页固定为 `{"messages":[],"has_more":false,"next_before_seq":0}`，不应再翻页。
 
 `/delivery` 示例：`{"conversation_id":"...","seq":42,"confirmed_members":3,"total_members":9,"as_of":"..."}`。统计排除发送者，同一成员多台设备只计一次；某成员任意一台设备的接收游标达到该 `seq` 就计入。它是**查询时客户端所声明的应用层接收进度**，不是设备在线、用户已读或用户实际看到了消息；未确认也不能推断一定没收到。结果只对查询时的成员集合有效，返回时间后可能变化。服务端不为恶意或错误客户端的虚假确认提供物理收包证明。
+
+## 回复、提及与撤回
+
+消息对象新增 `reply_to_id`、`reply`、`mentions` 与 `recalled_at`。所有读取路径（历史、同步、搜索、WebSocket 推送、ACK）都返回这些字段。
+
+- **回复**：发送时带 `reply_to_id`。服务端校验被引用消息属于同一会话，否则 404 `not_found`；跨会话引用不会被接受。`reply` 是服务端生成的引用上下文：`{"id","seq","sender_id","kind","excerpt","recalled","media_type"}`，`excerpt` 最多 120 个字符，附件消息按类型显示。原文被撤回后 `recalled=true` 且 `excerpt` 为空。
+- **提及**：`mentions` 是最多 100 个成员用户 ID；重复值被去重并按 ID 排序，非成员或空值返回 400 `invalid_mentions`。提及只是结构化标注与客户端高亮/通知依据，**不是**投递保证。
+- **撤回**：`POST /conversations/{id}/messages/{seq}/recall`。发送者本人可在**发送后 2 分钟内**撤回，超时返回 403 `recall_window_expired`；群主与管理员不受该窗口限制，可撤回本群任意成员的消息（管理场景）。其他人返回 403 `forbidden`。撤回**保留消息行与会话序号**，因此历史仍然连续、`/sync` 游标不受影响；`content` 与附件元数据不再返回，客户端应显示占位文本。重复撤回幂等。撤回不删除磁盘上的附件字节。
+- 幂等比较包含 `content`、`media_id`、`reply_to_id` 与 `mentions`，其中任一不同而 `client_msg_id` 相同会返回 409 `message_conflict`。
+- 撤回推送 `message.recalled` 事件（载荷为撤回后的消息），与 `message.created` 一样可能重复或丢失，客户端应通过 `/sync` 兜底。
+
+当前没有：撤回后还原、管理员撤回审计记录、提及的定向通知与免打扰规则、@所有人。
+
+
 
 ## 群组治理
 

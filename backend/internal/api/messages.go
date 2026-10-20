@@ -91,16 +91,32 @@ func (server *Server) sync(writer http.ResponseWriter, request *http.Request, ca
 	respond(writer, 200, page)
 }
 
+func (server *Server) recall(writer http.ResponseWriter, request *http.Request, caller identity) {
+	seq, err := strconv.ParseInt(request.PathValue("seq"), 10, 64)
+	if err != nil {
+		fail(writer, model.Fail(404, "not_found"))
+		return
+	}
+	message, err := server.Services.Chat.Recall(request.Context(), caller.account.ID, request.PathValue("id"), seq)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, message)
+}
+
 func (server *Server) send(writer http.ResponseWriter, request *http.Request, caller identity) {
 	var input struct {
-		ClientMsgID string `json:"client_msg_id"`
-		Content     string `json:"content"`
-		MediaID     string `json:"media_id"`
+		ClientMsgID string   `json:"client_msg_id"`
+		Content     string   `json:"content"`
+		MediaID     string   `json:"media_id"`
+		ReplyToID   string   `json:"reply_to_id"`
+		Mentions    []string `json:"mentions"`
 	}
 	if !decode(writer, request, &input) {
 		return
 	}
-	item, duplicate, err := server.Services.Chat.Send(request.Context(), caller.account.ID, model.SendInput{ConversationID: request.PathValue("id"), ClientMsgID: input.ClientMsgID, Content: input.Content, MediaID: input.MediaID})
+	item, duplicate, err := server.Services.Chat.Send(request.Context(), caller.account.ID, model.SendInput{ConversationID: request.PathValue("id"), ClientMsgID: input.ClientMsgID, Content: input.Content, MediaID: input.MediaID, ReplyToID: input.ReplyToID, Mentions: input.Mentions})
 	if err != nil {
 		fail(writer, err)
 		return
