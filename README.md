@@ -16,6 +16,7 @@ Go + PostgreSQL + Redis + Vue 的开源即时通讯项目。当前版本聚焦**
 - 发送者可按消息查看其他成员的接收确认人数，明确区分“服务器已保存”“成员设备声明已接收”“用户已读”；查询失败或未确认不冒充成功。
 - 服务端每 5 秒按在线设备接收游标与会话最新序号对账；未确认收齐时持续发送定向补拉提示，不依赖 outbox 已发布状态或已读状态。客户端连续处理消息后才确认，确认失败会重试；离线成员重新上线后补齐。
 - Vue 客户端支持重连、定期补拉、多页漫游、已读状态与同 ID 安全重试；旧 `frontend/` 是不连服务的视觉演示。
+- 图片与视频附件：先上传再发送，附件的上传者必须是发送者本人且属于同一会话；聊天窗口内直接显示图片缩略与视频播放器，可附带文字说明。图片上限 10 MB、视频上限 100 MB；附件字节存入 `MEDIA_DIR`，数据库只保存元数据与归属。
 
 ## 本地运行
 
@@ -34,7 +35,7 @@ Set-Location C:\Sofware\Go_proj\websocket_chat_go
 powershell -ExecutionPolicy Bypass -File .\scripts\start.ps1
 ```
 
-如 PostgreSQL 或 Redis 安装在其他位置，可在启动前设置 `IM_POSTGRES_BIN`、`IM_POSTGRES_DATA`、`IM_REDIS_DIR`。
+如 PostgreSQL 或 Redis 安装在其他位置，可在启动前设置 `IM_POSTGRES_BIN`、`IM_POSTGRES_DATA`、`IM_REDIS_DIR`。附件默认保存在项目下的 `media/`，可用 `MEDIA_DIR` 指向其他目录。
 
 ```powershell
 Copy-Item .env.example .env

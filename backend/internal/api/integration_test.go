@@ -51,7 +51,7 @@ func fixture(t *testing.T, start bool) *svc.ServiceContext {
 		t.Fatal(err)
 	}
 	postgres.ConnConfig.RuntimeParams["search_path"] = schema
-	settings := config.Config{Postgres: postgres, RedisAddr: redisAddr, Origin: "http://im.test", MigrationsDir: filepath.Join("..", "..", "..", "database", "migrations"), Heartbeat: 200 * time.Millisecond, HeartbeatTimeout: time.Second}
+	settings := config.Config{Postgres: postgres, RedisAddr: redisAddr, Origin: "http://im.test", MigrationsDir: filepath.Join("..", "..", "..", "database", "migrations"), MediaDir: filepath.Join(t.TempDir(), "media"), Heartbeat: 200 * time.Millisecond, HeartbeatTimeout: time.Second}
 	services, err := svc.New(ctx, settings)
 	if err != nil {
 		t.Fatal(err)

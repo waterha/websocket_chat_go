@@ -14,10 +14,13 @@ CREATE INDEX message_media_conversation_idx ON message_media(conversation_id, cr
 ALTER TABLE messages ADD COLUMN media_id text REFERENCES message_media(id);
 CREATE UNIQUE INDEX messages_media_once_idx ON messages(media_id) WHERE media_id IS NOT NULL;
 
-ALTER TABLE messages DROP CONSTRAINT messages_kind_check;
+-- Constraint names are dropped defensively: a database upgraded from the
+-- earliest version still carries the original names, and replaying this file
+-- after a manual downgrade must not fail on an already removed constraint.
+ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_kind_check;
 ALTER TABLE messages ADD CONSTRAINT messages_kind_check CHECK (kind IN ('user', 'system', 'image', 'video'));
 
-ALTER TABLE messages DROP CONSTRAINT messages_content_check;
+ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_content_check;
 ALTER TABLE messages ADD CONSTRAINT messages_content_check CHECK (
     (kind IN ('user', 'system') AND char_length(content) BETWEEN 1 AND 4000) OR
     (kind IN ('image', 'video') AND media_id IS NOT NULL AND char_length(content) <= 4000)

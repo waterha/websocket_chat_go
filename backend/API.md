@@ -18,7 +18,9 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | GET | `/conversations` | 当前用户的会话、成员与已读游标 |
 | POST | `/conversations` | 私聊由联系人点击时用 `{"kind":"direct","member_ids":["另一用户ID"]}` 自动获取或创建唯一会话；群聊用 `group`、`name` 和可选的最多 999 个其他成员，创建者可以先单独建群，含创建者最多 1000 人 |
 | POST | `/conversations/{id}/members` | 群成员邀请用户：`{"member_ids":["用户ID"]}`；重复成员幂等，含现有成员最多 1000 人；新成员加入时按人写入一条可漫游的群聊系统消息 |
-| POST | `/conversations/{id}/messages` | `{"client_msg_id":"客户端稳定ID","content":"你好"}`；新消息 201，幂等重复 200 |
+| POST | `/conversations/{id}/messages` | `{"client_msg_id":"客户端稳定ID","content":"你好"}`；新消息 201，幂等重复 200。附图片或视频时再传 `media_id`，`content` 作为可选说明 |
+| POST | `/conversations/{id}/media?file_name=photo.png` | 上传图片或视频：请求体为文件原始字节，`Content-Length` 必填，`Content-Type` 决定类型；成功 201 返回附件元数据，见下文 |
+| GET | `/media/{media_id}` | 下载附件原始字节；仅该会话成员可访问，返回 `Content-Type`、`Content-Disposition: inline`，见下文 |
 | GET | `/conversations/{id}/messages?before_seq=100&limit=30` | 从 `before_seq` 之前倒序取页，返回按 `seq` 正序；默认最新 30，最多 100 |
 | GET | `/conversations/{id}/messages/search?q=hello&before_seq=100&limit=30` | 仅当前会话成员可搜索，按 `seq` 倒序返回 `messages,has_more,next_before_seq`，详见下文 |
 | GET | `/conversations/{id}/sync?after_seq=0&limit=100` | 返回 `messages,last_seq,next_seq,has_more`；按 `seq` 正序取 `after_seq` 之后最多 100 条；下一页用 `next_seq` |
@@ -40,6 +42,18 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 - 成功返回 `{"data":{"messages":[...],"has_more":true,"next_before_seq":42}}`。`messages` 是标准消息对象，按 `seq DESC` 排列；`has_more` 表示同一查询还有更旧的匹配消息，下一页沿用相同 `q` 并设置 `before_seq=next_before_seq`。`next_before_seq` 为本页末条消息的 `seq`，即使 `has_more=false` 也保留；空页固定为 `{"messages":[],"has_more":false,"next_before_seq":0}`，不应再翻页。
 
 `/delivery` 示例：`{"conversation_id":"...","seq":42,"confirmed_members":3,"total_members":9,"as_of":"..."}`。统计排除发送者，同一成员多台设备只计一次；某成员任意一台设备的接收游标达到该 `seq` 就计入。它是**查询时客户端所声明的应用层接收进度**，不是设备在线、用户已读或用户实际看到了消息；未确认也不能推断一定没收到。结果只对查询时的成员集合有效，返回时间后可能变化。服务端不为恶意或错误客户端的虚假确认提供物理收包证明。
+
+## 图片与视频
+
+消息支持 `kind` 为 `image` 或 `video` 的附件消息。附件先上传再发送：`POST /conversations/{id}/media` 只接受图片或视频，`GET /media/{media_id}` 只在调用者是所属会话成员时返回字节。**上传者与发送者必须是同一人**，且附件必须属于目标会话，因此上传凭证不能被借用。
+
+- 支持的类型由 `Content-Type` 决定：`image/jpeg`、`image/png`、`image/gif`、`image/webp` 以及 `video/mp4`、`video/webm`、`video/ogg`；其他类型返回 415 `unsupported_media_type`。请求体是原始字节，不是 multipart，也不是 JSON。
+- 图片上限 10 MiB，视频上限 100 MiB；超限返回 413 `media_too_large`。缺失或非正的 `Content-Length` 返回 400 `invalid_upload`；写入长度与声明不一致同样返回 400。
+- 上传非成员会话返回 404 `not_found`。成功 201 返回 `{"id","conversation_id","file_name","media_type","content_type","byte_size","created_at"}`；`file_name` 已去除路径部分并截断到 255 个字符。存储键不出现在任何响应中。
+- 发送附件消息：`{"client_msg_id":"...","content":"可选说明","media_id":"上传返回的 id"}`。`kind` 由附件类型推导，不读取客户端声明；`content` 可以为空字符串（最多 4000 字符）作为说明。引用不存在、不属于该会话或非本人上传的 `media_id` 返回 404；`content` 为空且没有 `media_id` 仍返回 400。重试的幂等比较同时包含 `content` 与 `media_id`，两者任一不同返回 409 `message_conflict`。
+- `GET /media/{media_id}` 对非成员或不存在返回 404 `not_found`。响应带 `nosniff` 与私有缓存头，`Content-Disposition` 为 `inline`。附件字节不参与 `/sync`、历史与搜索：这些接口只返回元数据，客户端按需再取字节。
+
+附件字节保存在服务端 `MEDIA_DIR`（默认相对后端目录的 `../media`），数据库只记录归属与元数据。删除消息与会话不会删除磁盘文件，清理策略尚未实现；当前也不支持上传进度、断点续传、缩略图与视频转码。
 
 ## WebSocket
 

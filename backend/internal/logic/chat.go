@@ -13,8 +13,9 @@ const MaxGroupMembers = 1000
 
 // messageColumns selects one message together with its attachment, if any. The
 // correlated subquery also populates media_id, so callers receive a complete
-// JSON object from every read path without extra queries.
-const messageColumns = `id,conversation_id,sender_id,client_msg_id,seq,content,kind,created_at,media_id,
+// JSON object from every read path without extra queries. media_id is coalesced
+// because rows without an attachment store NULL and scan as an empty string.
+const messageColumns = `id,conversation_id,sender_id,client_msg_id,seq,content,kind,created_at,COALESCE(media_id,''),
 	(SELECT jsonb_build_object('id',mm.id,'file_name',mm.file_name,'media_type',mm.media_type,'content_type',mm.content_type,'byte_size',mm.byte_size)
 	 FROM message_media mm WHERE mm.id=messages.media_id)`
 
