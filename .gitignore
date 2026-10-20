@@ -9,8 +9,13 @@ coverage/
 *.log
 *.exe
 backend/bin/
+# Attachment storage. The service may resolve MEDIA_DIR to the repository root
+# or to backend/ depending on where it is started, so both are ignored.
+media/
 /media/
+backend/media/
 .media-test-*/
+postgres.log
 .DS_Store
 Thumbs.db
 credentials.json
