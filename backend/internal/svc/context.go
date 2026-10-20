@@ -2,7 +2,9 @@ package svc
 
 import (
 	"context"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
@@ -14,15 +16,16 @@ import (
 )
 
 type ServiceContext struct {
-	Config  config.Config
-	Store   *model.Store
-	Redis   *redis.Client
-	Auth    *logic.Auth
-	Chat    *logic.Chat
-	Media   *logic.MediaService
-	Presence *logic.Presence
-	Hub     *realtime.Hub
-	workers sync.WaitGroup
+	Config    config.Config
+	Store     *model.Store
+	Redis     *redis.Client
+	Auth      *logic.Auth
+	Chat      *logic.Chat
+	Media     *logic.MediaService
+	Presence  *logic.Presence
+	Hub       *realtime.Hub
+	Broadcast *realtime.Broadcast
+	workers   sync.WaitGroup
 }
 
 func New(ctx context.Context, settings config.Config) (*ServiceContext, error) {
@@ -31,7 +34,12 @@ func New(ctx context.Context, settings config.Config) (*ServiceContext, error) {
 		return nil, err
 	}
 	redisClient := redis.NewClient(&redis.Options{Addr: settings.RedisAddr, Password: settings.RedisPassword, DialTimeout: settings.HeartbeatTimeout, ReadTimeout: settings.HeartbeatTimeout, WriteTimeout: settings.HeartbeatTimeout})
-	cleanup := func() { db.Close(); _ = redisClient.Close() }
+	// A subscribed go-redis client dedicates its connection to the subscription,
+	// so fan-out uses a second client to keep normal commands working. The read
+	// timeout matters: without it ReceiveMessage blocks forever and shutdown
+	// could not drain the subscription goroutine.
+	subscriber := redis.NewClient(&redis.Options{Addr: settings.RedisAddr, Password: settings.RedisPassword, DialTimeout: settings.HeartbeatTimeout, ReadTimeout: 5 * time.Second, WriteTimeout: settings.HeartbeatTimeout})
+	cleanup := func() { db.Close(); _ = redisClient.Close(); _ = subscriber.Close() }
 	if err = db.Ping(ctx); err != nil {
 		cleanup()
 		return nil, err
@@ -50,14 +58,34 @@ func New(ctx context.Context, settings config.Config) (*ServiceContext, error) {
 		cleanup()
 		return nil, err
 	}
-	return &ServiceContext{Config: settings, Store: store, Redis: redisClient, Auth: &logic.Auth{Store: store, Limiter: &logic.Limiter{Redis: redisClient}}, Chat: &logic.Chat{Store: store}, Media: &logic.MediaService{Store: store, Files: files}, Presence: &logic.Presence{Redis: redisClient}, Hub: realtime.NewHub(128)}, nil
+	hub := realtime.NewHub(128)
+	// Each process needs its own identity so a subscriber can skip the events it
+	// published itself and avoid delivering them twice.
+	instanceID := os.Getenv("INSTANCE_ID")
+	if instanceID == "" {
+		instanceID = model.NewID()
+	}
+	return &ServiceContext{
+		Config: settings, Store: store, Redis: redisClient,
+		Auth:     &logic.Auth{Store: store, Limiter: &logic.Limiter{Redis: redisClient}},
+		Chat:     &logic.Chat{Store: store},
+		Media:    &logic.MediaService{Store: store, Files: files},
+		Presence: &logic.Presence{Redis: redisClient},
+		Hub:      hub,
+		Broadcast: &realtime.Broadcast{Publisher: redisClient, Subscriber: subscriber, Hub: hub,
+			InstanceID: instanceID, Channel: realtime.DefaultBroadcastChannel},
+	}, nil
 }
 
 func (services *ServiceContext) Start(ctx context.Context) {
-	services.workers.Add(3)
+	services.workers.Add(4)
 	go func() {
 		defer services.workers.Done()
-		(&realtime.Dispatcher{Store: services.Store, Hub: services.Hub}).Run(ctx)
+		(&realtime.Dispatcher{Store: services.Store, Hub: services.Hub, Broadcast: services.Broadcast}).Run(ctx)
+	}()
+	go func() {
+		defer services.workers.Done()
+		services.Broadcast.Run(ctx)
 	}()
 	go func() {
 		defer services.workers.Done()
@@ -71,6 +99,11 @@ func (services *ServiceContext) Start(ctx context.Context) {
 
 func (services *ServiceContext) Close() {
 	services.Hub.Close()
+	// Close the subscription client first so a blocked ReceiveMessage returns
+	// immediately; otherwise waiting for the workers would hang.
+	if services.Broadcast != nil && services.Broadcast.Subscriber != nil {
+		_ = services.Broadcast.Subscriber.Close()
+	}
 	services.workers.Wait()
 	services.Store.DB.Close()
 	_ = services.Redis.Close()

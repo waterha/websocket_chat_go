@@ -12,6 +12,9 @@ import (
 type Dispatcher struct {
 	Store *model.Store
 	Hub   *Hub
+	// Broadcast fans a drained event out to other instances. A nil value keeps
+	// single-instance behaviour.
+	Broadcast *Broadcast
 }
 
 func (dispatcher *Dispatcher) Run(ctx context.Context) {
@@ -69,6 +72,15 @@ func (dispatcher *Dispatcher) Drain(ctx context.Context) error {
 	}
 	for _, item := range deliveries {
 		dispatcher.Hub.Publish(item.recipients, item.event)
+		// Every instance must be told, because the recipients may hold
+		// connections on instances that did not win the drain lock. A failure
+		// here is not fatal: the event stays published and devices recover
+		// through /sync reconciliation.
+		if broadcaster := dispatcher.Broadcast; broadcaster != nil {
+			if err := broadcaster.Publish(ctx, item.recipients, item.event); err != nil && ctx.Err() == nil {
+				log.Printf("cross-instance publish: %v", err)
+			}
+		}
 		if _, err = tx.Exec(ctx, "UPDATE message_outbox SET published_at=now() WHERE id=$1", item.id); err != nil {
 			return err
 		}
