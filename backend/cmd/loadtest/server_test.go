@@ -21,10 +21,10 @@ func bootServer(t *testing.T, members int) (fixture, func()) {
 	directory := t.TempDir()
 	fixturePath := filepath.Join(directory, "credentials.json")
 	settings := options{
-		mode:       "server",
-		address:    "127.0.0.1:18099",
-		fixture:    fixturePath,
-		members:    members,
+		mode:    "server",
+		address: "127.0.0.1:18099",
+		fixture: fixturePath,
+		members: members,
 		// The test runs in cmd/loadtest, so the migrations directory is three
 		// levels up from the working directory.
 		migrations: filepath.Join("..", "..", "..", "database", "migrations"),

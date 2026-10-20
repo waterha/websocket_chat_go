@@ -17,6 +17,7 @@ import (
 // maxUploadBody bounds the request reader before any media type is known. The
 // per-type limits enforced afterwards are always smaller or equal.
 const maxUploadBody = logic.MaxVideoBytes + (1 << 20)
+
 // uploadMedia accepts a raw image, video or document body for one conversation.
 // The media type is taken from the declared Content-Type, which is the same value
 // later returned on download and stored verbatim. It is not content sniffed, so

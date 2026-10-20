@@ -67,10 +67,10 @@ type GlobalSearchHit struct {
 }
 
 type GlobalSearchPage struct {
-	Results       []GlobalSearchHit `json:"results"`
-	HasMore       bool              `json:"has_more"`
-	NextBeforeTime time.Time        `json:"next_before_time"`
-	NextBeforeID   string           `json:"next_before_id"`
+	Results        []GlobalSearchHit `json:"results"`
+	HasMore        bool              `json:"has_more"`
+	NextBeforeTime time.Time         `json:"next_before_time"`
+	NextBeforeID   string            `json:"next_before_id"`
 }
 
 type SendInput struct {

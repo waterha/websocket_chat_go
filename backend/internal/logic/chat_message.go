@@ -3,9 +3,9 @@ package logic
 import (
 	"context"
 	"errors"
+	"github.com/jackc/pgx/v5"
 	"slices"
 	"strings"
-	"github.com/jackc/pgx/v5"
 	"websocket_chat_go/backend/internal/model"
 )
 
