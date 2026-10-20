@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+
 	"websocket_chat_go/backend/internal/model"
 )
 
@@ -11,7 +12,42 @@ func (server *Server) conversations(writer http.ResponseWriter, request *http.Re
 		fail(writer, err)
 		return
 	}
+	// Mark online members so the client can show who is reachable now. The check
+	// is best-effort: a Redis failure must not fail the whole list.
+	userIDs := []string{}
+	for _, item := range items {
+		for _, member := range item.Members {
+			userIDs = append(userIDs, member.ID)
+		}
+	}
+	if online, err := server.Services.Presence.Online(request.Context(), userIDs); err == nil {
+		for index := range items {
+			for memberIndex := range items[index].Members {
+				items[index].Members[memberIndex].Online = online[items[index].Members[memberIndex].ID]
+			}
+		}
+	}
 	respond(writer, 200, items)
+}
+
+// presence reports which of the given users currently hold a live connection.
+func (server *Server) presence(writer http.ResponseWriter, request *http.Request, caller identity) {
+	var input struct {
+		UserIDs []string `json:"user_ids"`
+	}
+	if !decode(writer, request, &input) {
+		return
+	}
+	if len(input.UserIDs) > 1000 {
+		fail(writer, model.Fail(400, "too_many_users"))
+		return
+	}
+	online, err := server.Services.Presence.Online(request.Context(), input.UserIDs)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, map[string]any{"online": online})
 }
 
 func (server *Server) create(writer http.ResponseWriter, request *http.Request, caller identity) {

@@ -53,6 +53,7 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/conversations/{id}/read", server.auth(server.read))
 	mux.HandleFunc("POST /api/v1/conversations/{id}/received", server.auth(server.received))
 	mux.HandleFunc("GET /api/v1/devices/{device_id}/cursors", server.auth(server.cursors))
+	mux.HandleFunc("POST /api/v1/presence", server.auth(server.presence))
 	mux.HandleFunc("GET /ws", server.auth(server.websocket))
 	return server.cors(server.csrf(mux))
 }

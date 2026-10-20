@@ -10,7 +10,9 @@ import (
 	"websocket_chat_go/backend/internal/realtime"
 )
 
-func (server *Server) presence(ctx context.Context, client *realtime.Client) {
+// markPresence refreshes this connection's short-lived presence marker, which
+// the presence query endpoint reads to answer "who is online right now".
+func (server *Server) markPresence(ctx context.Context, client *realtime.Client) {
 	key := "im:presence:" + client.UserID + ":" + client.DeviceID + ":" + client.ID
 	if err := server.Services.Redis.Set(ctx, key, client.ID, 3*server.Services.Config.Heartbeat).Err(); err != nil {
 		log.Printf("presence refresh: %v", err)
@@ -24,7 +26,7 @@ func (server *Server) writeLoop(connection *websocket.Conn, client *realtime.Cli
 		defer cancel()
 		_ = server.Services.Redis.Del(ctx, "im:presence:"+client.UserID+":"+client.DeviceID+":"+client.ID).Err()
 	}()
-	server.presence(client.Context, client)
+	server.markPresence(client.Context, client)
 	timer := time.NewTicker(server.Services.Config.Heartbeat)
 	defer timer.Stop()
 	for {
@@ -48,7 +50,7 @@ func (server *Server) writeLoop(connection *websocket.Conn, client *realtime.Cli
 				err = connection.Ping(ctx)
 			}
 			if err == nil {
-				server.presence(ctx, client)
+				server.markPresence(ctx, client)
 			}
 			cancel()
 			if err != nil {

@@ -20,6 +20,7 @@ type ServiceContext struct {
 	Auth    *logic.Auth
 	Chat    *logic.Chat
 	Media   *logic.MediaService
+	Presence *logic.Presence
 	Hub     *realtime.Hub
 	workers sync.WaitGroup
 }
@@ -49,11 +50,11 @@ func New(ctx context.Context, settings config.Config) (*ServiceContext, error) {
 		cleanup()
 		return nil, err
 	}
-	return &ServiceContext{Config: settings, Store: store, Redis: redisClient, Auth: &logic.Auth{Store: store, Limiter: &logic.Limiter{Redis: redisClient}}, Chat: &logic.Chat{Store: store}, Media: &logic.MediaService{Store: store, Files: files}, Hub: realtime.NewHub(128)}, nil
+	return &ServiceContext{Config: settings, Store: store, Redis: redisClient, Auth: &logic.Auth{Store: store, Limiter: &logic.Limiter{Redis: redisClient}}, Chat: &logic.Chat{Store: store}, Media: &logic.MediaService{Store: store, Files: files}, Presence: &logic.Presence{Redis: redisClient}, Hub: realtime.NewHub(128)}, nil
 }
 
 func (services *ServiceContext) Start(ctx context.Context) {
-	services.workers.Add(2)
+	services.workers.Add(3)
 	go func() {
 		defer services.workers.Done()
 		(&realtime.Dispatcher{Store: services.Store, Hub: services.Hub}).Run(ctx)
@@ -61,6 +62,10 @@ func (services *ServiceContext) Start(ctx context.Context) {
 	go func() {
 		defer services.workers.Done()
 		(&realtime.Reconciler{Store: services.Store, Hub: services.Hub}).Run(ctx)
+	}()
+	go func() {
+		defer services.workers.Done()
+		(&realtime.Retention{Store: services.Store, Files: services.Media.Files}).Run(ctx)
 	}()
 }
 

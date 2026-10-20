@@ -145,12 +145,16 @@ func (service *MediaService) Upload(ctx context.Context, userID, conversationID,
 }
 
 // Retrieve returns the upload only when the caller is a member of the owning
-// conversation, so media URLs cannot be shared outside their conversation.
+// conversation and the attachment has not been withdrawn. A media row is
+// referenced by at most one message (partial unique index on media_id), so a
+// recall on that message makes the bytes unavailable as well: otherwise a
+// member who kept the id could still download what the sender withdrew.
 func (service *MediaService) Retrieve(ctx context.Context, userID, mediaID string) (model.MediaUpload, error) {
 	upload := model.MediaUpload{}
 	err := service.Store.DB.QueryRow(ctx, `SELECT m.id,m.owner_id,m.conversation_id,m.file_name,m.media_type,m.content_type,m.byte_size,m.storage_key,m.created_at
 		FROM message_media m JOIN conversation_members cm ON cm.conversation_id=m.conversation_id
-		WHERE m.id=$1 AND cm.user_id=$2`, mediaID, userID).Scan(&upload.ID, &upload.OwnerID, &upload.ConversationID, &upload.FileName, &upload.MediaType, &upload.ContentType, &upload.ByteSize, &upload.StorageKey, &upload.CreatedAt)
+		WHERE m.id=$1 AND cm.user_id=$2
+			AND NOT EXISTS (SELECT 1 FROM messages msg WHERE msg.media_id=m.id AND msg.recalled_at IS NOT NULL)`, mediaID, userID).Scan(&upload.ID, &upload.OwnerID, &upload.ConversationID, &upload.FileName, &upload.MediaType, &upload.ContentType, &upload.ByteSize, &upload.StorageKey, &upload.CreatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return model.MediaUpload{}, model.Fail(404, "not_found")
 	}

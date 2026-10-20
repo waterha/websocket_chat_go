@@ -48,6 +48,7 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | POST | `/conversations/{id}/received` | `{"device_id":"设备ID","seq":42}`；更新设备接收游标，与已读无关 |
 | GET | `/conversations/{id}/messages/{seq}/delivery` | 仅消息发送者可查：返回其他成员中至少一台设备确认到该序号的人数、其他成员总数及查询时间；找不到或无权查看返回 404 |
 | GET | `/devices/{device_id}/cursors` | 当前设备对每个会话的 `conversation_id,device_id,received_seq,last_seq`；用最新序号对账 |
+| POST | `/presence` | `{"user_ids":["用户ID"]}`（最多 1000 个）返回 `{"online":{"用户ID":true}}`；仅表示该用户当前是否有活动连接 |
 
 `client_msg_id` 长度 8–100，同一发送者全局唯一；重复提交相同会话及内容返回原消息，内容或会话不同返回 409。`seq` 在单个会话内连续；未提交的事务不会消耗序号。游标只前进；超过会话最新序号会返回 400。所有历史与同步接口都检查会话成员资格。`received_seq` 是客户端声明已经连续处理到该位置的应用层接收确认，并**不是**服务端写入网络成功或用户已读；不得跳过缺失序号确认。
 
@@ -69,7 +70,7 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 
 - **回复**：发送时带 `reply_to_id`。服务端校验被引用消息属于同一会话，否则 404 `not_found`；跨会话引用不会被接受。`reply` 是服务端生成的引用上下文：`{"id","seq","sender_id","kind","excerpt","recalled","media_type"}`，`excerpt` 最多 120 个字符，附件消息按类型显示。原文被撤回后 `recalled=true` 且 `excerpt` 为空。
 - **提及**：`mentions` 是最多 100 个成员用户 ID；重复值被去重并按 ID 排序，非成员或空值返回 400 `invalid_mentions`。提及只是结构化标注与客户端高亮/通知依据，**不是**投递保证。
-- **撤回**：`POST /conversations/{id}/messages/{seq}/recall`。发送者本人可在**发送后 2 分钟内**撤回，超时返回 403 `recall_window_expired`；群主与管理员不受该窗口限制，可撤回本群任意成员的消息（管理场景）。其他人返回 403 `forbidden`。撤回**保留消息行与会话序号**，因此历史仍然连续、`/sync` 游标不受影响；`content` 与附件元数据不再返回，客户端应显示占位文本。重复撤回幂等。撤回不删除磁盘上的附件字节。
+- **撤回**：`POST /conversations/{id}/messages/{seq}/recall`。发送者本人可在**发送后 2 分钟内**撤回，超时返回 403 `recall_window_expired`；群主与管理员不受该窗口限制，可撤回本群任意成员的消息（管理场景）。其他人返回 403 `forbidden`。撤回**保留消息行与会话序号**，因此历史仍然连续、`/sync` 游标不受影响；`content`、附件元数据与 **`media_id` 都不再返回**，客户端应显示占位文本。重复撤回幂等。**撤回会一并使附件不可下载**：`GET /media/{id}` 对该附件返回 404，即使调用者仍是会话成员且保存了该 id。附件字节由保留清理延迟回收（见下），磁盘删除不影响消息行与撤回状态。
 - 幂等比较包含 `content`、`media_id`、`reply_to_id` 与 `mentions`，其中任一不同而 `client_msg_id` 相同会返回 409 `message_conflict`。
 - 撤回推送 `message.recalled` 事件（载荷为撤回后的消息），与 `message.created` 一样可能重复或丢失，客户端应通过 `/sync` 兜底。
 
@@ -116,7 +117,13 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 - 发送附件消息：`{"client_msg_id":"...","content":"可选说明","media_id":"上传返回的 id"}`。`kind` 由附件类型推导，不读取客户端声明；`content` 可为空字符串（最多 4000 字符）作为说明。引用不存在、不属于该会话或非本人上传的 `media_id` 返回 404；`content` 为空且没有 `media_id` 返回 400。
 - `GET /media/{media_id}`：`image`/`video` 以 `Content-Disposition: inline` 返回，`file` 以 `attachment` 返回并带 UTF-8 文件名，避免浏览器在应用源内渲染不可信文档。非成员或不存在返回 404 `not_found`。响应带 `nosniff` 与私有缓存头。
 
-附件字节保存在服务端 `MEDIA_DIR`（默认相对后端目录的 `../media`），数据库只记录归属与元数据。删除消息与会话不会删除磁盘文件，清理策略尚未实现；当前也不支持上传进度、断点续传、缩略图、视频转码与病毒扫描。
+附件字节保存在服务端 `MEDIA_DIR`（默认相对后端目录的 `../media`），数据库只记录归属与元数据。**保留清理**每 5 分钟回收两类数据：已发布且超过保留期（默认 7 天）的 outbox 行，以及已被撤回消息所引用的附件字节（行保留并标记 `bytes_removed_at`，文件删除）。未发布的 outbox 行与仍被正常消息引用的附件**永不删除**。清理是幂等的，删除文件后写标记，进程在两步之间崩溃时下一轮会重试。当前不支持上传进度、断点续传、缩略图、视频转码与病毒扫描。
+
+## 在线状态
+
+`POST /api/v1/presence` 用 `{"user_ids":[...]}` 查询这些用户当前是否有活动连接，返回 `{"online":{"用户ID":true}}`；未列出或已过期的用户视为离线。它读取的是 WebSocket 写循环每 `Heartbeat` 刷新的 Redis 标记（TTL 为三倍心跳），因此回答的是「最近一个心跳窗口内是否有连接」，而不是投递保证，也不是历史在线记录。`GET /conversations` 的成员对象也带 `online` 字段，方便直接渲染。
+
+查询是**只读**的，不产生事件；Redis 不可用时该字段与接口会失败或缺失，客户端不应据此断言离线。当前没有：在线状态的推送通知、自定义状态（忙碌/离开）、最后上线时间与离线原因。
 
 ## 全局搜索
 

@@ -156,3 +156,43 @@ func TestRecalledMessageHidesContent(t *testing.T) {
 }
 
 func itoa(value int64) string { return strconv.FormatInt(value, 10) }
+
+// A recall must withdraw the attachment itself, not just the caption: the
+// download endpoint authorises by conversation membership, so a reader who kept
+// the id could otherwise still fetch bytes the sender withdrew.
+func TestRecalledAttachmentBecomesUnavailable(t *testing.T) {
+	_, server, _, aliceToken, _, bobToken, _, _, group := replyFixture(t)
+
+	image := []byte("\x89PNG\r\n\x1a\n secret image bytes")
+	uploaded, _ := uploadMedia(t, server, aliceToken, group, "secret.png", "image/png", image, 201)
+	message := sendMessage(t, server, aliceToken, group, map[string]any{"client_msg_id": "recall-media-0001", "content": "", "media_id": uploaded.ID}, 201)
+
+	// Before the recall a member can read the bytes.
+	download(t, server, bobToken, uploaded.ID, 200)
+
+	recalled := httpCall(t, server, aliceToken, "POST", "/api/v1/conversations/"+group+"/messages/"+itoa(message.Seq)+"/recall", nil, 200)
+	var result model.Message
+	if err := json.Unmarshal(recalled, &result); err != nil {
+		t.Fatal(err)
+	}
+	// The recall response must not carry the attachment id either.
+	if result.MediaID != "" || result.Media != nil || result.Content != "" {
+		t.Fatalf("recall still exposes the attachment: %+v", result)
+	}
+
+	// Sync must not leak the id to other members.
+	synced := httpCall(t, server, bobToken, "GET", "/api/v1/conversations/"+group+"/sync?after_seq=0&limit=100", nil, 200)
+	var page model.SyncPage
+	if err := json.Unmarshal(synced, &page); err != nil {
+		t.Fatal(err)
+	}
+	for _, item := range page.Messages {
+		if item.Seq == message.Seq && (item.MediaID != "" || item.Media != nil) {
+			t.Fatalf("sync leaked a recalled attachment id: %+v", item)
+		}
+	}
+
+	// The bytes are unavailable afterwards, even to a member holding the id.
+	download(t, server, bobToken, uploaded.ID, 404)
+	download(t, server, aliceToken, uploaded.ID, 404)
+}

@@ -54,10 +54,14 @@ func scanMessage(row pgx.Row) (model.Message, error) {
 			return message, err
 		}
 	}
-	// A recalled message hides its body, matching what the quoted excerpt shows.
+	// A recalled message hides everything about its body. MediaID is cleared too:
+	// leaving it in the payload would let a reader fetch the bytes that the
+	// recall was meant to withdraw, since the download endpoint authorises by
+	// conversation membership alone.
 	if message.RecalledAt != nil {
 		message.Content = ""
 		message.Media = nil
+		message.MediaID = ""
 	}
 	return message, nil
 }

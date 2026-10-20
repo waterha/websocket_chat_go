@@ -9,6 +9,9 @@ type Member struct {
 	Role        string     `json:"role"`
 	LastReadSeq int64      `json:"last_read_seq"`
 	ReadAt      *time.Time `json:"read_at"`
+	// Online reflects a live WebSocket connection within the heartbeat window.
+	// It is a best-effort hint, not a delivery guarantee.
+	Online bool `json:"online"`
 }
 
 type Conversation struct {

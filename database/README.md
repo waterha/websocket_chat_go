@@ -1,6 +1,6 @@
 # 数据库说明
 
-`000001_initial` 建立用户、会话、会话成员、登录会话与消息；`000002_im_core` 增加成员已读时间、每设备接收游标、待推送 outbox；`000003_system_messages` 为群成员邀请提示增加消息类型；`000004_friendships` 增加双向好友关系；`000005_friend_requests` 增加带可选申请信息的好友申请及 pending/accepted/rejected 状态；`000006_message_history_index` 移除重复历史索引，保留 `(conversation_id, seq)` 唯一 B-tree 同时服务正向补拉和反向历史分页；`000007_media_messages` 增加图片/视频附件表并把消息类型扩展为 `user/system/image/video`；`000008_group_roles` 增加群主/管理员角色、群公告与 `created_by`，并移除「消息发送者必须是当前成员」的外键；`000009_message_reply_mentions` 为消息增加引用回复、@提及与撤回状态；`000010_file_attachments_search` 允许通用文件附件（不含可用索引，原因见下）；`000011_session_csrf` 为登录会话增加 CSRF 令牌与创建时间，支持修改密码后撤销其他会话；`000012_drop_search_trgm_index` 移除 000010 曾创建但无法加速搜索的 `pg_trgm` 索引；`000013_conversation_preferences` 增加按成员的置顶、免打扰与归档；`000014_drop_archive` 移除归档（只保留置顶与免打扰）并重建偏好索引。服务启动时通过 `schema_migrations` 逐项执行尚未应用的迁移，迁移文件内容和版本写入同一事务；既有未版本化初始数据库可识别并升级。生产环境应使用独立迁移任务和最小权限。
+`000001_initial` 建立用户、会话、会话成员、登录会话与消息；`000002_im_core` 增加成员已读时间、每设备接收游标、待推送 outbox；`000003_system_messages` 为群成员邀请提示增加消息类型；`000004_friendships` 增加双向好友关系；`000005_friend_requests` 增加带可选申请信息的好友申请及 pending/accepted/rejected 状态；`000006_message_history_index` 移除重复历史索引，保留 `(conversation_id, seq)` 唯一 B-tree 同时服务正向补拉和反向历史分页；`000007_media_messages` 增加图片/视频附件表并把消息类型扩展为 `user/system/image/video`；`000008_group_roles` 增加群主/管理员角色、群公告与 `created_by`，并移除「消息发送者必须是当前成员」的外键；`000009_message_reply_mentions` 为消息增加引用回复、@提及与撤回状态；`000010_file_attachments_search` 允许通用文件附件（不含可用索引，原因见下）；`000011_session_csrf` 为登录会话增加 CSRF 令牌与创建时间，支持修改密码后撤销其他会话；`000012_drop_search_trgm_index` 移除 000010 曾创建但无法加速搜索的 `pg_trgm` 索引；`000013_conversation_preferences` 增加按成员的置顶、免打扰与归档；`000014_drop_archive` 移除归档（只保留置顶与免打扰）并重建偏好索引；`000015_retention` 增加保留清理所需的索引与附件回收标记。服务启动时通过 `schema_migrations` 逐项执行尚未应用的迁移，迁移文件内容和版本写入同一事务；既有未版本化初始数据库可识别并升级。生产环境应使用独立迁移任务和最小权限。
 
 - `conversations.next_seq`：会话序号，发送事务锁会话行并加一；`messages` 对 `(conversation_id, seq)` 和 `(sender_id, client_msg_id)` 唯一。
 - `messages.kind`：普通消息为 `user`，群成员邀请提示为 `system`，附件消息为 `image` 或 `video`；提示与普通消息共用会话序号，可离线同步与历史漫游。
@@ -8,6 +8,7 @@
 - `messages_content_trgm_idx`（已移除）：最初为全局搜索建立 `pg_trgm` GIN 索引，但搜索使用 `strpos(lower(content),lower(q))`，是函数调用而非 `LIKE` 操作符，该索引无法被使用；同时 `CREATE EXTENSION` 受迁移 `search_path` 限制，在临时 schema 中不可见。因此 `000012` 删除它，全局搜索当前**没有**专用索引，只靠成员资格过滤、时间排序与行数上限约束。真正需要时（例如 `tsvector` 列或外部搜索服务）应作为独立工作实现。
 - `sessions.csrf_token` / `created_at`：每个登录会话的 CSRF 令牌（写请求必须在 `X-CSRF-Token` 中回传）与创建时间。修改密码时删除该用户除当前会话外的所有行，从而撤销其他设备的登录。
 - `conversation_members.pinned_at` / `muted`：每个成员私有的会话偏好（置顶时间、免打扰）。索引 `conversation_members_prefs_idx` 服务置顶优先的列表排序。`archived_at` 曾由 `000013` 加入，`000014` 已移除：归档不改变消息可见性，只是把会话移出列表，属于多余的第二生命周期。
+- `message_media.bytes_removed_at`：附件字节已被保留清理删除的时间。行保留以便消息仍能解析到「曾有什么被撤回」，但文件不再存在。`message_media_removable_idx` 与 `message_outbox_published_age_idx` 服务清理扫描。清理**只**处理已发布且过期的 outbox 行与「被撤回消息引用」的附件；未发布行与正常引用的附件永不删除。
 - `conversations.created_by` / `announcement`：群主（转让时同步更新）与群公告（最多 2000 字）。
 - `conversation_members.role`：`owner`/`admin`/`member`；部分唯一索引 `conversation_members_owner_idx` 保证每个会话最多一个群主。私聊成员固定为 `member`。
 - 消息发送者不必是当前成员：`messages` 不再有 `(conversation_id, sender_id)` 外键，因此移除成员或退群不会删除、也无法删除群内历史；写入新消息时的成员资格由应用层在事务内校验。
