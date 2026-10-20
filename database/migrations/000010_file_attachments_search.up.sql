@@ -13,7 +13,8 @@ ALTER TABLE messages ADD CONSTRAINT messages_content_check CHECK (
     (kind IN ('image', 'video', 'file') AND media_id IS NOT NULL AND char_length(content) <= 4000)
 );
 
--- Global search filters by membership and orders by recency, so it needs an
--- index on the message body plus the existing per-conversation history index.
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE INDEX messages_content_trgm_idx ON messages USING gin(lower(content) gin_trgm_ops);
+-- Global search matches with `strpos(lower(content), lower(query))`, which is a
+-- function call rather than a LIKE operator, so a pg_trgm GIN index cannot
+-- accelerate it. No index is created here; the query is bounded by the caller's
+-- membership, a recency ordering and a row limit. Adding a real search index
+-- (for example a tsvector column or an external search service) is future work.

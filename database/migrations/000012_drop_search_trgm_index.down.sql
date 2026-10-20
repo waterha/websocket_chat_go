@@ -1,0 +1,4 @@
+-- Recreating the index needs the pg_trgm extension in the migration search_path,
+-- which is not guaranteed. The down script therefore documents the intent rather
+-- than restoring an index that could not be used by the search query.
+-- (Intentionally a no-op.)

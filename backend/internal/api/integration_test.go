@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -65,13 +66,19 @@ func fixture(t *testing.T, start bool) *svc.ServiceContext {
 	return services
 }
 
+// testCSRFTokens remembers each registered test session's CSRF token so
+// httpCall can attach the header without every call site carrying it. The
+// production client reads the same token from the readable `csrf` cookie.
+var testCSRFTokens sync.Map
+
 func account(t *testing.T, services *svc.ServiceContext, name string) (model.User, string) {
 	t.Helper()
-	user, token, err := services.Auth.Register(t.Context(), logic.Credentials{Email: name + "@example.test", Name: name, Password: "secure-password"})
+	user, session, err := services.Auth.Register(t.Context(), logic.Credentials{Email: name + "@example.test", Name: name, Password: "secure-password"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return user, token
+	testCSRFTokens.Store(session.Token, session.CSRFToken)
+	return user, session.Token
 }
 
 func status(t *testing.T, err error, expected int) {
@@ -166,6 +173,11 @@ func httpCall(t *testing.T, server *httptest.Server, token, method, path string,
 		t.Fatal(err)
 	}
 	request.Header.Set("Cookie", "session="+token)
+	// State-changing requests need the session's CSRF token; safe methods ignore
+	// the header, so setting it unconditionally keeps this helper simple.
+	if csrf, ok := testCSRFTokens.Load(token); ok {
+		request.Header.Set("X-CSRF-Token", csrf.(string))
+	}
 	response, err := server.Client().Do(request)
 	if err != nil {
 		t.Fatal(err)

@@ -1,5 +1,3 @@
-DROP INDEX messages_content_trgm_idx;
-
 ALTER TABLE messages DROP CONSTRAINT messages_content_check;
 ALTER TABLE messages ADD CONSTRAINT messages_content_check CHECK (
     (kind IN ('user', 'system') AND char_length(content) BETWEEN 1 AND 4000) OR

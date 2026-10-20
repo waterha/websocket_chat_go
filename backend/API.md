@@ -1,12 +1,24 @@
 # API 参考
 
-HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","message":"..."}}`。受保护接口使用 `session` HttpOnly Cookie。JSON 使用 `snake_case`；同一 Cookie 的会话主体由服务端确定，客户端不能指定发送者。请求体不超过 64 KiB；请求的 `Origin` 必须匹配 `FRONTEND_ORIGIN`（CLI 请求可以省略）。
+HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","message":"..."}}`。受保护接口使用 `session` HttpOnly Cookie。JSON 使用 `snake_case`；同一 Cookie 的会话主体由服务端确定，客户端不能指定发送者。请求体不超过 64 KiB（媒体上传例外）；请求的 `Origin` 必须匹配 `FRONTEND_ORIGIN`（CLI 请求可以省略）。
+
+## 会话、CSRF 与限流
+
+登录与注册会同时下发两个 Cookie：`session`（HttpOnly，不可被脚本读取）与 `csrf`（可被脚本读取）。**除 `GET`/`HEAD`/`OPTIONS` 外的所有请求**都必须带上与 `csrf` Cookie 值一致的 `X-CSRF-Token` 请求头，否则返回 403 `invalid_csrf`。这是防跨站请求伪造的双重提交校验；`SameSite=Lax` 只覆盖大部分表单提交场景，令牌校验才覆盖剩余情况。登录与注册本身无需令牌，因为它们发生在会话建立之前。
+
+- 升级前建立的会话没有 `csrf_token`，因此写请求会返回 401 `reauthentication_required`：请重新登录，而不是被隐式信任。
+- 登录失败按账号计数，`IM_TEST_REDIS_ADDR` 中的 Redis 保存固定窗口计数（默认 15 分钟 10 次）。超过后返回 429 `too_many_attempts` 并带 `Retry-After` 头；窗口内的正确密码同样被拒绝。账号不存在与密码错误返回**相同**的 401 `invalid_credentials`，且都计入限流，避免用错误码枚举已注册账号。Redis 不可用时**放行**（fail-open），以免缓存故障把所有人锁在账号外。
+- `POST /auth/password`：`{"current_password":"...","new_password":"至少八位"}`。校验当前密码（错误返回 403 `invalid_password`），新旧相同返回 400 `password_unchanged`，新密码长度非法返回 400 `invalid_password`。成功后**撤销除当前会话外的全部会话**，并断开其他设备的 WebSocket 连接；旧密码立即失效。响应 `{"revoked_other_sessions":true}`。
+- 会话有效期 7 天，Cookie 为 `SameSite=Lax`；`APP_ENV=production` 时附带 `Secure`。
+
+当前没有：二次验证、找回密码、独立的会话管理界面（列出并逐个撤销设备）、IP 维度限流与审计日志。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | POST | `/auth/register` | `{"email":"...","name":"...","password":"至少八位"}`；注册并登录 |
 | POST | `/auth/login` | `{"email":"...","password":"..."}` |
 | POST | `/auth/logout` | 当前会话注销并断开其 WebSocket |
+| POST | `/auth/password` | 修改密码：`{"current_password":"...","new_password":"..."}`；成功后撤销其他会话 |
 | GET | `/me` | 当前用户 |
 | PATCH | `/me` | 修改当前用户的用户名和用户账号：`{"name":"新用户名","email":"new@example.com"}`；用户 ID 不变，账号重复返回 `email_exists` |
 | GET | `/users` | 用户列表（当前最多 1000 条） |

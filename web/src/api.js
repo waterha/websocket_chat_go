@@ -1,20 +1,33 @@
+// The CSRF token is issued in a readable cookie at login and echoed back in a
+// header on every state-changing request. Safe methods do not need it.
+function csrfToken() {
+  const match = document.cookie.match(/(?:^|;\s*)csrf=([^;]*)/)
+  return match ? decodeURIComponent(match[1]) : ''
+}
+
+function requestHeaders(headers = {}) {
+  const token = csrfToken()
+  return token ? { ...headers, 'X-CSRF-Token': token } : headers
+}
+
 export async function api(path, options = {}) {
   const response = await fetch(`/api/v1${path}`, {
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: requestHeaders({ 'Content-Type': 'application/json', ...(options.headers || {}) }),
   })
   const body = await response.json()
   if (!response.ok) {
     const error = new Error(body.error?.message || '请求失败')
     error.status = response.status
+    error.code = body.error?.code
     throw error
   }
   return body.data
 }
 
 const MEDIA_ERRORS = {
-  unsupported_media_type: '只支持图片或视频文件',
+  unsupported_media_type: '不支持该文件类型',
   media_too_large: '文件超出大小限制',
   invalid_upload: '文件上传不完整，请重试',
   not_found: '当前会话不可用，无法上传',
@@ -27,7 +40,7 @@ export async function uploadMedia(conversationID, file) {
   const response = await fetch(`/api/v1/conversations/${conversationID}/media?${params}`, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'Content-Type': file.type },
+    headers: requestHeaders({ 'Content-Type': file.type }),
     body: file,
   })
   const body = await response.json().catch(() => ({}))

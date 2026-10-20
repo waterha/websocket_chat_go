@@ -28,6 +28,9 @@ func uploadMedia(t *testing.T, server *httptest.Server, token, conversationID, f
 	}
 	request.Header.Set("Cookie", "session="+token)
 	request.Header.Set("Content-Type", contentType)
+	if csrf, ok := testCSRFTokens.Load(token); ok {
+		request.Header.Set("X-CSRF-Token", csrf.(string))
+	}
 	response, err := server.Client().Do(request)
 	if err != nil {
 		t.Fatal(err)

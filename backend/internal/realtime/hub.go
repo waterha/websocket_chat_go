@@ -115,6 +115,18 @@ func (hub *Hub) DisconnectSession(sessionHash string) {
 	}
 }
 
+// DisconnectOthers closes every connection of a user except the session that
+// must stay alive, so a password change ends all other logins immediately.
+func (hub *Hub) DisconnectOthers(userID, keepSessionHash string) {
+	hub.mutex.Lock()
+	defer hub.mutex.Unlock()
+	for _, client := range hub.clients[userID] {
+		if client.SessionHash != keepSessionHash {
+			client.stop()
+		}
+	}
+}
+
 func (hub *Hub) Close() {
 	hub.mutex.Lock()
 	defer hub.mutex.Unlock()

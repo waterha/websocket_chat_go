@@ -16,9 +16,13 @@ type authHandler func(http.ResponseWriter, *http.Request, identity)
 func (server *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", server.health)
+	// Login and registration are unauthenticated and therefore cannot carry a
+	// session CSRF token, but they are still protected by SameSite cookies and
+	// the login limiter.
 	mux.HandleFunc("POST /api/v1/auth/register", server.register)
 	mux.HandleFunc("POST /api/v1/auth/login", server.login)
 	mux.HandleFunc("POST /api/v1/auth/logout", server.auth(server.logout))
+	mux.HandleFunc("POST /api/v1/auth/password", server.auth(server.changePassword))
 	mux.HandleFunc("PATCH /api/v1/me", server.auth(server.updateMe))
 	mux.HandleFunc("GET /api/v1/me", server.auth(func(writer http.ResponseWriter, request *http.Request, caller identity) {
 		respond(writer, 200, caller.account)
@@ -49,5 +53,5 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/conversations/{id}/received", server.auth(server.received))
 	mux.HandleFunc("GET /api/v1/devices/{device_id}/cursors", server.auth(server.cursors))
 	mux.HandleFunc("GET /ws", server.auth(server.websocket))
-	return server.cors(mux)
+	return server.cors(server.csrf(mux))
 }

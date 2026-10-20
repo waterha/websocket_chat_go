@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"websocket_chat_go/backend/internal/logic"
 	"websocket_chat_go/backend/internal/model"
 )
 
@@ -27,6 +28,10 @@ func publicError(err error) *model.Error {
 
 func fail(writer http.ResponseWriter, err error) {
 	failure := publicError(err)
+	// A throttling failure carries a suggested wait in a header, not the body.
+	if failure.RetryAfter > 0 {
+		writer.Header().Set("Retry-After", logic.RetrySeconds(failure.RetryAfter))
+	}
 	writer.Header().Set("Content-Type", "application/json")
 	writer.Header().Set("Cache-Control", "no-store")
 	writer.WriteHeader(failure.Status)
