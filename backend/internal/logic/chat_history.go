@@ -28,7 +28,36 @@ func (chat *Chat) History(ctx context.Context, userID, conversationID string, be
 		messages = append(messages, message)
 	}
 	slices.Reverse(messages)
+	if err = chat.attachThreads(ctx, messages); err != nil {
+		return nil, err
+	}
 	return messages, rows.Err()
+}
+
+// attachThreads adds reply summaries to the root messages in a page. Messages
+// that are themselves replies are left alone: their summary belongs to the
+// window they were posted in, which the thread endpoint resolves by walking up
+// to the stored root.
+func (chat *Chat) attachThreads(ctx context.Context, messages []model.Message) error {
+	roots := []string{}
+	for _, message := range messages {
+		if message.ThreadRootID == "" && message.Kind != "system" {
+			roots = append(roots, message.ID)
+		}
+	}
+	if len(roots) == 0 {
+		return nil
+	}
+	summaries, err := chat.ThreadSummaries(ctx, roots)
+	if err != nil {
+		return err
+	}
+	for index := range messages {
+		if summary, exists := summaries[messages[index].ID]; exists {
+			messages[index].Thread = &summary
+		}
+	}
+	return nil
 }
 
 func (chat *Chat) Sync(ctx context.Context, userID, conversationID string, after int64, limit int) (model.SyncPage, error) {
@@ -55,5 +84,8 @@ func (chat *Chat) Sync(ctx context.Context, userID, conversationID string, after
 		page.NextSeq = message.Seq
 	}
 	page.HasMore = page.NextSeq < lastSeq
+	if err = chat.attachThreads(ctx, page.Messages); err != nil {
+		return page, err
+	}
 	return page, rows.Err()
 }

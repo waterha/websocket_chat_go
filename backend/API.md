@@ -37,6 +37,7 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | PATCH | `/conversations/{id}/announcement` | 群公告：`{"announcement":"最多 2000 字，可清空"}`；群主与管理员可调用，空字符串表示清除 |
 | PATCH | `/conversations/{id}/preferences` | 个人会话偏好：`{"pinned":true,"muted":false}`，字段可省略表示不改，仅影响本人 |
 | POST | `/conversations/{id}/messages` | `{"client_msg_id":"客户端稳定ID","content":"你好"}`；新消息 201，幂等重复 200。可带 `media_id`（附件）、`reply_to_id`（引用同会话消息）、`mentions`（提及成员 ID 数组） |
+| GET | `/conversations/{id}/messages/{message_id}/thread?limit=100&after_seq=0` | 回复对话窗口：返回根消息与该消息的全部回复（升序分页），见下文 |
 | POST | `/conversations/{id}/messages/{seq}/recall` | 撤回消息；发送者本人在 2 分钟内可撤回，群主/管理员可撤回本群任意消息；已撤回的消息内容不再返回 |
 | POST | `/conversations/{id}/media?file_name=photo.png` | 上传图片或视频：请求体为文件原始字节，`Content-Length` 必填，`Content-Type` 决定类型；成功 201 返回附件元数据，见下文 |
 | GET | `/media/{media_id}` | 下载附件原始字节；仅该会话成员可访问，返回 `Content-Type`、`Content-Disposition: inline`，见下文 |
@@ -87,6 +88,17 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 - 免打扰只影响客户端的提示与未读角标，**不影响消息投递、接收游标与已读状态**。
 
 偏好是本机可见的视图设置，因此不产生 outbox 事件，也不做广播。**归档功能已移除**（迁移 000014）：它只增加第二个生命周期，却不改变任何成员能看到或能做的事，因此不值得保留。当前也没有：按会话自定义提醒级别、免打扰时间段与文件夹分组。
+
+## 回复对话窗口（话题串）
+
+回复被组织成**扁平的话题串**：一条被回复的消息是窗口的根，对它（以及对其回复）的所有回复都属于同一个窗口。这样「展开一条消息的全部回复」是一次带索引的查询，而不会随嵌套深度增长。
+
+- 根由服务端推导，不信任客户端：发送回复时 `thread_root_id` 由被引用消息决定。若被引用消息自己有根，则沿用该根（回复的回复归入同一窗口）；否则以被引用消息为根（开启新窗口）。因此**客户端传入 `thread_root_id` 不会生效**，无法把回复塞进无关窗口。
+- `GET /conversations/{id}/messages/{message_id}/thread` 返回 `{"root":{...},"replies":[...],"has_more":bool,"next_after_seq":N,"reply_count":N}`。`message_id` 可以是根，也可以是窗口内的任一回复——服务端会解析到根，因此从回复打开得到的是同一个窗口，而不是嵌套窗口。`replies` 按会话内 `seq` **升序**返回（旧的在前）。`limit` 默认 100、上限 100；`after_seq` 为上一页的 `next_after_seq`。非成员、非本会话消息与不存在的消息都返回 404 `not_found`。
+- 主聊天界面的每条根消息带 `thread` 摘要：`{"root_id","reply_count","preview":[...]}`。`reply_count` 是**窗口内回复总数**，而 `preview` 只保留**最早 3 条**回复，避免长话题把历史列表撑大。没有回复的消息不带 `thread` 字段。摘要在历史与 `/sync` 返回消息时一并附带，因此客户端不需要为每条消息单独请求。
+- 窗口内的回复也可以被回复和撤回，规则与其他消息相同；窗口本身不改变撤回语义。
+
+当前没有：话题串成员订阅、未读计数、把话题串限制在频道内、以及回复的通知聚合。
 
 ## 群组治理
 

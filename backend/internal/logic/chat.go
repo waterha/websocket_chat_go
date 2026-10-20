@@ -15,7 +15,7 @@ const MaxGroupMembers = 1000
 // and recall state. The correlated subqueries keep every read path returning a
 // complete JSON object without extra queries. media_id is coalesced because rows
 // without an attachment store NULL and would otherwise scan as an error.
-const messageColumns = `id,conversation_id,sender_id,client_msg_id,seq,content,kind,created_at,COALESCE(media_id,''),mentions,recalled_at,COALESCE(reply_to_id,''),
+const messageColumns = `id,conversation_id,sender_id,client_msg_id,seq,content,kind,created_at,COALESCE(media_id,''),mentions,recalled_at,COALESCE(reply_to_id,''),COALESCE(thread_root_id,''),
 	(SELECT jsonb_build_object('id',mm.id,'file_name',mm.file_name,'media_type',mm.media_type,'content_type',mm.content_type,'byte_size',mm.byte_size)
 	 FROM message_media mm WHERE mm.id=messages.media_id),
 	(SELECT jsonb_build_object('id',r.id,'seq',r.seq,'sender_id',r.sender_id,'kind',r.kind,'recalled',r.recalled_at IS NOT NULL,
@@ -28,7 +28,7 @@ const messageColumns = `id,conversation_id,sender_id,client_msg_id,seq,content,k
 // ambiguous (for example `id` exists on both messages and conversations).
 func messageColumnsFor(alias string) string {
 	prefix := func(column string) string { return alias + "." + column }
-	return prefix(`id`) + `,` + prefix(`conversation_id`) + `,` + prefix(`sender_id`) + `,` + prefix(`client_msg_id`) + `,` + prefix(`seq`) + `,` + prefix(`content`) + `,` + prefix(`kind`) + `,` + prefix(`created_at`) + `,COALESCE(` + prefix(`media_id`) + `,''),` + prefix(`mentions`) + `,` + prefix(`recalled_at`) + `,COALESCE(` + prefix(`reply_to_id`) + `,''),
+	return prefix(`id`) + `,` + prefix(`conversation_id`) + `,` + prefix(`sender_id`) + `,` + prefix(`client_msg_id`) + `,` + prefix(`seq`) + `,` + prefix(`content`) + `,` + prefix(`kind`) + `,` + prefix(`created_at`) + `,COALESCE(` + prefix(`media_id`) + `,''),` + prefix(`mentions`) + `,` + prefix(`recalled_at`) + `,COALESCE(` + prefix(`reply_to_id`) + `,''),COALESCE(` + prefix(`thread_root_id`) + `,''),
 	(SELECT jsonb_build_object('id',mm.id,'file_name',mm.file_name,'media_type',mm.media_type,'content_type',mm.content_type,'byte_size',mm.byte_size)
 	 FROM message_media mm WHERE mm.id=` + prefix(`media_id`) + `),
 	(SELECT jsonb_build_object('id',r.id,'seq',r.seq,'sender_id',r.sender_id,'kind',r.kind,'recalled',r.recalled_at IS NOT NULL,
@@ -40,7 +40,7 @@ func messageColumnsFor(alias string) string {
 func scanMessage(row pgx.Row) (model.Message, error) {
 	var message model.Message
 	var attachment, reply []byte
-	err := row.Scan(&message.ID, &message.ConversationID, &message.SenderID, &message.ClientMsgID, &message.Seq, &message.Content, &message.Kind, &message.CreatedAt, &message.MediaID, &message.Mentions, &message.RecalledAt, &message.ReplyToID, &attachment, &reply)
+	err := row.Scan(&message.ID, &message.ConversationID, &message.SenderID, &message.ClientMsgID, &message.Seq, &message.Content, &message.Kind, &message.CreatedAt, &message.MediaID, &message.Mentions, &message.RecalledAt, &message.ReplyToID, &message.ThreadRootID, &attachment, &reply)
 	if err != nil {
 		return message, err
 	}
@@ -80,8 +80,8 @@ func insertMessage(ctx context.Context, tx pgx.Tx, input model.Message) (model.M
 	if mentions == nil {
 		mentions = []string{}
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO messages(id,conversation_id,sender_id,client_msg_id,seq,content,kind,media_id,reply_to_id,mentions)
-		VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,''),NULLIF($9,''),$10)`, identifier, input.ConversationID, input.SenderID, input.ClientMsgID, input.Seq, input.Content, input.Kind, input.MediaID, input.ReplyToID, mentions); err != nil {
+	if _, err := tx.Exec(ctx, `INSERT INTO messages(id,conversation_id,sender_id,client_msg_id,seq,content,kind,media_id,reply_to_id,thread_root_id,mentions)
+		VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8,''),NULLIF($9,''),NULLIF($10,''),$11)`, identifier, input.ConversationID, input.SenderID, input.ClientMsgID, input.Seq, input.Content, input.Kind, input.MediaID, input.ReplyToID, input.ThreadRootID, mentions); err != nil {
 		return model.Message{}, err
 	}
 	return scanMessage(tx.QueryRow(ctx, "SELECT "+messageColumns+" FROM messages WHERE id=$1", identifier))

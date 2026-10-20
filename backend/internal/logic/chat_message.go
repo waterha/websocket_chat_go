@@ -83,13 +83,27 @@ func (chat *Chat) Send(ctx context.Context, userID string, input model.SendInput
 	if input.ReplyToID != "" {
 		// The quoted message must live in the same conversation, otherwise a
 		// caller could leak context across conversations they belong to.
-		var exists bool
-		if err = tx.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM messages WHERE id=$1 AND conversation_id=$2)", input.ReplyToID, input.ConversationID).Scan(&exists); err != nil {
-			return model.Message{}, false, err
-		}
-		if !exists {
+		// The thread root is derived here rather than trusted from the client: a
+		// reply to a reply must join the original window, and a reply to a root
+		// starts one. A client-supplied root would be an easy way to file a reply
+		// into an unrelated window.
+		var quotedRoot string
+		err = tx.QueryRow(ctx, "SELECT COALESCE(thread_root_id,'') FROM messages WHERE id=$1 AND conversation_id=$2", input.ReplyToID, input.ConversationID).Scan(&quotedRoot)
+		if errors.Is(err, pgx.ErrNoRows) {
 			return model.Message{}, false, model.Fail(404, "not_found")
 		}
+		if err != nil {
+			return model.Message{}, false, err
+		}
+		if quotedRoot != "" {
+			// Replying inside a window joins that window.
+			input.ThreadRootID = quotedRoot
+		} else {
+			// Replying to a root message starts a window rooted at it.
+			input.ThreadRootID = input.ReplyToID
+		}
+	} else {
+		input.ThreadRootID = ""
 	}
 	if len(input.Mentions) > 0 {
 		// Mentioned users must actually be members at send time.
@@ -105,7 +119,9 @@ func (chat *Chat) Send(ctx context.Context, userID string, input model.SendInput
 	if err = tx.QueryRow(ctx, "UPDATE conversations SET next_seq=next_seq+1 WHERE id=$1 RETURNING next_seq", input.ConversationID).Scan(&seq); err != nil {
 		return model.Message{}, false, err
 	}
-	message, err := insertMessage(ctx, tx, model.Message{ConversationID: input.ConversationID, SenderID: userID, ClientMsgID: input.ClientMsgID, Seq: seq, Content: input.Content, Kind: kind, MediaID: input.MediaID, ReplyToID: input.ReplyToID, Mentions: input.Mentions})
+	// ThreadRootID must be passed through: it is what files the reply into a
+	// window, and omitting it here would silently create orphan replies.
+	message, err := insertMessage(ctx, tx, model.Message{ConversationID: input.ConversationID, SenderID: userID, ClientMsgID: input.ClientMsgID, Seq: seq, Content: input.Content, Kind: kind, MediaID: input.MediaID, ReplyToID: input.ReplyToID, ThreadRootID: input.ThreadRootID, Mentions: input.Mentions})
 	if err != nil {
 		return model.Message{}, false, err
 	}

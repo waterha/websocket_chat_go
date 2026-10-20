@@ -8,6 +8,7 @@ import { appendPage, PendingSends, Requests, SyncTasks } from './realtime.js'
 import { canChangeRole, canEditAnnouncement, canInvite, canLeave, canManageMembers, canRemoveMember, canTransferOwnership, roleLabel, roleOf } from './group.js'
 import { groupByPin, showsUnreadBadge } from './preferences.js'
 import { activeMentionToken, applyMention, canRecall, mentionCandidates, messageBody, recalledLabel, replyExcerpt, replyLabel } from './reply.js'
+import { hasThread, hiddenReplyCount, replyTargetForWindow, threadHasMore, threadLabel, threadPreview, threadRootID } from './thread.js'
 import { formatBytes, mediaPreview, mediaURL, validateMediaFile } from './media.js'
 import { api, uploadMedia } from './api.js'
 import { template } from './template.js'
@@ -285,25 +286,72 @@ createApp({
     }
     const currentPinned = computed(() => Boolean(current.value?.pinned))
     const currentMuted = computed(() => Boolean(current.value?.muted))
-    // Delivery status is only meaningful for a message the caller sent, and the
-    // endpoint refuses anyone else, so the button is offered on own messages.
-    const deliveryBusy = ref(0)
-    const deliveryStatus = ref(null)
-    const deliveryError = ref('')
-    async function loadDelivery(item) {
-      if (deliveryBusy.value || !item) return
-      deliveryBusy.value = item.seq
-      deliveryError.value = ''
-      try {
-        const status = await api(`/conversations/${active.value}/messages/${item.seq}/delivery`)
-        deliveryStatus.value = status
-      } catch (cause) {
-        deliveryError.value = cause.message || '查询失败，请重试'
-      } finally { deliveryBusy.value = 0 }
+    // The thread window is a surface separate from the chat list: it shows one
+    // root message and every reply to it, and replies sent here join that window.
+    const threadOpen = ref(false)
+    const threadRoot = ref(null)
+    const threadReplies = ref([])
+    const threadHasMorePages = ref(false)
+    const threadBusy = ref(false)
+    const threadError = ref('')
+    const threadReplyCount = ref(0)
+    const threadStream = ref(null)
+    function closeThread() {
+      threadOpen.value = false
+      threadRoot.value = null
+      threadReplies.value = []
+      threadError.value = ''
+      threadHasMorePages.value = false
+      threadReplyCount.value = 0
+      clearReply()
     }
-    function closeDelivery() {
-      deliveryStatus.value = null
-      deliveryError.value = ''
+    async function openThread(item) {
+      if (!item) return
+      const id = active.value
+      const rootID = threadRootID(item)
+      const version = epoch
+      threadOpen.value = true
+      threadRoot.value = item
+      threadReplies.value = []
+      threadError.value = ''
+      threadHasMorePages.value = false
+      threadBusy.value = true
+      try {
+        const page = await api(`/conversations/${id}/messages/${rootID}/thread?limit=100`)
+        if (version !== epoch) return
+        // The server resolves a reply to its window root, so the header shows the
+        // root even when the user opened the window from a reply.
+        threadRoot.value = page.root
+        threadReplies.value = page.replies || []
+        threadReplyCount.value = page.reply_count || 0
+        threadHasMorePages.value = threadHasMore(page)
+        await nextTick()
+        threadStream.value?.scrollTo({ top: threadStream.value.scrollHeight })
+      } catch (cause) {
+        if (version === epoch) threadError.value = cause.message || '打开对话窗口失败'
+      } finally { if (version === epoch) threadBusy.value = false }
+    }
+    async function loadMoreThread() {
+      if (threadBusy.value || !threadHasMorePages.value || !threadRoot.value) return
+      const id = active.value
+      const version = epoch
+      const last = threadReplies.value.at(-1)
+      threadBusy.value = true
+      try {
+        const page = await api(`/conversations/${id}/messages/${threadRoot.value.id}/thread?limit=100&after_seq=${last?.seq || 0}`)
+        if (version !== epoch) return
+        threadReplies.value = [...threadReplies.value, ...(page.replies || [])]
+        threadHasMorePages.value = threadHasMore(page)
+        threadReplyCount.value = page.reply_count || threadReplyCount.value
+      } catch (cause) { if (version === epoch) threadError.value = cause.message || '加载失败' }
+      finally { if (version === epoch) threadBusy.value = false }
+    }
+    // Replying inside the window targets the window's root, keeping threads flat
+    // rather than nesting a reply under a reply.
+    function replyInThread() {
+      const target = replyTargetForWindow({ root: threadRoot.value })
+      if (!target) return
+      startReply(target)
     }
     function openMembers() {
       memberQuery.value = ''
@@ -957,7 +1005,7 @@ createApp({
       window.addEventListener('focus', onVisible)
     })
     onUnmounted(() => { resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, announcementDraft, announcementEditing, startAnnouncementEdit, saveAnnouncement, hasAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, deliveryBusy, deliveryStatus, deliveryError, loadDelivery, closeDelivery, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, draftArea, replyTarget, startReply, clearReply, replyPreview, replyAuthor, bodyOf, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
+    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, announcementDraft, announcementEditing, startAnnouncementEdit, saveAnnouncement, hasAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, replyInThread, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, draftArea, replyTarget, startReply, clearReply, replyPreview, replyAuthor, bodyOf, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
   },
   template,
 }).mount('#app')

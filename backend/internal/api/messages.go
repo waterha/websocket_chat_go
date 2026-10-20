@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"websocket_chat_go/backend/internal/logic"
 	"websocket_chat_go/backend/internal/model"
 )
 
@@ -131,6 +132,27 @@ func (server *Server) sync(writer http.ResponseWriter, request *http.Request, ca
 	respond(writer, 200, page)
 }
 
+// thread returns one page of a message's window: the root plus its replies,
+// oldest first. It is the endpoint behind the conversation window.
+func (server *Server) thread(writer http.ResponseWriter, request *http.Request, caller identity) {
+	after, err := integer(request, "after_seq", 0)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	limit, err := integer(request, "limit", logic.ThreadReplyLimit)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	page, err := server.Services.Chat.Thread(request.Context(), caller.account.ID, request.PathValue("id"), request.PathValue("message_id"), after, int(limit))
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, page)
+}
+
 func (server *Server) recall(writer http.ResponseWriter, request *http.Request, caller identity) {
 	seq, err := strconv.ParseInt(request.PathValue("seq"), 10, 64)
 	if err != nil {
@@ -147,16 +169,20 @@ func (server *Server) recall(writer http.ResponseWriter, request *http.Request, 
 
 func (server *Server) send(writer http.ResponseWriter, request *http.Request, caller identity) {
 	var input struct {
-		ClientMsgID string   `json:"client_msg_id"`
-		Content     string   `json:"content"`
-		MediaID     string   `json:"media_id"`
-		ReplyToID   string   `json:"reply_to_id"`
-		Mentions    []string `json:"mentions"`
+		ClientMsgID  string   `json:"client_msg_id"`
+		Content      string   `json:"content"`
+		MediaID      string   `json:"media_id"`
+		ReplyToID    string   `json:"reply_to_id"`
+		ThreadRootID string   `json:"thread_root_id"`
+		Mentions     []string `json:"mentions"`
 	}
 	if !decode(writer, request, &input) {
 		return
 	}
-	item, duplicate, err := server.Services.Chat.Send(request.Context(), caller.account.ID, model.SendInput{ConversationID: request.PathValue("id"), ClientMsgID: input.ClientMsgID, Content: input.Content, MediaID: input.MediaID, ReplyToID: input.ReplyToID, Mentions: input.Mentions})
+	// ThreadRootID is accepted for forward compatibility but the server derives
+	// the real root from ReplyToID, so a client cannot file a reply into an
+	// unrelated window.
+	item, duplicate, err := server.Services.Chat.Send(request.Context(), caller.account.ID, model.SendInput{ConversationID: request.PathValue("id"), ClientMsgID: input.ClientMsgID, Content: input.Content, MediaID: input.MediaID, ReplyToID: input.ReplyToID, ThreadRootID: input.ThreadRootID, Mentions: input.Mentions})
 	if err != nil {
 		fail(writer, err)
 		return

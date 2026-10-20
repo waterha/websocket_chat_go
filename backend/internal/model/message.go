@@ -28,6 +28,26 @@ type ReplyRef struct {
 	MediaType string `json:"media_type,omitempty"`
 }
 
+// ThreadSummary lets the main chat view show a compact preview under a message
+// without fetching the whole thread. Replies are truncated to a few previews so
+// a busy thread does not inflate every message in the history.
+type ThreadSummary struct {
+	RootID      string    `json:"root_id"`
+	ReplyCount  int       `json:"reply_count"`
+	Preview     []Message `json:"preview"`
+	LastReplyAt time.Time `json:"last_reply_at,omitempty"`
+}
+
+// ThreadPage is one page of a thread window, ordered oldest first so the window
+// reads like a conversation.
+type ThreadPage struct {
+	Root       Message   `json:"root"`
+	Replies    []Message `json:"replies"`
+	HasMore    bool      `json:"has_more"`
+	NextAfter  int64     `json:"next_after_seq"`
+	ReplyCount int       `json:"reply_count"`
+}
+
 type Message struct {
 	ID             string    `json:"id"`
 	ConversationID string    `json:"conversation_id"`
@@ -44,6 +64,12 @@ type Message struct {
 	// Reply carries the quoted excerpt so a client can render it without a
 	// second request.
 	Reply *ReplyRef `json:"reply,omitempty"`
+	// ThreadRootID is set on a reply and names the message whose window it
+	// belongs to. It is empty on a root message and on messages without replies.
+	ThreadRootID string `json:"thread_root_id,omitempty"`
+	// Thread summarises replies to this message. It is present only on the root
+	// messages that the caller is currently reading.
+	Thread *ThreadSummary `json:"thread,omitempty"`
 	// Mentions lists the user IDs explicitly mentioned by the sender.
 	Mentions []string `json:"mentions,omitempty"`
 	// RecalledAt is set once the sender recalls the message. Callers must treat
@@ -82,6 +108,10 @@ type SendInput struct {
 	MediaID string `json:"media_id"`
 	// ReplyToID quotes an earlier message in the same conversation.
 	ReplyToID string `json:"reply_to_id"`
+	// ThreadRootID names the window a reply belongs to. A client may set it when
+	// replying inside a window; the server derives it when omitted, so a reply
+	// to a reply always joins the original window.
+	ThreadRootID string `json:"thread_root_id"`
 	// Mentions lists user IDs to notify; membership is verified by the server.
 	Mentions []string `json:"mentions"`
 }
