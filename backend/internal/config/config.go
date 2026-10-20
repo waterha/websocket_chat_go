@@ -62,8 +62,13 @@ func Load() (Config, error) {
 	if _, err := os.Stat(directory); err != nil && os.Getenv("MIGRATIONS_DIR") == "" {
 		directory = filepath.Join("database", "migrations")
 	}
+	// Media sits beside the backend during development (../media) and beside the
+	// repository root otherwise. The migrations probe above already established
+	// which layout we are in: a leading ".." means the process runs from backend/.
+	// Probing the parent of the candidate path, as an earlier version did, asked
+	// an unrelated question and could silently select the wrong directory.
 	mediaDirectory := value("MEDIA_DIR", filepath.Join("..", "media"))
-	if _, err := os.Stat(filepath.Dir(mediaDirectory)); err != nil && os.Getenv("MEDIA_DIR") == "" {
+	if os.Getenv("MEDIA_DIR") == "" && !strings.HasPrefix(directory, "..") {
 		mediaDirectory = "media"
 	}
 	return Config{HTTPAddr: value("HTTP_ADDR", "127.0.0.1:8080"), Origin: value("FRONTEND_ORIGIN", "http://127.0.0.1:4173"), SecureCookie: os.Getenv("APP_ENV") == "production", Postgres: postgres, RedisAddr: value("REDIS_ADDR", "127.0.0.1:6379"), RedisPassword: os.Getenv("REDIS_PASSWORD"), MigrationsDir: directory, MediaDir: mediaDirectory, Heartbeat: 20 * time.Second, HeartbeatTimeout: 8 * time.Second}, nil
