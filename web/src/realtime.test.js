@@ -97,3 +97,20 @@ test('uncertain send retains its id across reload and cannot silently change con
   reloaded.forget()
   assert.equal(reloaded.get('other'), null)
 })
+
+test('an attachment resend keeps the same id and refuses a different media', () => {
+  const values = new Map()
+  const storage = {
+    getItem: key => values.get(key) || null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: key => values.delete(key),
+  }
+  const sends = new PendingSends(storage, 'alice')
+  const pending = sends.save('chat', 'caption', 'media-1')
+  assert.equal(pending.media_id, 'media-1')
+  assert.deepEqual(sends.save('chat', 'caption', 'media-1'), pending)
+  assert.throws(() => sends.save('chat', 'caption', 'media-2'), /未确认/)
+  assert.throws(() => sends.save('chat', 'changed', 'media-1'), /未确认/)
+  const textOnly = sends.save('other', 'plain')
+  assert.equal(textOnly.media_id, '')
+})

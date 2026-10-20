@@ -94,11 +94,13 @@ export class PendingSends {
     return item?.conversation_id === conversationID && typeof item.content === 'string' && typeof item.client_msg_id === 'string' && item.client_msg_id.length >= 8 ? item : null
   }
 
-  save(conversationID, content) {
+  // A media message stores the uploaded attachment id as well, so a retry after
+  // an unknown result reuses the same bytes instead of re-uploading them.
+  save(conversationID, content, mediaID = '') {
     const existing = this.get(conversationID)
-    if (existing && existing.content !== content) throw new Error('上一条发送结果未确认，请先恢复原文重试或明确放弃')
+    if (existing && (existing.content !== content || (existing.media_id || '') !== mediaID)) throw new Error('上一条发送结果未确认，请先恢复原文重试或明确放弃')
     if (existing) return existing
-    const item = { conversation_id: conversationID, client_msg_id: crypto.randomUUID(), content }
+    const item = { conversation_id: conversationID, client_msg_id: crypto.randomUUID(), content, media_id: mediaID }
     this.storage.setItem(this.key, JSON.stringify({ ...this.entries(), [conversationID]: item }))
     return item
   }

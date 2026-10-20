@@ -1,15 +1,16 @@
 import { createApp, ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue/dist/vue.esm-bundler.js'
-import { Search, X, ArrowRight, RotateCw, Users } from 'lucide-vue-next'
+import { Search, X, ArrowRight, RotateCw, Users, ImagePlus } from 'lucide-vue-next'
 import { highlightMatches } from './message-search.js'
 import { filterMembers } from './member-list.js'
 import { filterDirectory, friendSearchFields, conversationSearchFields } from './directory-search.js'
 import { toggleConversationSelection } from './conversation-selection.js'
 import { appendPage, PendingSends, Requests, SyncTasks } from './realtime.js'
-import { api } from './api.js'
+import { formatBytes, mediaPreview, mediaURL, validateMediaFile } from './media.js'
+import { api, uploadMedia } from './api.js'
 import './style.css'
 
 createApp({
-  components: { Search, X, ArrowRight, RotateCw, Users },
+  components: { Search, X, ArrowRight, RotateCw, Users, ImagePlus },
   setup() {
     const me = ref(null)
     const mode = ref('login')
@@ -54,6 +55,10 @@ createApp({
     const loading = ref(false)
     const stream = ref(null)
     const sending = ref(false)
+    const mediaInput = ref(null)
+    const uploadBusy = ref(false)
+    const attachment = ref(null)
+    const previewFile = ref(null)
     const visibleCount = ref(100)
     const showSearch = ref(false)
     const searchInput = ref(null)
@@ -157,7 +162,12 @@ createApp({
       : item.name
     const sender = id => current.value?.members.find(member => member.id === id)?.name || '成员'
     const time = value => new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-    const preview = item => latestMessage(item)?.content || '暂无消息'
+    const preview = item => {
+      const message = latestMessage(item)
+      if (!message) return '暂无消息'
+      const label = mediaPreview(message)
+      return label ? (message.content.trim() ? `${label} ${message.content}` : label) : message.content
+    }
     const contactPreview = person => { const conversation = directConversation(person.id); return conversation ? preview(conversation) : '暂无消息' }
     const unreadLabel = id => { const count = unreadCounts.value[id] || 0; return count > 99 ? '99+' : String(count) }
     const hasUnread = id => (unreadCounts.value[id] || 0) > 0
@@ -181,6 +191,40 @@ createApp({
       if (!pendingSend.value || !confirm('放弃确认不等于撤回：消息可能已经保存在服务器。请先检查聊天记录，确定仍要放弃吗？')) return
       pendingStore.clear(pendingSend.value.conversation_id, pendingSend.value.client_msg_id)
       pendingSend.value = null
+    }
+    function openMediaPicker() {
+      if (!active.value || uploadBusy.value || sending.value) return
+      mediaInput.value?.click()
+    }
+    function releaseAttachment() {
+      if (previewFile.value) URL.revokeObjectURL(previewFile.value)
+      previewFile.value = null
+      attachment.value = null
+    }
+    function clearAttachment() {
+      releaseAttachment()
+      if (mediaInput.value) mediaInput.value.value = ''
+    }
+    // The file is uploaded immediately so the message send only has to reference
+    // the stored attachment; a failed upload leaves the draft untouched.
+    async function chooseMedia(event) {
+      const file = event.target.files?.[0]
+      if (mediaInput.value) mediaInput.value.value = ''
+      if (!file || !active.value) return
+      const check = validateMediaFile(file)
+      if (!check.ok) { showError({ message: check.error }); return }
+      if (pendingSend.value?.conversation_id === active.value) { showError({ message: '上一条发送结果未确认，请先恢复或放弃' }); return }
+      const id = active.value
+      const version = epoch
+      releaseAttachment()
+      uploadBusy.value = true
+      try {
+        const uploaded = await uploadMedia(id, file)
+        if (version !== epoch || active.value !== id) return
+        attachment.value = uploaded
+        previewFile.value = URL.createObjectURL(file)
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { if (version === epoch) uploadBusy.value = false }
     }
     async function refresh() {
       if (refreshTask) return refreshTask
@@ -276,6 +320,7 @@ createApp({
       searchInput.value?.focus()
     }
     watch([active, me], () => {
+      clearAttachment()
       closeSearch()
       highlightedMessage.value = null
       clearTimeout(highlightTimer)
@@ -400,6 +445,7 @@ createApp({
     }
     async function logout() {
       pendingStore?.forget()
+      clearAttachment()
       epoch++; me.value = null; connected.value = false
       clearTimeout(reconnectTimer); requests?.close(); socket?.close(); socket = null
       cache.clear(); syncing.clear(); refreshTask = null; pendingStore = null; pendingSend.value = null; unreadCounts.value = {}
@@ -522,23 +568,26 @@ createApp({
       const content = draft.value.trim()
       const id = active.value
       const version = epoch
-      if (!content || !id || sending.value) return
+      const media = attachment.value
+      if ((!content && !media) || !id || sending.value || uploadBusy.value) return
       sending.value = true
       try {
-        const input = pendingStore.save(id, content)
+        const input = pendingStore.save(id, content, media?.id || '')
         pendingSend.value = input
+        const payload = { client_msg_id: input.client_msg_id, content, media_id: media?.id || '' }
         if (connected.value) {
           try { await requests.send('message.send', input) }
           catch (cause) {
             if (version !== epoch) return
             if (cause.application) throw cause
-            await api(`/conversations/${id}/messages`, { method: 'POST', body: JSON.stringify({ client_msg_id: input.client_msg_id, content }) })
+            await api(`/conversations/${id}/messages`, { method: 'POST', body: JSON.stringify(payload) })
           }
-        } else await api(`/conversations/${id}/messages`, { method: 'POST', body: JSON.stringify({ client_msg_id: input.client_msg_id, content }) })
+        } else await api(`/conversations/${id}/messages`, { method: 'POST', body: JSON.stringify(payload) })
         if (version !== epoch) return
         pendingStore.clear(id, input.client_msg_id)
         if (pendingSend.value?.client_msg_id === input.client_msg_id) pendingSend.value = null
         if (active.value === id && draft.value.trim() === content) draft.value = ''
+        if (active.value === id) clearAttachment()
         await syncConversation(id)
       } catch (cause) { showError(cause) }
       finally { sending.value = false }
@@ -570,8 +619,8 @@ createApp({
       document.addEventListener('visibilitychange', onVisible)
       window.addEventListener('focus', onVisible)
     })
-    onUnmounted(() => { resetSearch(); clearTimeout(highlightTimer); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { showMembers, memberQuery, currentMembers, memberCount, openMembers, closeMembers, inviteFromMembers, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter }
+    onUnmounted(() => { resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
+    return { showMembers, memberQuery, currentMembers, memberCount, openMembers, closeMembers, inviteFromMembers, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment }
   },
   template: `
     <div v-if="!me" class="auth-layout">
@@ -641,10 +690,10 @@ createApp({
             <div v-for="item in messages" :key="item.id" class="message-row" :data-message-seq="item.seq" :class="{ mine: item.sender_id === me.id, system: item.kind === 'system', 'search-target': highlightedMessage === item.seq }">
               <template v-if="item.kind === 'system'"><span class="system-notice">{{ item.content }}</span></template>
               <template v-else><span v-if="item.sender_id !== me.id" class="avatar tiny">{{ sender(item.sender_id).slice(0,1) }}</span>
-              <div><div class="message-meta">{{ sender(item.sender_id) }} · {{ time(item.created_at) }}</div><div class="bubble">{{ item.content }}</div></div></template>
+              <div><div class="message-meta">{{ sender(item.sender_id) }} · {{ time(item.created_at) }}</div><div class="bubble" :class="{ media: item.kind === 'image' || item.kind === 'video' }"><template v-if="item.kind === 'image'"><a class="media-item" :href="mediaURL(item.media_id)" target="_blank" rel="noopener" :aria-label="'查看图片 ' + item.media.file_name"><img class="media-image" :src="mediaURL(item.media_id)" :alt="item.media.file_name" loading="lazy" /></a></template><template v-else-if="item.kind === 'video'"><video class="media-video" :src="mediaURL(item.media_id)" controls preload="metadata" :aria-label="'播放视频 ' + item.media.file_name"></video></template><p v-if="item.content" class="media-caption">{{ item.content }}</p></div></div></template>
             </div>
           </section>
-          <form v-show="!showSearch" class="composer" @submit.prevent="send"><p v-if="pendingSend?.conversation_id === active" class="pending-notice">发送结果未确认，消息可能已保存。<button type="button" @click="draft = pendingSend.content">恢复原文安全重试</button><button type="button" @click="discardPending">放弃确认</button></p><textarea v-model="draft" maxlength="4000" placeholder="输入消息…" @keydown.enter.exact="onEnter"></textarea><div><span>Enter 发送 · Shift + Enter 换行</span><button class="primary" :disabled="!draft.trim() || sending">{{ sending ? '发送中…' : '发送 ↗' }}</button></div></form>
+          <form v-show="!showSearch" class="composer" @submit.prevent="send"><p v-if="pendingSend?.conversation_id === active" class="pending-notice">发送结果未确认，消息可能已保存。<button type="button" @click="draft = pendingSend.content">恢复原文安全重试</button><button type="button" @click="discardPending">放弃确认</button></p><div v-if="uploadBusy" class="attachment-status" role="status">正在上传…</div><div v-else-if="attachment" class="attachment-preview"><img v-if="attachment.media_type === 'image'" :src="previewFile" :alt="attachment.file_name" /><video v-else :src="previewFile" muted playsinline preload="metadata"></video><span class="attachment-info"><strong>{{ attachment.file_name }}</strong><small>{{ attachment.media_type === 'video' ? '视频' : '图片' }} · {{ formatBytes(attachment.byte_size) }}</small></span><button type="button" class="icon-button" title="移除附件" aria-label="移除附件" :disabled="sending" @click="clearAttachment"><X :size="16" aria-hidden="true" /></button></div><textarea v-model="draft" maxlength="4000" :placeholder="attachment ? '添加说明（可选）…' : '输入消息…'" @keydown.enter.exact="onEnter"></textarea><div><span>Enter 发送 · Shift + Enter 换行</span><input ref="mediaInput" class="media-input" type="file" accept="image/*,video/*" @change="chooseMedia" /><button type="button" class="icon-button media-button" title="发送图片或视频" aria-label="发送图片或视频" :disabled="uploadBusy || sending" @click="openMediaPicker"><ImagePlus :size="19" aria-hidden="true" /></button><button class="primary" :disabled="(!draft.trim() && !attachment) || sending || uploadBusy">{{ sending ? '发送中…' : '发送 ↗' }}</button></div></form>
         </template>
          <div v-else class="welcome"><span class="brand-mark">✦</span><h2>开启一段新对话</h2><p>从左侧联系人选择用户即可开始私聊，也可以创建群聊。</p><div class="welcome-actions"><button class="outline-button" @click="openCreate()">创建群聊</button></div></div>
       </main>
