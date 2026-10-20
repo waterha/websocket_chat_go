@@ -17,7 +17,12 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | POST | `/friends/requests/{id}/reject` | 拒绝收到的好友申请；发起方可在发出申请列表看到 `rejected` |
 | GET | `/conversations` | 当前用户的会话、成员与已读游标 |
 | POST | `/conversations` | 私聊由联系人点击时用 `{"kind":"direct","member_ids":["另一用户ID"]}` 自动获取或创建唯一会话；群聊用 `group`、`name` 和可选的最多 999 个其他成员，创建者可以先单独建群，含创建者最多 1000 人 |
-| POST | `/conversations/{id}/members` | 群成员邀请用户：`{"member_ids":["用户ID"]}`；重复成员幂等，含现有成员最多 1000 人；新成员加入时按人写入一条可漫游的群聊系统消息 |
+| POST | `/conversations/{id}/members` | 群成员邀请用户：`{"member_ids":["用户ID"]}`；任意群成员可邀请，重复成员幂等，含现有成员最多 1000 人；新成员加入时按人写入一条可漫游的群聊系统消息 |
+| DELETE | `/conversations/{id}/members` | 移除成员：`{"user_id":"用户ID"}`；群主与管理员可调用，管理员不能移除群主或其他管理员，群主不能被移除（需先转让），每次移除写入系统提示 |
+| POST | `/conversations/{id}/members/leave` | 当前用户退出群聊；群主需先转让群主，否则返回 403 `owner_must_transfer` |
+| POST | `/conversations/{id}/roles` | 设置成员角色：`{"user_id":"用户ID","role":"admin"}` 或 `"member"`；仅群主可调用，群主身份不能通过该接口授予 |
+| POST | `/conversations/{id}/owner` | 转让群主：`{"user_id":"用户ID"}`；仅现任群主可调用，原群主变为管理员 |
+| PATCH | `/conversations/{id}/announcement` | 群公告：`{"announcement":"最多 2000 字，可清空"}`；群主与管理员可调用，空字符串表示清除 |
 | POST | `/conversations/{id}/messages` | `{"client_msg_id":"客户端稳定ID","content":"你好"}`；新消息 201，幂等重复 200。附图片或视频时再传 `media_id`，`content` 作为可选说明 |
 | POST | `/conversations/{id}/media?file_name=photo.png` | 上传图片或视频：请求体为文件原始字节，`Content-Length` 必填，`Content-Type` 决定类型；成功 201 返回附件元数据，见下文 |
 | GET | `/media/{media_id}` | 下载附件原始字节；仅该会话成员可访问，返回 `Content-Type`、`Content-Disposition: inline`，见下文 |
@@ -42,6 +47,25 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 - 成功返回 `{"data":{"messages":[...],"has_more":true,"next_before_seq":42}}`。`messages` 是标准消息对象，按 `seq DESC` 排列；`has_more` 表示同一查询还有更旧的匹配消息，下一页沿用相同 `q` 并设置 `before_seq=next_before_seq`。`next_before_seq` 为本页末条消息的 `seq`，即使 `has_more=false` 也保留；空页固定为 `{"messages":[],"has_more":false,"next_before_seq":0}`，不应再翻页。
 
 `/delivery` 示例：`{"conversation_id":"...","seq":42,"confirmed_members":3,"total_members":9,"as_of":"..."}`。统计排除发送者，同一成员多台设备只计一次；某成员任意一台设备的接收游标达到该 `seq` 就计入。它是**查询时客户端所声明的应用层接收进度**，不是设备在线、用户已读或用户实际看到了消息；未确认也不能推断一定没收到。结果只对查询时的成员集合有效，返回时间后可能变化。服务端不为恶意或错误客户端的虚假确认提供物理收包证明。
+
+## 群组治理
+
+群聊含创建者最多 1000 人。创建者自动成为**群主**，其余成员为**成员**；群主可把成员设为**管理员**。每个群有且只有一个群主，`conversation_members.role` 与部分唯一索引 `conversation_members_owner_idx` 共同保证这一点。私聊没有群主，且所有群治理接口对私聊返回 400 `invalid_conversation`。
+
+| 操作 | 允许的角色 | 失败情形 |
+| --- | --- | --- |
+| 邀请成员 | 任意群成员 | 非成员返回 404 |
+| 移除他人 | 群主、管理员 | 管理员不能移除群主或其他管理员；群主不可被移除（返回 403 `owner_must_transfer`） |
+| 退群 | 任意群成员（本人） | 群主必须先转让，否则 403 `owner_must_transfer` |
+| 设为/取消管理员 | 仅群主 | 不能授予群主身份，返回 400 `invalid_role` |
+| 转让群主 | 仅现任群主 | 目标必须是本群成员，否则 404；转让后原群主变为管理员 |
+| 编辑群公告 | 群主、管理员 | 超过 2000 字返回 400 `invalid_announcement` |
+
+移除成员、退群、角色变更与群主转让都会写入一条 `kind='system'` 的系统提示并复用会话序号，因此和其他消息一样可以被离线成员补拉漫游。**移除成员不删除其历史消息**：`messages` 不再要求发送者当前仍是成员（发送时由应用层校验成员资格），所以群内历史仍然完整、可搜索。群公告、角色与群主写在 `conversations.announcement`、`conversations.created_by` 与 `conversation_members.role`。
+
+`GET /conversations` 的成员对象带 `role` 字段并按「群主、管理员、其他成员」排序，会话对象带 `announcement` 与 `owner_id`。群元数据变化时向全群推送 `conversation.updated`，客户端据此刷新成员列表与公告。当前没有：自定义权限、禁言、成员邀请审批、群分组与审计日志。管理员不能移除其他管理员是刻意设计，避免管理员互相驱逐；如需该能力应由群主调整角色后操作。
+
+
 
 ## 图片与视频
 

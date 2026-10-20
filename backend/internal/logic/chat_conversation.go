@@ -20,8 +20,8 @@ func (chat *Chat) ConversationSeq(ctx context.Context, userID, conversationID st
 }
 
 func (chat *Chat) Conversations(ctx context.Context, userID string) ([]model.Conversation, error) {
-	rows, err := chat.Store.DB.Query(ctx, `SELECT c.id,c.name,c.kind,c.next_seq,cm.last_read_seq,
-		(SELECT jsonb_agg(jsonb_build_object('id',u.id,'name',u.name,'email',u.email,'last_read_seq',members.last_read_seq,'read_at',members.read_at) ORDER BY u.name,u.id) FROM conversation_members members JOIN users u ON u.id=members.user_id WHERE members.conversation_id=c.id)
+	rows, err := chat.Store.DB.Query(ctx, `SELECT c.id,c.name,c.kind,c.announcement,COALESCE(c.created_by,''),c.next_seq,cm.last_read_seq,
+		(SELECT jsonb_agg(jsonb_build_object('id',u.id,'name',u.name,'email',u.email,'role',members.role,'last_read_seq',members.last_read_seq,'read_at',members.read_at) ORDER BY (members.role='owner') DESC,(members.role='admin') DESC,u.name,u.id) FROM conversation_members members JOIN users u ON u.id=members.user_id WHERE members.conversation_id=c.id)
 		FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id WHERE cm.user_id=$1 ORDER BY c.created_at DESC,c.id`, userID)
 	if err != nil {
 		return nil, err
@@ -31,7 +31,7 @@ func (chat *Chat) Conversations(ctx context.Context, userID string) ([]model.Con
 	for rows.Next() {
 		var item model.Conversation
 		var members []byte
-		if err := rows.Scan(&item.ID, &item.Name, &item.Kind, &item.LastSeq, &item.LastReadSeq, &members); err != nil {
+		if err := rows.Scan(&item.ID, &item.Name, &item.Kind, &item.Announcement, &item.OwnerID, &item.LastSeq, &item.LastReadSeq, &members); err != nil {
 			return nil, err
 		}
 		if err := json.Unmarshal(members, &item.Members); err != nil {
@@ -67,6 +67,11 @@ func (chat *Chat) Create(ctx context.Context, userID string, input model.CreateI
 		return "", model.Fail(400, "invalid_members")
 	}
 	conversationID := model.NewID()
+	// The creator owns a new group; direct conversations keep no owner.
+	ownerID := any(nil)
+	if input.Kind == "group" {
+		ownerID = userID
+	}
 	var directKey any
 	if input.Kind == "direct" {
 		directKey = strings.Join(ids, ":")
@@ -83,10 +88,10 @@ func (chat *Chat) Create(ctx context.Context, userID string, input model.CreateI
 			return "", err
 		}
 	}
-	if _, err = tx.Exec(ctx, "INSERT INTO conversations(id,name,kind,direct_key) VALUES($1,$2,$3,$4)", conversationID, input.Name, input.Kind, directKey); err != nil {
+	if _, err = tx.Exec(ctx, "INSERT INTO conversations(id,name,kind,direct_key,created_by) VALUES($1,$2,$3,$4,$5)", conversationID, input.Name, input.Kind, directKey, ownerID); err != nil {
 		return "", err
 	}
-	if _, err = tx.Exec(ctx, "INSERT INTO conversation_members(conversation_id,user_id) SELECT $1,unnest($2::text[])", conversationID, ids); err != nil {
+	if _, err = tx.Exec(ctx, "INSERT INTO conversation_members(conversation_id,user_id,role) SELECT $1,id,CASE WHEN id=$3 AND $4='group' THEN 'owner' ELSE 'member' END FROM unnest($2::text[]) AS id", conversationID, ids, userID, input.Kind); err != nil {
 		return "", err
 	}
 	if err = chat.appendEvent(ctx, tx, conversationID, model.Event{Event: "conversation.created", Data: map[string]string{"id": conversationID}}); err != nil {

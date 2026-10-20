@@ -5,6 +5,7 @@ import { filterMembers } from './member-list.js'
 import { filterDirectory, friendSearchFields, conversationSearchFields } from './directory-search.js'
 import { toggleConversationSelection } from './conversation-selection.js'
 import { appendPage, PendingSends, Requests, SyncTasks } from './realtime.js'
+import { canChangeRole, canEditAnnouncement, canInvite, canLeave, canManageMembers, canRemoveMember, canTransferOwnership, roleLabel, roleOf } from './group.js'
 import { formatBytes, mediaPreview, mediaURL, validateMediaFile } from './media.js'
 import { api, uploadMedia } from './api.js'
 import './style.css'
@@ -37,6 +38,10 @@ createApp({
     const showInvite = ref(false)
     const showMembers = ref(false)
     const memberQuery = ref('')
+    const memberBusy = ref(false)
+    const announcementDraft = ref('')
+    const announcementEditing = ref(false)
+    const groupBusy = ref(false)
     const showSettings = ref(false)
     const showProfile = ref(false)
     const showFriendRequests = ref(false)
@@ -145,6 +150,88 @@ createApp({
     })
     const currentMembers = computed(() => filterMembers(current.value?.members, memberQuery.value, me.value?.id))
     const memberCount = computed(() => current.value?.members.length || 0)
+    const currentRole = computed(() => roleOf(current.value, me.value?.id))
+    const isGroupOwner = computed(() => canChangeRole(current.value, me.value?.id))
+    const canInviteMembers = computed(() => canInvite(current.value, me.value?.id))
+    const canManageGroupMembers = computed(() => canManageMembers(current.value, me.value?.id))
+    const canEditGroupAnnouncement = computed(() => canEditAnnouncement(current.value, me.value?.id))
+    const canLeaveGroup = computed(() => canLeave(current.value))
+    const memberCanBeRemoved = member => canRemoveMember(current.value, me.value?.id, member.id)
+    const memberCanChangeRole = member => isGroupOwner.value && member.id !== me.value?.id && member.role !== 'owner'
+    const canTransferTo = member => canTransferOwnership(current.value, me.value?.id) && member.id !== me.value?.id
+    const hasAnnouncement = computed(() => Boolean(current.value?.kind === 'group' && current.value?.announcement))
+    function startAnnouncementEdit() {
+      announcementDraft.value = current.value?.announcement || ''
+      announcementEditing.value = true
+    }
+    async function saveAnnouncement() {
+      if (groupBusy.value || !current.value) return
+      const id = active.value
+      const version = epoch
+      groupBusy.value = true
+      try {
+        const result = await api(`/conversations/${id}/announcement`, { method: 'PATCH', body: JSON.stringify({ announcement: announcementDraft.value }) })
+        if (version !== epoch) return
+        const conversation = conversations.value.find(item => item.id === id)
+        if (conversation) conversation.announcement = result.announcement
+        announcementEditing.value = false
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { if (version === epoch) groupBusy.value = false }
+    }
+    async function removeMember(member) {
+      if (memberBusy.value) return
+      if (!confirm(`确认将 ${member.name} 移出群聊？`)) return
+      const id = active.value
+      const version = epoch
+      memberBusy.value = true
+      try {
+        await api(`/conversations/${id}/members`, { method: 'DELETE', body: JSON.stringify({ user_id: member.id }) })
+        if (version !== epoch) return
+        await refresh()
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { if (version === epoch) memberBusy.value = false }
+    }
+    async function changeRole(member, role) {
+      if (memberBusy.value) return
+      const id = active.value
+      const version = epoch
+      memberBusy.value = true
+      try {
+        await api(`/conversations/${id}/roles`, { method: 'POST', body: JSON.stringify({ user_id: member.id, role }) })
+        if (version !== epoch) return
+        await refresh()
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { if (version === epoch) memberBusy.value = false }
+    }
+    async function transferOwnership(member) {
+      if (memberBusy.value) return
+      if (!confirm(`确认把群主转让给 ${member.name}？你将变为管理员。`)) return
+      const id = active.value
+      const version = epoch
+      memberBusy.value = true
+      try {
+        await api(`/conversations/${id}/owner`, { method: 'POST', body: JSON.stringify({ user_id: member.id }) })
+        if (version !== epoch) return
+        await refresh()
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { if (version === epoch) memberBusy.value = false }
+    }
+    async function leaveGroup() {
+      if (groupBusy.value || !current.value) return
+      if (!confirm(`确认退出群聊“${title(current.value)}”？退出后将不再接收该群消息。`)) return
+      const id = active.value
+      const version = epoch
+      groupBusy.value = true
+      try {
+        await api(`/conversations/${id}/members/leave`, { method: 'POST' })
+        if (version !== epoch) return
+        closeMembers()
+        active.value = null
+        chatVisible.value = false
+        await refresh()
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { if (version === epoch) groupBusy.value = false }
+    }
     function openMembers() {
       memberQuery.value = ''
       showMembers.value = true
@@ -417,6 +504,7 @@ createApp({
           }
           if (envelope.event === 'message.sync_required') await catchUp(envelope.data.cursors)
           if (envelope.event === 'conversation.created') await refresh()
+          if (envelope.event === 'conversation.updated') await refresh()
           if (envelope.event === 'error') throw new Error(envelope.error.message)
         } catch (cause) { showError(cause) }
       }
@@ -620,7 +708,7 @@ createApp({
       window.addEventListener('focus', onVisible)
     })
     onUnmounted(() => { resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { showMembers, memberQuery, currentMembers, memberCount, openMembers, closeMembers, inviteFromMembers, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment }
+    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, announcementDraft, announcementEditing, startAnnouncementEdit, saveAnnouncement, hasAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, openMembers, closeMembers, inviteFromMembers, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment }
   },
   template: `
     <div v-if="!me" class="auth-layout">
@@ -667,7 +755,9 @@ createApp({
       </aside>
       <main class="chat">
         <template v-if="current">
-          <header class="chat-head"><span class="avatar">{{ title(current).slice(0,1) }}</span><div><h2>{{ title(current) }}</h2><p v-if="current.kind === 'group'"><button type="button" class="member-count-button" @click="openMembers" :aria-haspopup="dialog" aria-label="查看群成员">{{ current.members.length }} 位成员</button> · {{ current.members.slice(0,5).map(member => member.name).join('、') }}{{ current.members.length > 5 ? ' 等 ' + current.members.length + ' 人' : '' }}</p><p v-else>私聊 · {{ current.members.slice(0,5).map(member => member.name).join('、') }}</p></div><button type="button" class="icon-button search-toggle" title="搜索聊天记录" aria-label="搜索聊天记录" :aria-expanded="showSearch" aria-controls="message-search-panel" @click="showSearch ? closeSearch() : openSearch()"><Search :size="20" aria-hidden="true" /></button><button v-if="current.kind === 'group'" type="button" class="icon-button member-toggle" title="群成员列表" aria-label="群成员列表" :aria-expanded="showMembers" @click="openMembers"><Users :size="20" aria-hidden="true" /></button><button v-if="current.kind === 'group'" class="outline-button" @click="openInvite">邀请成员</button></header>
+          <header class="chat-head"><span class="avatar">{{ title(current).slice(0,1) }}</span><div><h2>{{ title(current) }}</h2><p v-if="current.kind === 'group'"><button type="button" class="member-count-button" @click="openMembers" :aria-haspopup="dialog" aria-label="查看群成员">{{ current.members.length }} 位成员</button> · {{ current.members.slice(0,5).map(member => member.name).join('、') }}{{ current.members.length > 5 ? ' 等 ' + current.members.length + ' 人' : '' }}</p><p v-else>私聊 · {{ current.members.slice(0,5).map(member => member.name).join('、') }}</p></div><button type="button" class="icon-button search-toggle" title="搜索聊天记录" aria-label="搜索聊天记录" :aria-expanded="showSearch" aria-controls="message-search-panel" @click="showSearch ? closeSearch() : openSearch()"><Search :size="20" aria-hidden="true" /></button><button v-if="current.kind === 'group'" type="button" class="icon-button member-toggle" title="群成员列表" aria-label="群成员列表" :aria-expanded="showMembers" @click="openMembers"><Users :size="20" aria-hidden="true" /></button><button v-if="canInviteMembers" class="outline-button" @click="openInvite">邀请成员</button><button v-else-if="current.kind === 'group'" class="outline-button leave-button" :disabled="groupBusy" @click="leaveGroup">退出群聊</button></header>            <section v-if="hasAnnouncement && !announcementEditing" class="announcement" role="status" aria-label="群公告"><strong>群公告</strong><p>{{ current.announcement }}</p><button v-if="canEditGroupAnnouncement" type="button" class="icon-button" title="编辑群公告" aria-label="编辑群公告" @click="startAnnouncementEdit">编辑</button></section>
+            <section v-if="announcementEditing" class="announcement editing" aria-label="编辑群公告"><strong>群公告</strong><textarea v-model="announcementDraft" maxlength="2000" placeholder="填写群公告，成员都会在会话顶部看到"></textarea><div class="announcement-actions"><button type="button" class="outline-button" :disabled="groupBusy" @click="announcementEditing = false">取消</button><button type="button" class="primary" :disabled="groupBusy" @click="saveAnnouncement">{{ groupBusy ? '保存中…' : '保存公告' }}</button></div></section>
+            <section v-else-if="canEditGroupAnnouncement && !hasAnnouncement" class="announcement empty"><button type="button" class="text-button" @click="startAnnouncementEdit">+ 添加群公告</button></section>
            <section v-if="showSearch" id="message-search-panel" class="message-search" aria-label="搜索聊天记录" @keydown.esc.stop="closeSearch">
              <form class="message-search-form" role="search" @submit.prevent="searchMessages()">
                <div class="message-search-field"><Search :size="18" aria-hidden="true" /><input ref="searchInput" v-model="searchQuery" type="search" maxlength="100" placeholder="搜索当前会话的聊天记录" aria-label="消息关键词" @input="changeSearch" /></div>
@@ -708,7 +798,7 @@ createApp({
       <div v-if="showAddUser" class="modal-backdrop" @click.self="showAddUser = false"><div class="modal"><div class="modal-head"><h2>添加用户</h2><button @click="showAddUser = false">×</button></div><p class="subtle">通过用户名或用户账号搜索，点击发送申请后再填写申请信息。</p><input v-model="friendQuery" type="search" placeholder="搜索用户名或账号" aria-label="搜索用户名或账号" /><div class="user-list"><label v-for="person in friendCandidates" :key="person.id"><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>账号：{{ person.email }}</small></span><button type="button" class="small-button" :disabled="friendBusy" @click="addFriend(person.id)">{{ friendRequestFor(person.id) ? '已发送申请' : friendBusy ? '处理中…' : '发送申请' }}</button></label><p v-if="!friendCandidates.length">没有匹配的用户。</p></div></div></div>
 <div v-if="showRequestComposer" class="modal-backdrop" @click.self="showRequestComposer = false"><div class="modal request-composer"><div class="modal-head"><h2>发送好友申请</h2><button @click="showRequestComposer = false">×</button></div><div class="request-recipient"><span class="avatar tiny">{{ requestTarget?.name?.slice(0,1) }}</span><div><strong>{{ requestTarget?.name }}</strong><small>账号：{{ requestTarget?.email }}</small></div></div><p class="subtle">申请信息可选，填写后点击发送才会提交好友申请。</p><textarea v-model="requestMessage" class="request-message" maxlength="500" placeholder="请输入申请信息（可选）"></textarea><button class="primary" :disabled="friendBusy" @click="sendFriendRequest">{{ friendBusy ? '发送中…' : '发送好友申请' }}</button></div></div>
       <div v-if="showFriendRequests" class="modal-backdrop" @click.self="showFriendRequests = false"><div class="modal friend-requests-modal"><div class="modal-head"><h2>好友申请</h2><button @click="showFriendRequests = false">×</button></div><section><h3 class="request-section-title">收到的申请</h3><div class="request-list"><div v-for="item in friendRequests.incoming" :key="item.id" class="request-item"><div class="request-main"><strong>{{ item.requester.name }}</strong><small>{{ item.message || '请求添加你为好友' }}</small><time>{{ time(item.created_at) }}</time></div><div class="request-actions"><button class="small-button" :disabled="friendRequestBusy" @click="decideFriendRequest(item.id, 'accept')">同意</button><button class="small-button reject-button" :disabled="friendRequestBusy" @click="decideFriendRequest(item.id, 'reject')">拒绝</button></div></div><p v-if="!friendRequests.incoming.length" class="empty-request">暂无新的好友申请。</p></div></section><section><h3 class="request-section-title">发出的申请</h3><div class="request-list"><div v-for="item in friendRequests.outgoing" :key="item.id" class="request-item"><div class="request-main"><strong>{{ item.recipient.name }}</strong><small>{{ item.message || '未填写申请信息' }}</small><time>{{ time(item.updated_at) }}</time></div><span class="request-status" :class="'status-' + item.status">{{ friendRequestStatus(item.status) }}</span></div><p v-if="!friendRequests.outgoing.length" class="empty-request">暂无发出的申请。</p></div></section></div></div>
-            <div v-if="showMembers" class="modal-backdrop" @click.self="closeMembers"><div class="modal member-modal" role="dialog" aria-modal="true" aria-label="群成员列表"><div class="modal-head"><h2>群成员<span class="member-total">{{ memberCount }} 人</span></h2><button @click="closeMembers" aria-label="关闭">×</button></div><p class="subtle">{{ title(current) }} · 群成员上限 1000 人</p><div class="member-search"><Search :size="17" aria-hidden="true" /><input v-model="memberQuery" type="search" maxlength="100" placeholder="搜索群成员昵称或账号" aria-label="搜索群成员" /></div><div class="member-list" role="list"><div v-for="person in currentMembers" :key="person.id" class="member-item" role="listitem"><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span class="member-text"><strong>{{ person.name }}<span v-if="person.id === me.id" class="member-self">我</span></strong><small>账号：{{ person.email }}</small></span></div><p v-if="!currentMembers.length" class="empty-member">{{ memberQuery.trim() ? '没有匹配的成员' : '暂无群成员' }}</p></div><div class="member-actions"><button class="outline-button" type="button" @click="closeMembers">关闭</button><button class="primary" type="button" :disabled="memberCount >= 1000" @click="inviteFromMembers">{{ memberCount >= 1000 ? '成员已满' : '邀请成员' }}</button></div></div></div>
+            <div v-if="showMembers" class="modal-backdrop" @click.self="closeMembers"><div class="modal member-modal" role="dialog" aria-modal="true" aria-label="群成员列表"><div class="modal-head"><h2>群成员<span class="member-total">{{ memberCount }} 人</span></h2><button @click="closeMembers" aria-label="关闭">×</button></div><p class="subtle">{{ title(current) }} · 你的身份：{{ roleLabel(currentRole) }} · 群成员上限 1000 人</p><div class="member-search"><Search :size="17" aria-hidden="true" /><input v-model="memberQuery" type="search" maxlength="100" placeholder="搜索群成员昵称或账号" aria-label="搜索群成员" /></div><div class="member-list" role="list"><div v-for="person in currentMembers" :key="person.id" class="member-item" role="listitem"><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span class="member-text"><strong>{{ person.name }}<span v-if="person.id === me.id" class="member-self">我</span><span v-if="person.role !== 'member'" class="role-badge" :class="'role-' + person.role">{{ roleLabel(person.role) }}</span></strong><small>账号：{{ person.email }}</small></span><span v-if="memberCanChangeRole(person) || canTransferTo(person) || memberCanBeRemoved(person)" class="member-row-actions"><button v-if="memberCanChangeRole(person)" type="button" class="small-button" :disabled="memberBusy" @click="changeRole(person, person.role === 'admin' ? 'member' : 'admin')">{{ person.role === 'admin' ? '取消管理员' : '设为管理员' }}</button><button v-if="canTransferTo(person)" type="button" class="small-button" :disabled="memberBusy" @click="transferOwnership(person)">转让群主</button><button v-if="memberCanBeRemoved(person)" type="button" class="small-button reject-button" :disabled="memberBusy" @click="removeMember(person)">移出</button></span></div><p v-if="!currentMembers.length" class="empty-member">{{ memberQuery.trim() ? '没有匹配的成员' : '暂无群成员' }}</p></div><div class="member-actions"><button class="outline-button" type="button" @click="closeMembers">关闭</button><button v-if="canLeaveGroup" class="outline-button leave-button" type="button" :disabled="groupBusy" @click="leaveGroup">退出群聊</button><button v-if="canInviteMembers" class="primary" type="button" :disabled="memberCount >= 1000" @click="inviteFromMembers">{{ memberCount >= 1000 ? '成员已满' : '邀请成员' }}</button></div></div></div>
       <div v-if="showInvite" class="modal-backdrop" @click.self="showInvite = false"><div class="modal"><div class="modal-head"><h2>邀请成员</h2><button @click="showInvite = false">×</button></div><p class="subtle">选择要加入“{{ current?.name }}”的用户，群聊最多容纳 1000 人，当前 {{ current?.members.length }} 人。</p><div class="user-list"><label v-for="person in inviteCandidates" :key="person.id"><input v-model="inviteUsers" type="checkbox" :value="person.id" :disabled="(current?.members.length || 0) + inviteUsers.length >= 1000 && !inviteUsers.includes(person.id)" /><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>{{ person.email }}</small></span></label><p v-if="!inviteCandidates.length">暂无可邀请的用户。</p></div><button class="primary" :disabled="conversationBusy || !inviteUsers.length || (current?.members.length || 0) + inviteUsers.length > 1000" @click="addMembers">{{ conversationBusy ? '邀请中…' : '邀请加入群聊' }}</button></div></div>
       <div v-if="showProfile" class="modal-backdrop" @click.self="showProfile = false"><div class="modal profile-modal" role="dialog" aria-modal="true" aria-label="个人信息"><div class="modal-head"><h2>个人信息</h2><button @click="showProfile = false" aria-label="关闭">×</button></div><div class="profile-header"><span class="avatar profile-avatar self">{{ (profileEditing ? profileName : me.name).slice(0,1) }}</span><div><h3>{{ me.name }}</h3><p class="subtle">个人资料</p></div></div><template v-if="profileEditing"><div class="profile-form"><label>用户名<input v-model="profileName" maxlength="64" autocomplete="name" /></label><label>用户账号<input v-model="profileEmail" type="email" maxlength="254" autocomplete="email" /></label></div><div class="profile-actions"><button class="outline-button" type="button" :disabled="profileBusy" @click="profileEditing = false">取消</button><button class="primary" type="button" :disabled="profileBusy || !profileName.trim() || !profileEmail.trim()" @click="updateProfile">{{ profileBusy ? "保存中…" : "保存修改" }}</button></div></template><template v-else><dl class="profile-details"><div><dt>用户名</dt><dd>{{ me.name }}</dd></div><div><dt>用户账号</dt><dd>{{ me.email }}</dd></div><div><dt>用户 ID</dt><dd>{{ me.id }}</dd></div></dl><button class="primary profile-edit-button" type="button" @click="profileEditing = true">编辑个人信息</button></template></div></div>
     </div>
