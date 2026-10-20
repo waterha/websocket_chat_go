@@ -114,3 +114,38 @@ test('an attachment resend keeps the same id and refuses a different media', () 
   const textOnly = sends.save('other', 'plain')
   assert.equal(textOnly.media_id, '')
 })
+
+// The record is sent verbatim over WebSocket, so every field the server reads
+// must be stored on it. Reply and mention fields were previously dropped here,
+// which silently lost quoting and mentions on the real send path while the HTTP
+// fallback still worked.
+test('a pending send carries the reply and mention fields the server reads', () => {
+  const values = new Map()
+  const storage = {
+    getItem: key => values.get(key) || null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: key => values.delete(key),
+  }
+  const sends = new PendingSends(storage, 'alice')
+  const pending = sends.save('chat', 'agree', '', 'root-message-id', ['bob-id'])
+  assert.equal(pending.reply_to_id, 'root-message-id')
+  assert.deepEqual(pending.mentions, ['bob-id'])
+  // The payload sent over the socket is this stored object, so it must also carry
+  // the conversation, which the server needs to route the send.
+  assert.equal(pending.conversation_id, 'chat')
+  assert.ok(pending.client_msg_id.length >= 8)
+})
+
+test('a reply resend keeps its target and refuses a changed one', () => {
+  const values = new Map()
+  const storage = {
+    getItem: key => values.get(key) || null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: key => values.delete(key),
+  }
+  const sends = new PendingSends(storage, 'alice')
+  const pending = sends.save('chat', 'agree', '', 'root-a', [])
+  assert.deepEqual(sends.save('chat', 'agree', '', 'root-a', []), pending)
+  assert.throws(() => sends.save('chat', 'agree', '', 'root-b', []), /未确认/)
+  assert.throws(() => sends.save('chat', 'agree', '', 'root-a', ['bob']), /未确认/)
+})

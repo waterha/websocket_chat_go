@@ -76,6 +76,15 @@ export class Requests {
   }
 }
 
+// sameMentions compares two mention lists by content, ignoring order, so a retry
+// of the same message is not rejected over ordering.
+function sameMentions(left, right) {
+  const first = [...(left || [])].sort()
+  const second = [...(right || [])].sort()
+  if (first.length !== second.length) return false
+  return first.every((value, index) => value === second[index])
+}
+
 export class PendingSends {
   constructor(storage, userID) {
     this.storage = storage
@@ -94,13 +103,30 @@ export class PendingSends {
     return item?.conversation_id === conversationID && typeof item.content === 'string' && typeof item.client_msg_id === 'string' && item.client_msg_id.length >= 8 ? item : null
   }
 
-  // A media message stores the uploaded attachment id as well, so a retry after
-  // an unknown result reuses the same bytes instead of re-uploading them.
-  save(conversationID, content, mediaID = '') {
+  // The stored record IS the payload sent over the socket, so it must carry every
+  // field the server reads for a send: the attachment id, the quoted message and
+  // the mentions. Storing only content and media previously meant a WebSocket
+  // send silently lost quoting and mentions, while the HTTP fallback kept them.
+  //
+  // The fields also participate in the "did the user change the message" check,
+  // so an uncertain send cannot silently be retried as a different message.
+  save(conversationID, content, mediaID = '', replyToID = '', mentions = []) {
     const existing = this.get(conversationID)
-    if (existing && (existing.content !== content || (existing.media_id || '') !== mediaID)) throw new Error('上一条发送结果未确认，请先恢复原文重试或明确放弃')
+    if (existing && (
+      existing.content !== content
+      || (existing.media_id || '') !== mediaID
+      || (existing.reply_to_id || '') !== replyToID
+      || !sameMentions(existing.mentions, mentions)
+    )) throw new Error('上一条发送结果未确认，请先恢复原文重试或明确放弃')
     if (existing) return existing
-    const item = { conversation_id: conversationID, client_msg_id: crypto.randomUUID(), content, media_id: mediaID }
+    const item = {
+      conversation_id: conversationID,
+      client_msg_id: crypto.randomUUID(),
+      content,
+      media_id: mediaID,
+      reply_to_id: replyToID,
+      mentions: [...(mentions || [])],
+    }
     this.storage.setItem(this.key, JSON.stringify({ ...this.entries(), [conversationID]: item }))
     return item
   }

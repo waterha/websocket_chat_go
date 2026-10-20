@@ -97,6 +97,9 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 - `GET /conversations/{id}/messages/{message_id}/thread` 返回 `{"root":{...},"replies":[...],"has_more":bool,"next_after_seq":N,"reply_count":N}`。`message_id` 可以是根，也可以是窗口内的任一回复——服务端会解析到根，因此从回复打开得到的是同一个窗口，而不是嵌套窗口。`replies` 按会话内 `seq` **升序**返回（旧的在前）。`limit` 默认 100、上限 100；`after_seq` 为上一页的 `next_after_seq`。非成员、非本会话消息与不存在的消息都返回 404 `not_found`。
 - 主聊天界面的每条根消息带 `thread` 摘要：`{"root_id","reply_count","preview":[...]}`。`reply_count` 是**窗口内回复总数**，而 `preview` 只保留**最早 3 条**回复，避免长话题把历史列表撑大。没有回复的消息不带 `thread` 字段。摘要在历史与 `/sync` 返回消息时一并附带，因此客户端不需要为每条消息单独请求。
 - 窗口内的回复也可以被回复和撤回，规则与其他消息相同；窗口本身不改变撤回语义。
+- **客户端行为**：点击消息上的「回复」直接打开该消息的对话窗口，回复在主聊天输入框之外、由窗口自己的输入框提交，两者互不干扰。窗口内提交的回复以窗口根消息为 `reply_to_id`，因此始终落在同一窗口。主输入框发送的消息不带引用（引用统一由窗口产生）。
+
+**发送路径的一致性**：`message.send` WebSocket 命令的 `data` 就是客户端待确认发送记录本身，该记录必须包含服务端读取的全部字段（`client_msg_id`、`content`、`media_id`、`reply_to_id`、`mentions`）。曾出现过记录只存 `content`/`media_id` 导致 **WebSocket 发送静默丢失引用与提及**、而 HTTP 回退仍正常的问题；现由测试 `TestReplySurvivesTheWebsocketSendPath` 固定该行为。
 
 当前没有：话题串成员订阅、未读计数、把话题串限制在频道内、以及回复的通知聚合。
 

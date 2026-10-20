@@ -154,6 +154,10 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .thread-window-item.mine { flex-direction: row-reverse; text-align: right; }
 .thread-window-body { min-width: 0; }
 .thread-window-foot { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--line); background: var(--card); }
+.thread-window-composer { display: grid; gap: 8px; margin: 0; padding: 12px 16px; border-top: 1px solid var(--line); background: var(--card); }
+.thread-window-composer textarea { min-height: 56px; resize: vertical; border-radius: 12px; }
+.thread-window-composer div { display: flex; align-items: center; justify-content: flex-end; gap: 8px; color: var(--muted); font-size: 11px; }
+.thread-window-composer div span { margin-right: auto; }
 @media (max-width: 720px) { .thread-window { width: 100vw; } }
 @media (max-width: 720px) {
   .chat-head { gap: 8px; padding: 12px 16px; }

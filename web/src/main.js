@@ -48,7 +48,6 @@ createApp({
     const announcementEditing = ref(false)
     const groupBusy = ref(false)
     const draftArea = ref(null)
-    const replyTarget = ref(null)
     const mentionQuery = ref(null)
     const mentionIndex = ref(0)
     const mentionList = ref([])
@@ -303,7 +302,8 @@ createApp({
       threadError.value = ''
       threadHasMorePages.value = false
       threadReplyCount.value = 0
-      clearReply()
+      // A draft typed in the window is not carried over to the next one.
+      threadDraft.value = ''
     }
     async function openThread(item) {
       if (!item) return
@@ -346,12 +346,52 @@ createApp({
       } catch (cause) { if (version === epoch) threadError.value = cause.message || '加载失败' }
       finally { if (version === epoch) threadBusy.value = false }
     }
-    // Replying inside the window targets the window's root, keeping threads flat
-    // rather than nesting a reply under a reply.
-    function replyInThread() {
-      const target = replyTargetForWindow({ root: threadRoot.value })
-      if (!target) return
-      startReply(target)
+    // The window has its own composer: a reply written here must be sent into the
+    // window without disturbing whatever the user had typed in the main chat.
+    const threadDraft = ref('')
+    const threadSending = ref(false)
+    const threadDraftArea = ref(null)
+    async function sendInThread() {
+      const content = threadDraft.value.trim()
+      const root = threadRoot.value
+      const id = active.value
+      const version = epoch
+      if (!content || !root || !id || threadSending.value) return
+      threadSending.value = true
+      try {
+        await api(`/conversations/${id}/messages`, {
+          method: 'POST',
+          body: JSON.stringify({ client_msg_id: crypto.randomUUID(), content, media_id: '', reply_to_id: root.id, mentions: [] }),
+        })
+        if (version !== epoch) return
+        threadDraft.value = ''
+        await refreshThread()
+        await syncConversation(id)
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { if (version === epoch) threadSending.value = false }
+    }
+    // Reloads the window after a change so the reply appears with its true count.
+    async function refreshThread() {
+      const root = threadRoot.value
+      const id = active.value
+      if (!root || !id) return
+      const page = await api(`/conversations/${id}/messages/${root.id}/thread?limit=100`)
+      threadRoot.value = page.root
+      threadReplies.value = page.replies || []
+      threadReplyCount.value = page.reply_count || 0
+      threadHasMorePages.value = threadHasMore(page)
+      await nextTick()
+      threadStream.value?.scrollTo({ top: threadStream.value.scrollHeight })
+    }
+    function onThreadEnter(event) {
+      if (event.isComposing) return
+      event.preventDefault()
+      sendInThread()
+    }
+    function onThreadEnter(event) {
+      if (event.isComposing) return
+      event.preventDefault()
+      sendInThread()
     }
     function openMembers() {
       memberQuery.value = ''
@@ -454,12 +494,12 @@ createApp({
     const canRecallMessage = item => canRecall(item, me.value?.id, current.value)
     // Mention list is derived from the active "@" token in the composer.
     const showMentions = computed(() => mentionQuery.value !== null && current.value?.kind === 'group')
+    // Clicking "reply" opens the conversation window for that message, which is
+    // where the user reads every reply and writes their own. Replies never travel
+    // through the main composer, so the two surfaces stay distinct.
     function startReply(item) {
-      replyTarget.value = item
-      nextTick(() => draftArea.value?.focus())
-    }
-    function clearReply() {
-      replyTarget.value = null
+      if (!item) return
+      openThread(item)
     }
     function updateMentionState() {
       const area = draftArea.value
@@ -513,7 +553,6 @@ createApp({
       try {
         await api(`/conversations/${id}/messages/${item.seq}/recall`, { method: 'POST' })
         if (version !== epoch) return
-        if (replyTarget.value?.id === item.id) replyTarget.value = null
         await syncConversation(id)
       } catch (cause) { if (version === epoch) showError(cause) }
       finally { if (version === epoch) sending.value = false }
@@ -676,7 +715,8 @@ createApp({
     }
     watch([active, me], () => {
       clearAttachment()
-      clearReply()
+      // Switching conversation closes the window; its replies belong to the old one.
+      closeThread()
       mentionQuery.value = null
       mentionList.value = []
       closeSearch()
@@ -955,9 +995,15 @@ createApp({
       if ((!content && !media) || !id || sending.value || uploadBusy.value) return
       sending.value = true
       try {
-        const input = pendingStore.save(id, content, media?.id || '')
+        // The main composer sends a message without quoting: quoting happens in
+        // the conversation window, which targets that window's root. Mentions are
+        // still resolved here. The stored record doubles as the WebSocket payload,
+        // so every field the server reads is passed in rather than left out of it.
+        const replyToID = ''
+        const mentions = resolveMentions()
+        const input = pendingStore.save(id, content, media?.id || '', replyToID, mentions)
         pendingSend.value = input
-        const payload = { client_msg_id: input.client_msg_id, content, media_id: media?.id || '', reply_to_id: replyTarget.value?.id || '', mentions: resolveMentions() }
+        const payload = { client_msg_id: input.client_msg_id, content, media_id: media?.id || '', reply_to_id: replyToID, mentions }
         if (connected.value) {
           try { await requests.send('message.send', input) }
           catch (cause) {
@@ -971,7 +1017,6 @@ createApp({
         if (pendingSend.value?.client_msg_id === input.client_msg_id) pendingSend.value = null
         if (active.value === id && draft.value.trim() === content) draft.value = ''
         if (active.value === id) clearAttachment()
-        if (active.value === id) clearReply()
         await syncConversation(id)
       } catch (cause) { showError(cause) }
       finally { sending.value = false }
@@ -1005,7 +1050,7 @@ createApp({
       window.addEventListener('focus', onVisible)
     })
     onUnmounted(() => { resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, announcementDraft, announcementEditing, startAnnouncementEdit, saveAnnouncement, hasAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, replyInThread, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, draftArea, replyTarget, startReply, clearReply, replyPreview, replyAuthor, bodyOf, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
+    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, announcementDraft, announcementEditing, startAnnouncementEdit, saveAnnouncement, hasAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, draftArea, startReply, replyPreview, replyAuthor, bodyOf, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
   },
   template,
 }).mount('#app')
