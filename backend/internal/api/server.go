@@ -41,6 +41,7 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/conversations/{id}/owner", server.auth(server.transferOwnership))
 	mux.HandleFunc("POST /api/v1/conversations/{id}/roles", server.auth(server.setRole))
 	mux.HandleFunc("PATCH /api/v1/conversations/{id}/announcement", server.auth(server.setAnnouncement))
+	mux.HandleFunc("PATCH /api/v1/conversations/{id}/preferences", server.auth(server.setPreferences))
 	mux.HandleFunc("GET /api/v1/conversations/{id}/messages", server.auth(server.history))
 	mux.HandleFunc("GET /api/v1/conversations/{id}/messages/search", server.auth(server.searchMessages))
 	mux.HandleFunc("GET /api/v1/conversations/{id}/messages/{seq}/delivery", server.auth(server.deliveryStatus))

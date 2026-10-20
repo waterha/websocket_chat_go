@@ -54,6 +54,19 @@ func (server *Server) transferOwnership(writer http.ResponseWriter, request *htt
 	respond(writer, 200, map[string]string{"id": request.PathValue("id")})
 }
 
+func (server *Server) setPreferences(writer http.ResponseWriter, request *http.Request, caller identity) {
+	var input model.PreferenceInput
+	if !decode(writer, request, &input) {
+		return
+	}
+	preferences, err := server.Services.Chat.Preferences(request.Context(), caller.account.ID, request.PathValue("id"), input)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, preferences)
+}
+
 func (server *Server) setAnnouncement(writer http.ResponseWriter, request *http.Request, caller identity) {
 	var input model.AnnouncementInput
 	if !decode(writer, request, &input) {

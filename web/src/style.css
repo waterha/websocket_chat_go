@@ -120,6 +120,12 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .media-file-text small { opacity: .75; font-size: 11px; }
 .global-search-modal { width: min(680px, calc(100vw - 40px)); max-height: 84vh; overflow: auto; }
 .search-result-conversation { color: var(--muted); font-size: 11px; }
+.pin-mark, .mute-mark { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 500; }
+.pin-mark { color: #8a5a00; background: #ffe6a8; }
+.mute-mark { color: #555; background: #e8e6e1; }
+.list-section-title { margin: 10px 14px 6px; color: var(--muted); font-size: 11px; letter-spacing: .04em; }
+.conversation.archived { opacity: .7; }
+.archived-toggle { display: block; margin: 10px auto 4px; }
 @media (max-width: 720px) {
   .chat-head { gap: 8px; padding: 12px 16px; }
   .chat-head .outline-button { padding: 8px; font-size: 12px; flex: none; }

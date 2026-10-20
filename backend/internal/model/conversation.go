@@ -20,6 +20,10 @@ type Conversation struct {
 	Members      []Member `json:"members"`
 	LastSeq      int64    `json:"last_seq"`
 	LastReadSeq  int64    `json:"last_read_seq"`
+	// These reflect only the caller's own preferences.
+	Pinned   bool `json:"pinned"`
+	Muted    bool `json:"muted"`
+	Archived bool `json:"archived"`
 }
 
 type CreateInput struct {
