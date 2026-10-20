@@ -4,8 +4,8 @@
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024
 
-// A content type is required because the upload endpoint refuses to guess: the
-// server re-derives the kind from exactly this header.
+// The upload endpoint trusts the declared Content-Type as the media type; it
+// does not sniff the bytes, so the client must send the file's real type.
 export function mediaKind(contentType) {
   const type = String(contentType || '').toLowerCase().split(';')[0].trim()
   if (type.startsWith('image/')) return 'image'

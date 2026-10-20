@@ -47,7 +47,7 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 
 消息支持 `kind` 为 `image` 或 `video` 的附件消息。附件先上传再发送：`POST /conversations/{id}/media` 只接受图片或视频，`GET /media/{media_id}` 只在调用者是所属会话成员时返回字节。**上传者与发送者必须是同一人**，且附件必须属于目标会话，因此上传凭证不能被借用。
 
-- 支持的类型由 `Content-Type` 决定：`image/jpeg`、`image/png`、`image/gif`、`image/webp` 以及 `video/mp4`、`video/webm`、`video/ogg`；其他类型返回 415 `unsupported_media_type`。请求体是原始字节，不是 multipart，也不是 JSON。
+- 支持的类型由 `Content-Type` 决定：`image/jpeg`、`image/png`、`image/gif`、`image/webp` 以及 `video/mp4`、`video/webm`、`video/ogg`；其他类型返回 415 `unsupported_media_type`。请求体是原始字节，不是 multipart，也不是 JSON。服务端**不嗅探文件内容**，声明的类型即存储与下载类型，因此任意字节都可以被标成图片；下载方应把返回内容视为不可信媒体。
 - 图片上限 10 MiB，视频上限 100 MiB；超限返回 413 `media_too_large`。缺失或非正的 `Content-Length` 返回 400 `invalid_upload`；写入长度与声明不一致同样返回 400。
 - 上传非成员会话返回 404 `not_found`。成功 201 返回 `{"id","conversation_id","file_name","media_type","content_type","byte_size","created_at"}`；`file_name` 已去除路径部分并截断到 255 个字符。存储键不出现在任何响应中。
 - 发送附件消息：`{"client_msg_id":"...","content":"可选说明","media_id":"上传返回的 id"}`。`kind` 由附件类型推导，不读取客户端声明；`content` 可以为空字符串（最多 4000 字符）作为说明。引用不存在、不属于该会话或非本人上传的 `media_id` 返回 404；`content` 为空且没有 `media_id` 仍返回 400。重试的幂等比较同时包含 `content` 与 `media_id`，两者任一不同返回 409 `message_conflict`。

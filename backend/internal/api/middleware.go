@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 	"websocket_chat_go/backend/internal/model"
 )
@@ -26,7 +27,14 @@ func (server *Server) cors(next http.Handler) http.Handler {
 			return
 		}
 		if request.URL.Path != "/ws" {
-			ctx, cancel := context.WithTimeout(request.Context(), 15*time.Second)
+			// Uploads stream up to 100 MiB of video, so they need far more time
+			// than an ordinary JSON request; every other route keeps the short
+			// bound that protects the rest of the API.
+			timeout := 15 * time.Second
+			if request.Method == "POST" && strings.HasSuffix(request.URL.Path, "/media") {
+				timeout = 10 * time.Minute
+			}
+			ctx, cancel := context.WithTimeout(request.Context(), timeout)
 			defer cancel()
 			request = request.WithContext(ctx)
 		}
