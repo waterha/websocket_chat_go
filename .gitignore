@@ -19,3 +19,6 @@ postgres.log
 .DS_Store
 Thumbs.db
 credentials.json
+
+# Scratch file used to pass multi-line commit messages on Windows.
+.git-commit-msg.txt
