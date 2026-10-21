@@ -12,7 +12,8 @@ import { hasThread, hiddenReplyCount, replyTargetForWindow, threadHasMore, threa
 import { availableInitials, filterCandidates, groupByInitial, keepSelectable, OTHER_INITIAL, selectAllCandidates, selectionSummary, toggleSelection } from './invite.js'
 import { formatBytes, mediaPreview, mediaURL, validateMediaFile } from './media.js'
 import { collectImages, hasTransferableFiles, prepareImage } from './image-input.js'
-import { buildBlocks, blocksToText, countImages, hasBlocks, insertToken, messageSegments, nextImageIndex, removeToken } from './composer-blocks.js'
+import { hasBlocks, messageSegments, nextImageIndex } from './composer-blocks.js'
+import { caretRange, collectPieces, hasContent, insertImageAtCaret, piecesToBlocks, piecesToText, placeCaretAfter, removeImageFromComposer, renderInto, textBeforeCaret } from './composer-dom.js'
 import { api, uploadMedia } from './api.js'
 import { template } from './template.js'
 import './style.css'
@@ -622,9 +623,9 @@ createApp({
         return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
       } catch { return null }
     }
-    // Uploads images and puts a token for each one into the draft at the caret, so
-    // several images can be interleaved with text in the order they are added.
-    // Nothing is sent here: the whole draft leaves as one message.
+    // Uploads images and inserts each one as a real picture at the caret, so several
+    // images can be interleaved with text in the order they are added and the draft
+    // reads exactly as the message will. Nothing is sent here.
     async function acceptImages(files) {
       const id = active.value
       if (!id || !files.length) return
@@ -645,37 +646,75 @@ createApp({
           const uploaded = await uploadMedia(id, prepared)
           if (version !== epoch || active.value !== id) return
           const index = nextImageIndex(composerImages.value)
-          composerImages.value = [...composerImages.value, {
+          const image = {
             index,
             mediaId: uploaded.id,
             previewURL: URL.createObjectURL(prepared),
             fileName: uploaded.file_name || prepared.name,
-          }]
-          // The token goes where the caret was, so the image reads at the point the
-          // user pasted it.
-          const caret = draftArea.value?.selectionStart ?? draft.value.length
-          const inserted = insertToken(draft.value, caret, index)
-          draft.value = inserted.text
-          await nextTick()
-          if (draftArea.value) {
-            draftArea.value.selectionStart = inserted.caret
-            draftArea.value.selectionEnd = inserted.caret
-            draftArea.value.focus()
+          }
+          composerImages.value = [...composerImages.value, image]
+          // The picture goes where the caret was, so it reads at the point the user
+          // pasted it.
+          const root = draftArea.value
+          if (root) {
+            const range = caretRange(root, window.getSelection())
+            const chip = insertImageAtCaret(root, range, image)
+            placeCaretAfter(root, chip, window.getSelection())
+            root.focus()
+            syncDraftFromDom()
           }
         }
       } catch (cause) { if (version === epoch) showError(cause) }
       finally { if (version === epoch) uploadBusy.value = false }
     }
-    // Removing an image from the strip also removes its token from the draft.
+    // Removing an image drops its picture from the draft as well as its entry.
     function removeComposerImage(image) {
       if (!image) return
-      draft.value = removeToken(draft.value, image.index)
+      if (draftArea.value) removeImageFromComposer(draftArea.value, image.mediaId)
       if (image.previewURL) URL.revokeObjectURL(image.previewURL)
-      composerImages.value = composerImages.value.filter(entry => entry.index !== image.index)
+      composerImages.value = composerImages.value.filter(entry => entry.mediaId !== image.mediaId)
+      syncDraftFromDom()
     }
     function clearComposerImages() {
       for (const image of composerImages.value) if (image.previewURL) URL.revokeObjectURL(image.previewURL)
       composerImages.value = []
+    }
+    // The rich region is the source of truth while editing, so the draft string the
+    // rest of the component reads is derived from it after every change.
+    function syncDraftFromDom() {
+      const root = draftArea.value
+      if (!root) return
+      draft.value = piecesToText(collectPieces(root))
+    }
+    function composerBlocks() {
+      const root = draftArea.value
+      return root ? piecesToBlocks(collectPieces(root)) : []
+    }
+    function composerHasContent() {
+      const root = draftArea.value
+      return root ? hasContent(collectPieces(root)) : false
+    }
+    function onComposerInput() {
+      syncDraftFromDom()
+      updateMentionState()
+    }
+    // A click on the remove control deletes that image without selecting the chip.
+    function onComposerClick(event) {
+      const remove = event.target?.closest?.('[data-remove-media]')
+      if (remove) {
+        event.preventDefault()
+        const mediaId = remove.getAttribute('data-remove-media')
+        const image = composerImages.value.find(entry => entry.mediaId === mediaId)
+        if (image) removeComposerImage(image)
+        return
+      }
+      updateMentionState()
+    }
+    function onComposerBlur() {
+      // The mention popup is dismissed when focus leaves the composer, but choosing an
+      // entry cancels the blur first.
+      mentionQuery.value = null
+      mentionList.value = []
     }
     // Pasting an image keeps it out of the text box and holds it for sending.
     function onComposerPaste(event) {
@@ -724,7 +763,10 @@ createApp({
     function updateMentionState() {
       const area = draftArea.value
       if (!area || current.value?.kind !== 'group') { mentionQuery.value = null; mentionList.value = []; return }
-      const token = activeMentionToken(draft.value, area.selectionStart)
+      // A contenteditable region has no selectionStart, so the caret is measured as
+      // the text before it inside the region.
+      const before = textBeforeCaret(area, window.getSelection())
+      const token = activeMentionToken(before, before.length)
       if (!token) { mentionQuery.value = null; mentionList.value = []; return }
       mentionQuery.value = token
       mentionList.value = mentionCandidates(current.value?.members, me.value?.id, token.query).slice(0, 8)
@@ -734,14 +776,31 @@ createApp({
       const token = mentionQuery.value
       if (!token || !person) return
       const applied = applyMention(draft.value, token, person.name)
-      draft.value = applied.text
       mentionQuery.value = null
       mentionList.value = []
+      // Rewriting the region from the applied text keeps the mention edit simple; the
+      // caret is then placed where the mention ended.
+      const area = draftArea.value
+      if (!area) return
+      area.textContent = applied.text
+      draft.value = applied.text
       nextTick(() => {
-        const area = draftArea.value
-        if (!area) return
-        area.focus()
-        area.setSelectionRange(applied.caret, applied.caret)
+        const root = draftArea.value
+        if (!root) return
+        root.focus()
+        const range = document.createRange()
+        const target = root.firstChild
+        if (target && target.nodeType === 3) {
+          const offset = Math.min(applied.caret, target.length)
+          range.setStart(target, offset)
+        } else {
+          range.selectNodeContents(root)
+          range.collapse(false)
+        }
+        range.collapse(true)
+        const selection = window.getSelection()
+        selection.removeAllRanges()
+        selection.addRange(range)
       })
     }
     function mentionKeydown(event) {
@@ -1216,9 +1275,10 @@ createApp({
       const id = active.value
       const version = epoch
       const media = attachment.value
-      // The draft is turned into ordered blocks, so an image and the text around it
-      // travel together in the order they were written.
-      const blocks = buildBlocks(draft.value, composerImages.value)
+      // The rich region is turned into ordered blocks, so an image and the text around
+      // it travel together in the order they were written.
+      syncDraftFromDom()
+      const blocks = composerBlocks()
       const content = draft.value.trim()
       if ((!blocks.length && !content && !media) || !id || sending.value || uploadBusy.value) return
       sending.value = true
@@ -1243,7 +1303,12 @@ createApp({
         if (version !== epoch) return
         pendingStore.clear(id, input.client_msg_id)
         if (pendingSend.value?.client_msg_id === input.client_msg_id) pendingSend.value = null
-        if (active.value === id && draft.value.trim() === content) draft.value = ''
+        // The composer is emptied only if it still holds what was just sent, so text
+        // typed during the round trip is not lost.
+        if (active.value === id && draft.value.trim() === content && draftArea.value) {
+          draftArea.value.textContent = ''
+          draft.value = ''
+        }
         if (active.value === id) { clearAttachment(); clearComposerImages() }
         await syncConversation(id)
       } catch (cause) { showError(cause) }
@@ -1262,6 +1327,24 @@ createApp({
       event.preventDefault()
       send()
     }
+    // Restoring an uncertain send puts its text and images back into the rich region,
+    // so the user can retry exactly what they had written.
+    function restorePending() {
+      const pending = pendingSend.value
+      const root = draftArea.value
+      if (!pending) return
+      if (root) {
+        renderInto(root, pending.blocks || [], composerImages.value)
+        syncDraftFromDom()
+        // A send that had no blocks carries its text in content instead.
+        if (!(pending.blocks || []).length) {
+          root.textContent = pending.content || ''
+          draft.value = pending.content || ''
+        }
+      } else {
+        draft.value = pending.content || ''
+      }
+    }
     onMounted(async () => {
       try { me.value = await api('/me'); pendingStore = new PendingSends(sessionStorage, me.value.id); await refresh(); if (active.value) await select(active.value) }
       catch (cause) { if (cause.status === 401) me.value = null; else showError(cause) }
@@ -1278,7 +1361,7 @@ createApp({
       window.addEventListener('focus', onVisible)
     })
     onUnmounted(() => { resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, inviteQuery, inviteInitial, inviteVisible, inviteGroups, inviteInitials, inviteSummary, inviteSelectedCount, inviteSelectedPeople, chooseInviteInitial, toggleInvite, selectAllInvites, clearInvites, resetInviteFilters, OTHER_INITIAL, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, discardPending, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, composerImages, removeComposerImage, clearComposerImages, dragging, onComposerPaste, onDragOver, onDragLeave, onDrop, draftArea, startReply, replyPreview, replyAuthor, bodyOf, segmentsOf, usesBlocks, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
+    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, inviteQuery, inviteInitial, inviteVisible, inviteGroups, inviteInitials, inviteSummary, inviteSelectedCount, inviteSelectedPeople, chooseInviteInitial, toggleInvite, selectAllInvites, clearInvites, resetInviteFilters, OTHER_INITIAL, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, discardPending, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, composerImages, removeComposerImage, clearComposerImages, syncDraftFromDom, onComposerInput, onComposerClick, onComposerBlur, restorePending, dragging, onComposerPaste, onDragOver, onDragLeave, onDrop, draftArea, startReply, replyPreview, replyAuthor, bodyOf, segmentsOf, usesBlocks, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
   },
   template,
 }).mount('#app')
