@@ -133,6 +133,18 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .attachment-info strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-info small { color: var(--muted); font-size: 11px; }
 .attachment-hint { display: block; margin-top: 2px; color: var(--accent-dark); font-style: normal; font-size: 11px; font-weight: 600; }
+/* A message whose images sit between its text, in the order it was written. */
+.block-stack { display: flex; flex-direction: column; gap: 8px; }
+.block-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.block-image { display: block; }
+.block-image img { display: block; max-width: min(320px, 100%); max-height: 320px; border-radius: 12px; object-fit: cover; }
+.block-file { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 12px; }
+/* The images the draft references, shown above the text box. */
+.composer-images { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.composer-images figure { position: relative; display: flex; flex-direction: column; gap: 3px; margin: 0; }
+.composer-images img { width: 74px; height: 74px; border: 1px solid var(--line); border-radius: 10px; object-fit: cover; }
+.composer-images figcaption { color: var(--muted); font-size: 10px; text-align: center; }
+.composer-images .icon-button { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 50%; background: #fff; }
 .attachment-status { padding: 8px 10px; border: 1px dashed var(--line); border-radius: 14px; color: var(--muted); font-size: 12px; }
 .announcement { display: flex; align-items: flex-start; gap: 10px; margin: 0 auto; width: min(760px, calc(100% - 48px)); padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; background: #fffaf2; }
 .announcement strong { flex: none; color: var(--accent-dark); font-size: 12px; }
