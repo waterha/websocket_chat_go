@@ -32,16 +32,18 @@ export function collectPieces(root) {
       return
     }
     if (node.nodeType !== 1) return
-    if (node.tagName === 'IMG') {
-      const mediaId = node.getAttribute(MEDIA_ATTRIBUTE) || ''
-      // An image without an upload id cannot be sent, so it is ignored rather than
-      // producing a block the server would reject.
-      if (mediaId) {
-        flushText()
-        pieces.push({ type: 'image', mediaId })
-      }
+    // The chip wrapping an image carries the upload id, so it is matched before its
+    // children are walked. Matching only <img> would miss the id, which lives on the
+    // wrapper so the picture and its remove control behave as one unit.
+    const chipID = node.getAttribute && node.getAttribute(MEDIA_ATTRIBUTE)
+    if (chipID) {
+      flushText()
+      pieces.push({ type: 'image', mediaId: chipID })
       return
     }
+    // An <img> that is not inside a chip has no upload, so it cannot be sent and is
+    // ignored rather than producing a block the server would reject.
+    if (node.tagName === 'IMG') return
     if (node.tagName === 'BR') {
       buffer += '\n'
       return
@@ -72,7 +74,10 @@ export function piecesToBlocks(pieces) {
   const blocks = []
   let pending = ''
   const flushText = () => {
-    const trimmed = pending.replace(/^[ \t\n\r]+|[ \t\n\r]+$/g, '')
+    // The non-breaking space the image insert adds, and any ordinary space around a
+    // segment, is not part of what the user meant to say. Leading and trailing
+    // whitespace is trimmed while inner line breaks survive.
+    const trimmed = pending.replace(/[\s\u00A0]+$/, '').replace(/^[\s\u00A0]+/, '')
     if (trimmed) blocks.push({ type: 'text', text: trimmed })
     pending = ''
   }
