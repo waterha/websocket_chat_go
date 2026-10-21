@@ -52,12 +52,20 @@ func (chat *Chat) SearchAll(ctx context.Context, userID, query string, before *t
 	hits := []model.GlobalSearchHit{}
 	for rows.Next() {
 		var hit model.GlobalSearchHit
-		var attachment, reply []byte
+		var attachment, reply, blocks []byte
 		var conversationName, conversationKind string
 		var memberCount int
 		message := model.Message{}
-		if err = rows.Scan(&message.ID, &message.ConversationID, &message.SenderID, &message.ClientMsgID, &message.Seq, &message.Content, &message.Kind, &message.CreatedAt, &message.MediaID, &message.Mentions, &message.RecalledAt, &message.ReplyToID, &message.ThreadRootID, &attachment, &reply, &conversationName, &conversationKind, &memberCount); err != nil {
+		if err = rows.Scan(&message.ID, &message.ConversationID, &message.SenderID, &message.ClientMsgID, &message.Seq, &message.Content, &message.Kind, &message.CreatedAt, &message.MediaID, &message.Mentions, &message.RecalledAt, &message.ReplyToID, &message.ThreadRootID, &blocks, &attachment, &reply, &conversationName, &conversationKind, &memberCount); err != nil {
 			return page, err
+		}
+		if len(blocks) > 0 {
+			if err = decodeJSON(blocks, &message.Blocks); err != nil {
+				return page, err
+			}
+			if len(message.Blocks) == 0 {
+				message.Blocks = nil
+			}
 		}
 		if len(attachment) > 0 {
 			if err = decodeJSON(attachment, &message.Media); err != nil {
