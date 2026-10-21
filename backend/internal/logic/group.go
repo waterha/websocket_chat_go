@@ -3,7 +3,6 @@ package logic
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"websocket_chat_go/backend/internal/model"
@@ -204,30 +203,5 @@ func (chat *Chat) TransferOwnership(ctx context.Context, userID, conversationID,
 	return tx.Commit(ctx)
 }
 
-// SetAnnouncement lets owners and admins publish the group announcement that
-// every member sees at the top of the conversation.
-func (chat *Chat) SetAnnouncement(ctx context.Context, userID, conversationID, announcement string) (string, error) {
-	announcement = strings.TrimSpace(announcement)
-	if len([]rune(announcement)) > 2000 {
-		return "", model.Fail(400, "invalid_announcement")
-	}
-	tx, err := chat.Store.DB.Begin(ctx)
-	if err != nil {
-		return "", err
-	}
-	defer tx.Rollback(ctx)
-	callerRole, err := chat.roleOf(ctx, tx, userID, conversationID)
-	if err != nil {
-		return "", err
-	}
-	if callerRole != model.RoleOwner && callerRole != model.RoleAdmin {
-		return "", model.Fail(403, "forbidden")
-	}
-	if _, err = tx.Exec(ctx, "UPDATE conversations SET announcement=$1 WHERE id=$2", announcement, conversationID); err != nil {
-		return "", err
-	}
-	if err = chat.notifyConversation(ctx, tx, conversationID); err != nil {
-		return "", err
-	}
-	return announcement, tx.Commit(ctx)
-}
+// SetAnnouncement is gone: announcements are now individual rows managed by
+// Announcements/CreateAnnouncement/UpdateAnnouncement/DeleteAnnouncement.

@@ -67,15 +67,46 @@ func (server *Server) setPreferences(writer http.ResponseWriter, request *http.R
 	respond(writer, 200, preferences)
 }
 
-func (server *Server) setAnnouncement(writer http.ResponseWriter, request *http.Request, caller identity) {
-	var input model.AnnouncementInput
-	if !decode(writer, request, &input) {
-		return
-	}
-	announcement, err := server.Services.Chat.SetAnnouncement(request.Context(), caller.account.ID, request.PathValue("id"), input.Announcement)
+// announcements lists every notice of a group. Any member may read them.
+func (server *Server) announcements(writer http.ResponseWriter, request *http.Request, caller identity) {
+	items, err := server.Services.Chat.Announcements(request.Context(), caller.account.ID, request.PathValue("id"))
 	if err != nil {
 		fail(writer, err)
 		return
 	}
-	respond(writer, 200, map[string]string{"announcement": announcement})
+	respond(writer, 200, items)
+}
+
+func (server *Server) createAnnouncement(writer http.ResponseWriter, request *http.Request, caller identity) {
+	var input model.AnnouncementInput
+	if !decode(writer, request, &input) {
+		return
+	}
+	item, err := server.Services.Chat.CreateAnnouncement(request.Context(), caller.account.ID, request.PathValue("id"), input.Content)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 201, item)
+}
+
+func (server *Server) updateAnnouncement(writer http.ResponseWriter, request *http.Request, caller identity) {
+	var input model.AnnouncementInput
+	if !decode(writer, request, &input) {
+		return
+	}
+	item, err := server.Services.Chat.UpdateAnnouncement(request.Context(), caller.account.ID, request.PathValue("id"), request.PathValue("announcement_id"), input.Content)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, item)
+}
+
+func (server *Server) deleteAnnouncement(writer http.ResponseWriter, request *http.Request, caller identity) {
+	if err := server.Services.Chat.DeleteAnnouncement(request.Context(), caller.account.ID, request.PathValue("id"), request.PathValue("announcement_id")); err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, map[string]string{"id": request.PathValue("announcement_id")})
 }

@@ -20,7 +20,3 @@ type SetRoleInput struct {
 type TransferInput struct {
 	UserID string `json:"user_id"`
 }
-
-type AnnouncementInput struct {
-	Announcement string `json:"announcement"`
-}

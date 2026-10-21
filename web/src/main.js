@@ -44,8 +44,6 @@ createApp({
     const preferenceBusy = ref(false)
     const memberQuery = ref('')
     const memberBusy = ref(false)
-    const announcementDraft = ref('')
-    const announcementEditing = ref(false)
     const groupBusy = ref(false)
     const draftArea = ref(null)
     const mentionQuery = ref(null)
@@ -188,24 +186,99 @@ createApp({
     const memberCanBeRemoved = member => canRemoveMember(current.value, me.value?.id, member.id)
     const memberCanChangeRole = member => isGroupOwner.value && member.id !== me.value?.id && member.role !== 'owner'
     const canTransferTo = member => canTransferOwnership(current.value, me.value?.id) && member.id !== me.value?.id
-    const hasAnnouncement = computed(() => Boolean(current.value?.kind === 'group' && current.value?.announcement))
-    function startAnnouncementEdit() {
-      announcementDraft.value = current.value?.announcement || ''
-      announcementEditing.value = true
-    }
-    async function saveAnnouncement() {
-      if (groupBusy.value || !current.value) return
+    // The right-hand panel holds two independent blocks: the announcement block
+    // on top and the member list below. Both are always visible for a group, so
+    // they no longer live in modal dialogs.
+    const groupAnnouncements = ref([])
+    const announcementsBusy = ref(false)
+    const announcementsError = ref('')
+    const announcementPanelOpen = ref(false)
+    const announcementEditorOpen = ref(false)
+    const announcementEditingID = ref('')
+    const announcementDraftText = ref('')
+    const announcementSaving = ref(false)
+    const announcementCount = computed(() => groupAnnouncements.value.length)
+    // The panel block shows the newest notice as a teaser; opening it reveals all.
+    const latestAnnouncement = computed(() => groupAnnouncements.value[0] || null)
+    const canManageAnnouncements = computed(() => canEditGroupAnnouncement.value)
+    async function loadAnnouncements() {
       const id = active.value
       const version = epoch
-      groupBusy.value = true
+      if (!id || current.value?.kind !== 'group') {
+        groupAnnouncements.value = []
+        return
+      }
+      announcementsBusy.value = true
+      announcementsError.value = ''
       try {
-        const result = await api(`/conversations/${id}/announcement`, { method: 'PATCH', body: JSON.stringify({ announcement: announcementDraft.value }) })
+        const items = await api(`/conversations/${id}/announcements`)
         if (version !== epoch) return
-        const conversation = conversations.value.find(item => item.id === id)
-        if (conversation) conversation.announcement = result.announcement
-        announcementEditing.value = false
+        groupAnnouncements.value = items || []
+      } catch (cause) {
+        if (version === epoch) announcementsError.value = cause.message || '加载群公告失败'
+      } finally { if (version === epoch) announcementsBusy.value = false }
+    }
+    function openAnnouncementPanel() {
+      announcementPanelOpen.value = true
+      announcementEditorOpen.value = false
+      loadAnnouncements().catch(showError)
+    }
+    function closeAnnouncementPanel() {
+      announcementPanelOpen.value = false
+      announcementEditorOpen.value = false
+      announcementEditingID.value = ''
+      announcementDraftText.value = ''
+    }
+    function startCreateAnnouncement() {
+      if (!canManageAnnouncements.value) return
+      announcementEditingID.value = ''
+      announcementDraftText.value = ''
+      announcementEditorOpen.value = true
+    }
+    function startEditAnnouncement(item) {
+      if (!canManageAnnouncements.value || !item) return
+      announcementEditingID.value = item.id
+      announcementDraftText.value = item.content
+      announcementEditorOpen.value = true
+    }
+    function cancelAnnouncementEditor() {
+      announcementEditorOpen.value = false
+      announcementEditingID.value = ''
+      announcementDraftText.value = ''
+    }
+    async function saveAnnouncementText() {
+      const text = announcementDraftText.value.trim()
+      const id = active.value
+      if (!text || !id || announcementSaving.value) return
+      const version = epoch
+      const editing = announcementEditingID.value
+      announcementSaving.value = true
+      try {
+        if (editing) {
+          await api(`/conversations/${id}/announcements/${editing}`, { method: 'PATCH', body: JSON.stringify({ content: text }) })
+        } else {
+          await api(`/conversations/${id}/announcements`, { method: 'POST', body: JSON.stringify({ content: text }) })
+        }
+        if (version !== epoch) return
+        cancelAnnouncementEditor()
+        await loadAnnouncements()
+        await refresh()
       } catch (cause) { if (version === epoch) showError(cause) }
-      finally { if (version === epoch) groupBusy.value = false }
+      finally { if (version === epoch) announcementSaving.value = false }
+    }
+    async function deleteAnnouncement(item) {
+      if (!canManageAnnouncements.value || !item || announcementSaving.value) return
+      if (!confirm('删除后群成员将看不到这条公告，确认删除？')) return
+      const id = active.value
+      const version = epoch
+      announcementSaving.value = true
+      try {
+        await api(`/conversations/${id}/announcements/${item.id}`, { method: 'DELETE' })
+        if (version !== epoch) return
+        await loadAnnouncements()
+        await refresh()
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { if (version === epoch) announcementSaving.value = false }
     }
     async function removeMember(member) {
       if (memberBusy.value) return
@@ -793,6 +866,9 @@ createApp({
       showMessages(id)
       try {
         await syncConversation(id)
+        // The right-hand panel shows the group's announcements, so they are
+        // loaded when a conversation is opened rather than on every refresh.
+        await loadAnnouncements()
         if (active.value === id && chatVisible.value) await scroll()
       } catch (cause) { showError(cause) }
     }
@@ -1050,7 +1126,7 @@ createApp({
       window.addEventListener('focus', onVisible)
     })
     onUnmounted(() => { resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, announcementDraft, announcementEditing, startAnnouncementEdit, saveAnnouncement, hasAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, draftArea, startReply, replyPreview, replyAuthor, bodyOf, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
+    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, draftArea, startReply, replyPreview, replyAuthor, bodyOf, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
   },
   template,
 }).mount('#app')

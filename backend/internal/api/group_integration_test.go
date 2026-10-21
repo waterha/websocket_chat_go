@@ -73,14 +73,15 @@ func TestGroupRolesAndAnnouncement(t *testing.T) {
 	httpCall(t, server, bobToken, "DELETE", "/api/v1/conversations/"+group+"/members", map[string]string{"user_id": carol.ID}, 200)
 	httpCall(t, server, bobToken, "DELETE", "/api/v1/conversations/"+group+"/members", map[string]string{"user_id": alice.ID}, 403)
 
-	// Announcement editing requires owner or admin.
-	httpCall(t, server, carolToken, "PATCH", "/api/v1/conversations/"+group+"/announcement", map[string]string{"announcement": "nope"}, 404)
-	announcement := httpCall(t, server, bobToken, "PATCH", "/api/v1/conversations/"+group+"/announcement", map[string]string{"announcement": "周五全员同步"}, 200)
-	var result map[string]string
-	if err := json.Unmarshal(announcement, &result); err != nil || result["announcement"] != "周五全员同步" {
-		t.Fatalf("unexpected announcement result: %v %v", result, err)
+	// Announcements require owner or admin; a plain member is refused. carol was
+	// removed above, so she now gets 404, while the owner publishes successfully.
+	httpCall(t, server, carolToken, "POST", "/api/v1/conversations/"+group+"/announcements", map[string]string{"content": "nope"}, 404)
+	created := httpCall(t, server, bobToken, "POST", "/api/v1/conversations/"+group+"/announcements", map[string]string{"content": "周五全员同步"}, 201)
+	var announcement model.Announcement
+	if err := json.Unmarshal(created, &announcement); err != nil || announcement.Content != "周五全员同步" {
+		t.Fatalf("unexpected announcement result: %v %v", announcement, err)
 	}
-	httpCall(t, server, bobToken, "PATCH", "/api/v1/conversations/"+group+"/announcement", map[string]string{"announcement": string(make([]rune, 2001))}, 400)
+	httpCall(t, server, bobToken, "POST", "/api/v1/conversations/"+group+"/announcements", map[string]string{"content": string(make([]rune, 2001))}, 400)
 
 	// Every change is recorded as a system message that members can roam.
 	synced := httpCall(t, server, aliceToken, "GET", "/api/v1/conversations/"+group+"/sync?after_seq=0&limit=100", nil, 200)
@@ -184,5 +185,5 @@ func TestDirectConversationsHaveNoGovernance(t *testing.T) {
 	}
 	httpCall(t, server, aliceToken, "POST", "/api/v1/conversations/"+direct+"/members/leave", nil, 400)
 	httpCall(t, server, aliceToken, "POST", "/api/v1/conversations/"+direct+"/owner", map[string]string{"user_id": bob.ID}, 400)
-	httpCall(t, server, aliceToken, "PATCH", "/api/v1/conversations/"+direct+"/announcement", map[string]string{"announcement": "hi"}, 400)
+	httpCall(t, server, aliceToken, "POST", "/api/v1/conversations/"+direct+"/announcements", map[string]string{"content": "hi"}, 400)
 }

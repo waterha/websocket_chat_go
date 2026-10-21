@@ -15,14 +15,16 @@ type Member struct {
 }
 
 type Conversation struct {
-	ID           string   `json:"id"`
-	Name         string   `json:"name"`
-	Kind         string   `json:"kind"`
-	Announcement string   `json:"announcement"`
-	OwnerID      string   `json:"owner_id,omitempty"`
-	Members      []Member `json:"members"`
-	LastSeq      int64    `json:"last_seq"`
-	LastReadSeq  int64    `json:"last_read_seq"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Kind    string `json:"kind"`
+	OwnerID string `json:"owner_id,omitempty"`
+	// AnnouncementCount lets the panel show how many notices exist without
+	// fetching them for every conversation in the sidebar.
+	AnnouncementCount int      `json:"announcement_count"`
+	Members           []Member `json:"members"`
+	LastSeq           int64    `json:"last_seq"`
+	LastReadSeq       int64    `json:"last_read_seq"`
 	// These reflect only the caller's own preferences.
 	Pinned bool `json:"pinned"`
 	Muted  bool `json:"muted"`
