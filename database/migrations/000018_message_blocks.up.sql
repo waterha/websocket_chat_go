@@ -20,3 +20,14 @@ ALTER TABLE messages ADD COLUMN blocks jsonb;
 ALTER TABLE messages ADD CONSTRAINT messages_blocks_shape CHECK (
     blocks IS NULL OR (jsonb_typeof(blocks) = 'array' AND jsonb_array_length(blocks) <= 20)
 );
+
+-- The old content rule required a non-empty body for a 'user' message unless it
+-- carried a single attachment. A message made of image blocks alone has no text at
+-- all, so the rule gains a third branch: a non-empty blocks array is a body on its
+-- own, and content stays bounded so search and excerpts remain safe.
+ALTER TABLE messages DROP CONSTRAINT messages_content_check;
+ALTER TABLE messages ADD CONSTRAINT messages_content_check CHECK (
+    (kind IN ('user', 'system') AND char_length(content) BETWEEN 1 AND 4000) OR
+    (kind IN ('image', 'video', 'file') AND media_id IS NOT NULL AND char_length(content) <= 4000) OR
+    (blocks IS NOT NULL AND jsonb_array_length(blocks) > 0 AND char_length(content) <= 4000)
+);
