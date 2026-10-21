@@ -34,7 +34,10 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | POST | `/conversations/{id}/members/leave` | 当前用户退出群聊；群主需先转让群主，否则返回 403 `owner_must_transfer` |
 | POST | `/conversations/{id}/roles` | 设置成员角色：`{"user_id":"用户ID","role":"admin"}` 或 `"member"`；仅群主可调用，群主身份不能通过该接口授予 |
 | POST | `/conversations/{id}/owner` | 转让群主：`{"user_id":"用户ID"}`；仅现任群主可调用，原群主变为管理员 |
-| PATCH | `/conversations/{id}/announcement` | 群公告：`{"announcement":"最多 2000 字，可清空"}`；群主与管理员可调用，空字符串表示清除 |
+| GET | `/conversations/{id}/announcements` | 群公告列表，任意群成员可读，按发布时间倒序 |
+| POST | `/conversations/{id}/announcements` | 新建群公告：`{"content":"最多 2000 字"}`；仅群主与管理员 |
+| PATCH | `/conversations/{id}/announcements/{announcement_id}` | 编辑群公告：`{"content":"..."}`；仅群主与管理员，作者不变 |
+| DELETE | `/conversations/{id}/announcements/{announcement_id}` | 删除群公告；仅群主与管理员 |
 | PATCH | `/conversations/{id}/preferences` | 个人会话偏好：`{"pinned":true,"muted":false}`，字段可省略表示不改，仅影响本人 |
 | POST | `/conversations/{id}/messages` | `{"client_msg_id":"客户端稳定ID","content":"你好"}`；新消息 201，幂等重复 200。可带 `media_id`（附件）、`reply_to_id`（引用同会话消息）、`mentions`（提及成员 ID 数组） |
 | GET | `/conversations/{id}/messages/{message_id}/thread?limit=100&after_seq=0` | 回复对话窗口：返回根消息与该消息的全部回复（升序分页），见下文 |
@@ -116,7 +119,7 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | 转让群主 | 仅现任群主 | 目标必须是本群成员，否则 404；转让后原群主变为管理员 |
 | 编辑群公告 | 群主、管理员 | 超过 2000 字返回 400 `invalid_announcement` |
 
-移除成员、退群、角色变更与群主转让都会写入一条 `kind='system'` 的系统提示并复用会话序号，因此和其他消息一样可以被离线成员补拉漫游。**移除成员不删除其历史消息**：`messages` 不再要求发送者当前仍是成员（发送时由应用层校验成员资格），所以群内历史仍然完整、可搜索。群公告、角色与群主写在 `conversations.announcement`、`conversations.created_by` 与 `conversation_members.role`。
+移除成员、退群、角色变更与群主转让都会写入一条 `kind='system'` 的系统提示并复用会话序号，因此和其他消息一样可以被离线成员补拉漫游。**移除成员不删除其历史消息**：`messages` 不再要求发送者当前仍是成员（发送时由应用层校验成员资格），所以群内历史仍然完整、可搜索。群公告是独立记录的集合（`announcements` 表）：群主与管理员可新建、编辑、删除每一条，普通成员只读全部列表；正文 1–2000 字符、每群最多 100 条，`PATCH` 保留原作者并把 `edited` 置真，跨会话或未知 id 返回 404。角色与群主写在 `conversation_members.role` 与 `conversations.created_by`。
 
 `GET /conversations` 的成员对象带 `role` 字段并按「群主、管理员、其他成员」排序，会话对象带 `announcement` 与 `owner_id`。群元数据变化时向全群推送 `conversation.updated`，客户端据此刷新成员列表与公告。当前没有：自定义权限、禁言、成员邀请审批、群分组与审计日志。管理员不能移除其他管理员是刻意设计，避免管理员互相驱逐；如需该能力应由群主调整角色后操作。
 
