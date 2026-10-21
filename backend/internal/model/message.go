@@ -48,6 +48,26 @@ type ThreadPage struct {
 	ReplyCount int       `json:"reply_count"`
 }
 
+// Block is one ordered segment of a message. A message can interleave text and
+// images so the bubble matches the order the sender typed.
+//
+// Blocks are stored on the message so a reader needs no extra request. The media
+// metadata is denormalised into the block because an uploaded attachment's name,
+// type and size never change after the upload.
+type Block struct {
+	// Type is "text" or "image".
+	Type string `json:"type"`
+	// Text holds the segment for a text block.
+	Text string `json:"text,omitempty"`
+	// MediaID references an attachment for an image block. The server fills the
+	// remaining media fields itself; a client-supplied value for them is ignored.
+	MediaID     string `json:"media_id,omitempty"`
+	FileName    string `json:"file_name,omitempty"`
+	MediaType   string `json:"media_type,omitempty"`
+	ContentType string `json:"content_type,omitempty"`
+	ByteSize    int64  `json:"byte_size,omitempty"`
+}
+
 type Message struct {
 	ID             string    `json:"id"`
 	ConversationID string    `json:"conversation_id"`
@@ -61,6 +81,10 @@ type Message struct {
 	Media          *Media    `json:"media,omitempty"`
 	// ReplyToID is the quoted message, if any.
 	ReplyToID string `json:"reply_to_id,omitempty"`
+	// Blocks holds the message as an ordered list of text and image segments. It is
+	// empty for messages sent before blocks existed and for a plain text or single
+	// attachment message, which clients render from content and media instead.
+	Blocks []Block `json:"blocks,omitempty"`
 	// Reply carries the quoted excerpt so a client can render it without a
 	// second request.
 	Reply *ReplyRef `json:"reply,omitempty"`
@@ -108,6 +132,10 @@ type SendInput struct {
 	MediaID string `json:"media_id"`
 	// ReplyToID quotes an earlier message in the same conversation.
 	ReplyToID string `json:"reply_to_id"`
+	// Blocks carries a message whose images are interleaved with its text. When it
+	// is set the plain content is derived from it, so a client sending blocks does
+	// not also need to send content.
+	Blocks []Block `json:"blocks"`
 	// ThreadRootID names the window a reply belongs to. A client may set it when
 	// replying inside a window; the server derives it when omitted, so a reply
 	// to a reply always joins the original window.
