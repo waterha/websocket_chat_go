@@ -56,19 +56,33 @@ if (Test-TcpPort $BackendPort) {
         throw "端口 $BackendPort 已被其他程序占用（PID $ListenerPid）。请关闭它，或修改 .env 中的 HTTP_ADDR 后重试。"
     }
 } else {
-    Write-Note '编译后端'
-    Push-Location (Join-Path $Root 'backend')
-    try {
-        & go build -o $BackendExe ./cmd/server
-        if ($LASTEXITCODE -ne 0) { throw '后端编译失败，请查看上方错误。' }
-    } finally {
-        Pop-Location
+    if ($SkipBuild -and (Test-Path $BackendExe)) {
+        Write-Step '跳过编译，使用已有的后端程序'
+    } else {
+        Write-Note '编译后端'
+        Push-Location (Join-Path $Root 'backend')
+        try {
+            & go build -o $BackendExe ./cmd/server
+            if ($LASTEXITCODE -ne 0) { throw '后端编译失败，请查看上方错误。' }
+        } finally {
+            Pop-Location
+        }
     }
     Remove-Item $BackendOut, $BackendErr -Force -ErrorAction SilentlyContinue
-    $BackendCommand = "Set-Location -LiteralPath '$Root\backend'; `$Host.UI.RawUI.WindowTitle = 'IM 后端'; & '$BackendExe' 2>&1 | Tee-Object -FilePath '$BackendOut'"
-    Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile', '-Command', $BackendCommand -WindowStyle Minimized | Out-Null
+    # Run through a generated .cmd file: plain redirection keeps the log clean
+    # (piping PowerShell's 2>&1 would wrap each line in error-record noise).
+    $RunBackend = Join-Path $Dev 'run-backend.cmd'
+    $RunLines = @(
+        '@echo off',
+        'chcp 65001 >nul',
+        'title IM 后端',
+        "cd /d `"$Root\backend`"",
+        "`"$BackendExe`" >> `"$BackendOut`" 2>> `"$BackendErr`""
+    )
+    [IO.File]::WriteAllLines($RunBackend, $RunLines, (New-Object System.Text.UTF8Encoding($false)))
+    Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', "`"$RunBackend`"" -WindowStyle Minimized | Out-Null
     if (-not (Wait-HttpOk "http://127.0.0.1:$BackendPort/healthz" 90)) {
-        $Tail = Get-Content $BackendOut -Tail 20 -ErrorAction SilentlyContinue
+        $Tail = Get-Content $BackendErr, $BackendOut -Tail 20 -ErrorAction SilentlyContinue
         throw ("后端启动失败，日志见 .dev\logs\backend.out.log`n" + ($Tail -join "`n"))
     }
     Write-Ok "后端已启动（端口 $BackendPort）"
@@ -86,8 +100,16 @@ if (Test-TcpPort $FrontendPort) {
     }
 } else {
     Write-Note '启动前端开发服务器'
-    $FrontendCommand = "Set-Location -LiteralPath '$Root\web'; `$Host.UI.RawUI.WindowTitle = 'IM 前端'; npm run dev 2>&1 | Tee-Object -FilePath '$Logs\frontend.log'"
-    Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile', '-Command', $FrontendCommand -WindowStyle Minimized | Out-Null
+    $RunFrontend = Join-Path $Dev 'run-frontend.cmd'
+    $RunLines = @(
+        '@echo off',
+        'chcp 65001 >nul',
+        'title IM 前端',
+        "cd /d `"$Root\web`"",
+        "npm run dev >> `"$Logs\frontend.log`" 2>&1"
+    )
+    [IO.File]::WriteAllLines($RunFrontend, $RunLines, (New-Object System.Text.UTF8Encoding($false)))
+    Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', "`"$RunFrontend`"" -WindowStyle Minimized | Out-Null
     if (-not (Wait-HttpOk $WebUrl 90)) {
         $Tail = Get-Content (Join-Path $Logs 'frontend.log') -Tail 20 -ErrorAction SilentlyContinue
         throw ("前端启动失败，日志见 .dev\logs\frontend.log`n" + ($Tail -join "`n"))
