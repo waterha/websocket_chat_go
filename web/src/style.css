@@ -132,6 +132,7 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .attachment-info { display: flex; flex-direction: column; min-width: 0; }
 .attachment-info strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-info small { color: var(--muted); font-size: 11px; }
+.attachment-hint { display: block; margin-top: 2px; color: var(--accent-dark); font-style: normal; font-size: 11px; font-weight: 600; }
 .attachment-status { padding: 8px 10px; border: 1px dashed var(--line); border-radius: 14px; color: var(--muted); font-size: 12px; }
 .announcement { display: flex; align-items: flex-start; gap: 10px; margin: 0 auto; width: min(760px, calc(100% - 48px)); padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; background: #fffaf2; }
 .announcement strong { flex: none; color: var(--accent-dark); font-size: 12px; }
