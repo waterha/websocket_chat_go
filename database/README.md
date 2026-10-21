@@ -10,6 +10,7 @@
 - `conversation_members.pinned_at` / `muted`：每个成员私有的会话偏好（置顶时间、免打扰）。索引 `conversation_members_prefs_idx` 服务置顶优先的列表排序。`archived_at` 曾由 `000013` 加入，`000014` 已移除：归档不改变消息可见性，只是把会话移出列表，属于多余的第二生命周期。
 - `message_media.bytes_removed_at`：附件字节已被保留清理删除的时间。行保留以便消息仍能解析到「曾有什么被撤回」，但文件不再存在。`message_media_removable_idx` 与 `message_outbox_published_age_idx` 服务清理扫描。清理**只**处理已发布且过期的 outbox 行与「被撤回消息引用」的附件；未发布行与正常引用的附件永不删除。
 - `messages.thread_root_id`：该消息所属话题串窗口的根消息。回复的根由服务端推导（引用消息的根，或引用消息本身），因此话题串保持**扁平**：对回复的回复也落在同一窗口。`messages_thread_idx` 与 `messages_thread_root_lookup_idx` 分别服务窗口分页与「这条消息有几条回复」的摘要查询。`reply_to_id` 仍记录直接引用对象，两者含义不同。
+- `messages.blocks`：图文混排的顺序段（`text` 与 `image`），迁移 `000018` 增加。`messages.content` 仍是所有 `text` 段用换行拼接的纯文本，所以搜索、引用摘要与通知无需理解 `blocks`；`messages.media_id` 保留给旧消息与单附件消息。约束 `messages_blocks_shape` 要求它是数组且不超过 20 段；`messages_content_check` 增加了「非空 `blocks` 也算有正文」的分支，使纯图片消息可以没有文字。
 - `announcements`：每条群公告一行（作者、正文、创建与更新时间），取代原 `conversations.announcement` 单列；迁移 `000017` 会把既有公告搬入该表，作者记为用户当时可推知的群主（`created_by`）。`announcements_conversation_idx` 服务按会话倒序列出。群主与管理员可增删改，普通成员只读。
 - `conversations.created_by`：群主（转让时同步更新）。
 - `conversation_members.role`：`owner`/`admin`/`member`；部分唯一索引 `conversation_members_owner_idx` 保证每个会话最多一个群主。私聊成员固定为 `member`。
