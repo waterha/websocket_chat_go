@@ -147,10 +147,18 @@ type rootedMessage struct {
 // scanMessageWithRoot reads messageColumnsFor plus the trailing thread_root_id.
 func scanMessageWithRoot(row pgx.Row) (rootedMessage, error) {
 	var rooted rootedMessage
-	var attachment, reply []byte
-	err := row.Scan(&rooted.message.ID, &rooted.message.ConversationID, &rooted.message.SenderID, &rooted.message.ClientMsgID, &rooted.message.Seq, &rooted.message.Content, &rooted.message.Kind, &rooted.message.CreatedAt, &rooted.message.MediaID, &rooted.message.Mentions, &rooted.message.RecalledAt, &rooted.message.ReplyToID, &rooted.message.ThreadRootID, &attachment, &reply, &rooted.threadRoot)
+	var attachment, reply, blocks []byte
+	err := row.Scan(&rooted.message.ID, &rooted.message.ConversationID, &rooted.message.SenderID, &rooted.message.ClientMsgID, &rooted.message.Seq, &rooted.message.Content, &rooted.message.Kind, &rooted.message.CreatedAt, &rooted.message.MediaID, &rooted.message.Mentions, &rooted.message.RecalledAt, &rooted.message.ReplyToID, &rooted.message.ThreadRootID, &blocks, &attachment, &reply, &rooted.threadRoot)
 	if err != nil {
 		return rooted, err
+	}
+	if len(blocks) > 0 {
+		if err := decodeJSON(blocks, &rooted.message.Blocks); err != nil {
+			return rooted, err
+		}
+		if len(rooted.message.Blocks) == 0 {
+			rooted.message.Blocks = nil
+		}
 	}
 	if len(attachment) > 0 {
 		if err := decodeJSON(attachment, &rooted.message.Media); err != nil {
