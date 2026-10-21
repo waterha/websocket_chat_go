@@ -33,22 +33,29 @@ Go + PostgreSQL + Redis + Vue 的开源即时通讯项目。当前版本聚焦**
 
 ## 本地运行
 
-需要 Go 1.26、Node.js 22+、PostgreSQL 17 和 Redis 7。可以使用 Docker Compose 启动依赖：
+需要 Go 1.26 和 Node.js 22+。数据库和缓存由启动脚本在项目内的 `.dev/` 目录中准备，不需要提前安装 PostgreSQL 或 Redis。
 
-Windows 本机也可以使用一键启动脚本（默认识别当前项目使用的便携版 PostgreSQL 和 Redis）：
+**双击根目录的 `启动项目.bat`** 即可：
 
-```powershell
-Set-Location C:\Sofware\Go_proj\websocket_chat_go
-.\scripts\start.ps1
-```
+- 首次运行会初始化独立的 PostgreSQL 数据目录、下载便携版 Redis、安装前端依赖（不会触碰机器上已有的数据库）；
+- 随后启动 PostgreSQL、Redis、后端和前端，健康检查通过后自动打开 `http://127.0.0.1:4173`；
+- 已在运行的服务自动跳过，不会重复启动。
 
-脚本会自动跳过已经运行的服务，并在新窗口启动后端和前端。若 PowerShell 禁止执行脚本，可使用：
+停止时双击 `停止项目.bat`，会关闭本项目的前端、后端、数据库和缓存。数据、日志和编译产物都在 `.dev/`（已被 git 忽略），删除该目录即可重置本地环境。
+
+命令行等价用法：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\start.ps1
+# 只启动、不打开浏览器
+powershell -ExecutionPolicy Bypass -File .\scripts\start.ps1 -NoBrowser
+# 停止
+powershell -ExecutionPolicy Bypass -File .\scripts\stop.ps1
 ```
 
-如 PostgreSQL 或 Redis 安装在其他位置，可在启动前设置 `IM_POSTGRES_BIN`、`IM_POSTGRES_DATA`、`IM_REDIS_DIR`。附件默认保存在项目下的 `media/`，可用 `MEDIA_DIR` 指向其他目录。
+端口读取 `.env`：前端 4173、后端 8080、PostgreSQL 5433、Redis 6379。若要使用已有的 PostgreSQL，设置 `IM_POSTGRES_BIN` 指向其 `bin` 目录；若要使用已有 Redis，设置 `IM_REDIS_DIR`。附件默认保存在项目下的 `media/`，可用 `MEDIA_DIR` 指向其他目录。
+
+也可以手动启动依赖：
 
 ```powershell
 Copy-Item .env.example .env
