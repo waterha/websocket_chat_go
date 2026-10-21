@@ -11,7 +11,7 @@ import { activeMentionToken, applyMention, canRecall, mentionCandidates, message
 import { hasThread, hiddenReplyCount, replyTargetForWindow, threadHasMore, threadLabel, threadPreview, threadRootID } from './thread.js'
 import { availableInitials, filterCandidates, groupByInitial, keepSelectable, OTHER_INITIAL, selectAllCandidates, selectionSummary, toggleSelection } from './invite.js'
 import { formatBytes, mediaPreview, mediaURL, validateMediaFile } from './media.js'
-import { collectImages, hasTransferableFiles, prepareImage, shouldSendRightAway } from './image-input.js'
+import { collectImages, hasTransferableFiles, prepareImage } from './image-input.js'
 import { api, uploadMedia } from './api.js'
 import { template } from './template.js'
 import './style.css'
@@ -615,39 +615,36 @@ createApp({
         return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
       } catch { return null }
     }
-    // Uploads images arriving from the clipboard or a drop. A single image into an
-    // empty composer is posted at once, which is the "paste and it is sent"
-    // behaviour; with text in the box the image is attached so the text becomes its
-    // caption. Several images are always sent, one message each.
+    // Uploads images arriving from the clipboard or a drop and leaves them in the
+    // composer as a pending attachment. Nothing is sent here: the image and whatever
+    // text is typed share one message, which is the point of attaching rather than
+    // posting straight away.
+    //
+    // A message carries at most one attachment, so only the first image of a
+    // multi-image paste is kept; the rest are named in the notice instead of being
+    // dropped silently.
     async function acceptImages(files) {
       const id = active.value
       if (!id || !files.length) return
       if (pendingSend.value?.conversation_id === id) { showError({ message: '上一条发送结果未确认，请先恢复或放弃' }); return }
       const version = epoch
-      const autoSend = shouldSendRightAway(draft.value) || files.length > 1
       uploadBusy.value = true
       try {
-        for (const candidate of files) {
-          const prepared = await prepareImage(candidate, convertImageToPNG)
-          const check = validateMediaFile(prepared)
-          if (!check.ok) { showError({ message: check.error }); continue }
-          const uploaded = await uploadMedia(id, prepared)
-          if (version !== epoch || active.value !== id) return
-          releaseAttachment()
-          attachment.value = uploaded
-          previewFile.value = URL.createObjectURL(prepared)
-          if (autoSend) {
-            // send() refuses while an upload is marked busy, so the flag is lowered
-            // around it and raised again for the next image.
-            uploadBusy.value = false
-            await send()
-            uploadBusy.value = true
-          }
+        const prepared = await prepareImage(files[0], convertImageToPNG)
+        const check = validateMediaFile(prepared)
+        if (!check.ok) { showError({ message: check.error }); return }
+        const uploaded = await uploadMedia(id, prepared)
+        if (version !== epoch || active.value !== id) return
+        releaseAttachment()
+        attachment.value = uploaded
+        previewFile.value = URL.createObjectURL(prepared)
+        if (files.length > 1) {
+          showError({ message: `一条消息只能附带一张图片，已保留第 1 张，其余 ${files.length - 1} 张请分开发送` })
         }
       } catch (cause) { if (version === epoch) showError(cause) }
       finally { if (version === epoch) uploadBusy.value = false }
     }
-    // Pasting an image keeps it out of the text box and sends it as a photo.
+    // Pasting an image keeps it out of the text box and holds it for sending.
     function onComposerPaste(event) {
       const images = collectImages(event.clipboardData)
       if (!images.length) return
