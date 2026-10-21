@@ -108,3 +108,36 @@ export function blocksToText(blocks, images) {
 export function countImages(blocks) {
   return (blocks || []).filter(block => block.type === 'image').length
 }
+
+// messageSegments returns what a message should render, in order.
+//
+// A message sent with blocks renders those blocks. An older message, or one sent as
+// plain text or a single attachment, renders through its content and media so the
+// existing markup keeps working. A recalled message renders nothing.
+export function messageSegments(message) {
+  if (message?.recalled_at) return []
+  const blocks = message?.blocks
+  if (Array.isArray(blocks) && blocks.length) {
+    return blocks.map(block => block.type === 'image'
+      ? { type: 'image', mediaId: block.media_id, fileName: block.file_name || '', byteSize: block.byte_size || 0 }
+      : { type: 'text', text: block.text || '' })
+  }
+  // The single-attachment shape: the media, then any caption.
+  const segments = []
+  if (message?.media_id) {
+    segments.push({
+      type: message.kind === 'image' ? 'image' : message.kind === 'video' ? 'video' : 'file',
+      mediaId: message.media_id,
+      fileName: message.media?.file_name || '',
+      byteSize: message.media?.byte_size || 0,
+    })
+  }
+  if (message?.content) segments.push({ type: 'text', text: message.content })
+  return segments
+}
+
+// hasBlocks reports whether a message uses the ordered shape, so the template can
+// pick the block renderer instead of the legacy one.
+export function hasBlocks(message) {
+  return Array.isArray(message?.blocks) && message.blocks.length > 0 && !message?.recalled_at
+}
