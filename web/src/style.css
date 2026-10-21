@@ -227,6 +227,33 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .member-search input { min-width: 0; padding: 8px 0; border: 0; border-radius: 0; background: transparent; font-size: 13px; }
 .member-search input:focus { box-shadow: none; }
 .member-list { display: grid; gap: 6px; max-height: min(46vh, 420px); overflow-y: auto; overscroll-behavior: contain; }
+/* The invite picker: fixed height, a scrolling list in the middle and a footer
+   that stays visible, so the invite button never scrolls out of reach. */
+.invite-modal { display: flex; flex-direction: column; width: min(560px, calc(100vw - 32px)); max-height: min(86vh, 760px); overflow: hidden; }
+.invite-modal .modal-head, .invite-modal .subtle, .invite-toolbar, .invite-index { flex: none; }
+.invite-toolbar { display: flex; align-items: center; gap: 6px; margin: 12px 0 8px; }
+.invite-search { display: flex; align-items: center; gap: 7px; flex: 1; padding: 0 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--muted); }
+.invite-search input { padding: 9px 0; border: 0; background: none; font-size: 13px; }
+.invite-search input:focus { box-shadow: none; border: 0; }
+.invite-index { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.invite-index button { min-width: 26px; height: 26px; padding: 0 7px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: #fff; font-size: 12px; font-weight: 700; }
+.invite-index button:hover { border-color: var(--accent); color: var(--accent-dark); }
+.invite-index button.active { border-color: var(--accent); color: #fff; background: var(--accent); }
+.invite-index-all { margin-right: 4px; }
+.invite-list { flex: 1; min-height: 120px; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; }
+.invite-group-head { position: sticky; top: 0; z-index: 1; padding: 6px 4px 4px; color: var(--muted); background: var(--card); font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.invite-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid transparent; border-radius: 10px; cursor: pointer; }
+.invite-item:hover { background: #f1e6da; }
+.invite-item.selected { border-color: var(--accent); background: #fffaf5; }
+.invite-item input { margin: 0; accent-color: var(--accent); }
+.invite-item-text { display: flex; flex-direction: column; min-width: 0; }
+.invite-item-text strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invite-item-text small { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.invite-foot { flex: none; display: flex; flex-direction: column; gap: 10px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+.invite-foot-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; }
+.invite-foot-actions { display: flex; gap: 6px; }
+.invite-foot-actions .small-button { margin-left: 0; }
+.invite-foot-buttons { display: flex; justify-content: flex-end; gap: 10px; }
 .member-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; }
 .member-text { display: grid; flex: 1; min-width: 0; gap: 3px; }
 .member-text strong { display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
