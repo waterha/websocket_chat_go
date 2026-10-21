@@ -9,12 +9,88 @@ import (
 	"websocket_chat_go/backend/internal/model"
 )
 
+// MaxMessageBlocks bounds how many segments one message may interleave, matching
+// the database constraint so a client gets a clear error before the insert.
+const MaxMessageBlocks = 20
+
+// maxMessageRunes is the length limit for the text a message carries, whether it
+// arrives as content or as text blocks.
+const maxMessageRunes = 4000
+
+// normalizeBlocks trims the segments a client sent, drops empty ones and joins the
+// text into the plain content the rest of the system reads. Image metadata is left
+// for the send step to fill from the database, so a client cannot label an upload.
+func normalizeBlocks(blocks []model.Block) ([]model.Block, string, error) {
+	if len(blocks) > MaxMessageBlocks {
+		return nil, "", model.Fail(400, "invalid_message")
+	}
+	normalized := make([]model.Block, 0, len(blocks))
+	texts := make([]string, 0, len(blocks))
+	total := 0
+	for _, block := range blocks {
+		switch block.Type {
+		case "text":
+			text := strings.TrimSpace(block.Text)
+			if text == "" {
+				continue
+			}
+			total += len([]rune(text))
+			if total > maxMessageRunes {
+				return nil, "", model.Fail(400, "invalid_message")
+			}
+			texts = append(texts, text)
+			normalized = append(normalized, model.Block{Type: "text", Text: text})
+		case "image":
+			if block.MediaID == "" {
+				return nil, "", model.Fail(400, "invalid_message")
+			}
+			normalized = append(normalized, model.Block{Type: "image", MediaID: block.MediaID})
+		default:
+			// An unknown segment cannot be rendered, so it is refused rather than
+			// silently dropped.
+			return nil, "", model.Fail(400, "invalid_message")
+		}
+	}
+	if len(normalized) == 0 {
+		return nil, "", model.Fail(400, "invalid_message")
+	}
+	return normalized, strings.Join(texts, "\n"), nil
+}
+
+// blocksSignature is the idempotency key for a message body: it ignores the media
+// metadata the server fills in, so a retried send compares equal to the stored one.
+func blocksSignature(blocks []model.Block) string {
+	parts := make([]string, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Type == "text" {
+			parts = append(parts, "text:"+block.Text)
+			continue
+		}
+		parts = append(parts, "image:"+block.MediaID)
+	}
+	return strings.Join(parts, "\n")
+}
+
 func ValidateSend(input model.SendInput) (model.SendInput, error) {
-	input.Content = strings.TrimSpace(input.Content)
-	validContent := len([]rune(input.Content)) >= 1 && len([]rune(input.Content)) <= 4000
+	// A message built from blocks carries its text inside them, so content is derived
+	// rather than required from the caller.
+	if len(input.Blocks) > 0 {
+		blocks, content, err := normalizeBlocks(input.Blocks)
+		if err != nil {
+			return input, err
+		}
+		input.Blocks = blocks
+		input.Content = content
+		// The single-attachment field belongs to the older shape; keeping it empty
+		// stops a rich message from rendering twice.
+		input.MediaID = ""
+	} else {
+		input.Content = strings.TrimSpace(input.Content)
+	}
+	validContent := len([]rune(input.Content)) >= 1 && len([]rune(input.Content)) <= maxMessageRunes
 	// A media message may carry an optional caption but must reference an
 	// upload, so an empty caption is only acceptable together with media_id.
-	if input.ConversationID == "" || len(input.ClientMsgID) < 8 || len(input.ClientMsgID) > 100 || (input.MediaID == "" && !validContent) || (input.MediaID != "" && len([]rune(input.Content)) > 4000) {
+	if input.ConversationID == "" || len(input.ClientMsgID) < 8 || len(input.ClientMsgID) > 100 || (input.MediaID == "" && len(input.Blocks) == 0 && !validContent) || (input.MediaID != "" && len([]rune(input.Content)) > maxMessageRunes) {
 		return input, model.Fail(400, "invalid_message")
 	}
 	if len(input.Mentions) > 100 {
@@ -58,7 +134,30 @@ func (chat *Chat) Send(ctx context.Context, userID string, input model.SendInput
 		return model.Message{}, false, model.Fail(404, "not_found")
 	}
 	kind := "user"
-	if input.MediaID != "" {
+	if len(input.Blocks) > 0 {
+		// Every image block must reference an upload that belongs to the sender in
+		// this conversation, and the metadata shown to readers is taken from that
+		// row rather than from the client's payload.
+		for index := range input.Blocks {
+			block := &input.Blocks[index]
+			if block.Type != "image" {
+				continue
+			}
+			var fileName, mediaType, contentType string
+			var byteSize int64
+			err = tx.QueryRow(ctx, "SELECT file_name,media_type,content_type,byte_size FROM message_media WHERE id=$1 AND owner_id=$2 AND conversation_id=$3", block.MediaID, userID, input.ConversationID).Scan(&fileName, &mediaType, &contentType, &byteSize)
+			if errors.Is(err, pgx.ErrNoRows) {
+				return model.Message{}, false, model.Fail(404, "not_found")
+			}
+			if err != nil {
+				return model.Message{}, false, err
+			}
+			block.FileName = fileName
+			block.MediaType = mediaType
+			block.ContentType = contentType
+			block.ByteSize = byteSize
+		}
+	} else if input.MediaID != "" {
 		// An attachment must belong to the sender and to this conversation.
 		var mediaKind string
 		err = tx.QueryRow(ctx, "SELECT media_type FROM message_media WHERE id=$1 AND owner_id=$2 AND conversation_id=$3", input.MediaID, userID, input.ConversationID).Scan(&mediaKind)
@@ -72,7 +171,7 @@ func (chat *Chat) Send(ctx context.Context, userID string, input model.SendInput
 	}
 	existing, err := scanMessage(tx.QueryRow(ctx, "SELECT "+messageColumns+" FROM messages WHERE sender_id=$1 AND client_msg_id=$2", userID, input.ClientMsgID))
 	if err == nil {
-		if existing.ConversationID != input.ConversationID || existing.Content != input.Content || existing.MediaID != input.MediaID || existing.ReplyToID != input.ReplyToID || !slices.Equal(existing.Mentions, input.Mentions) {
+		if existing.ConversationID != input.ConversationID || existing.Content != input.Content || existing.MediaID != input.MediaID || existing.ReplyToID != input.ReplyToID || !slices.Equal(existing.Mentions, input.Mentions) || blocksSignature(existing.Blocks) != blocksSignature(input.Blocks) {
 			return model.Message{}, false, model.Fail(409, "message_conflict")
 		}
 		return existing, true, nil
@@ -120,8 +219,9 @@ func (chat *Chat) Send(ctx context.Context, userID string, input model.SendInput
 		return model.Message{}, false, err
 	}
 	// ThreadRootID must be passed through: it is what files the reply into a
-	// window, and omitting it here would silently create orphan replies.
-	message, err := insertMessage(ctx, tx, model.Message{ConversationID: input.ConversationID, SenderID: userID, ClientMsgID: input.ClientMsgID, Seq: seq, Content: input.Content, Kind: kind, MediaID: input.MediaID, ReplyToID: input.ReplyToID, ThreadRootID: input.ThreadRootID, Mentions: input.Mentions})
+	// window, and omitting it here would silently create orphan replies. Blocks
+	// travel with it so the reader keeps the order the sender wrote.
+	message, err := insertMessage(ctx, tx, model.Message{ConversationID: input.ConversationID, SenderID: userID, ClientMsgID: input.ClientMsgID, Seq: seq, Content: input.Content, Kind: kind, MediaID: input.MediaID, Blocks: input.Blocks, ReplyToID: input.ReplyToID, ThreadRootID: input.ThreadRootID, Mentions: input.Mentions})
 	if err != nil {
 		return model.Message{}, false, err
 	}
