@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   collectImages, describeImageType, hasTransferableFiles, inferTypeFromName,
-  isImageFile, isInlineImageType, normalizeType, pastedName, prepareImage, shouldSendRightAway,
+  isImageFile, isInlineImageType, normalizeType, pastedName, prepareImage,
 } from './image-input.js'
 
 const file = (name, type, size = 16) => new File([new Uint8Array(size)], name, { type })
@@ -107,11 +107,4 @@ test('a failed conversion falls back to the original file instead of failing', a
   assert.equal(prepared, bmp)
   // A converter that returns nothing also falls back.
   assert.equal(await prepareImage(bmp, async () => null), bmp)
-})
-
-test('an empty composer sends at once, text waits for a caption', () => {
-  assert.equal(shouldSendRightAway(''), true)
-  assert.equal(shouldSendRightAway('   '), true)
-  assert.equal(shouldSendRightAway(undefined), true)
-  assert.equal(shouldSendRightAway('说明文字'), false)
 })
