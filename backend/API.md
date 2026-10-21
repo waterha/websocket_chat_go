@@ -39,7 +39,7 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | PATCH | `/conversations/{id}/announcements/{announcement_id}` | 编辑群公告：`{"content":"..."}`；仅群主与管理员，作者不变 |
 | DELETE | `/conversations/{id}/announcements/{announcement_id}` | 删除群公告；仅群主与管理员 |
 | PATCH | `/conversations/{id}/preferences` | 个人会话偏好：`{"pinned":true,"muted":false}`，字段可省略表示不改，仅影响本人 |
-| POST | `/conversations/{id}/messages` | `{"client_msg_id":"客户端稳定ID","content":"你好"}`；新消息 201，幂等重复 200。可带 `media_id`（附件）、`reply_to_id`（引用同会话消息）、`mentions`（提及成员 ID 数组） |
+| POST | `/conversations/{id}/messages` | `{"client_msg_id":"客户端稳定ID","content":"你好"}`；新消息 201，幂等重复 200。可带 `media_id`（附件）、`reply_to_id`（引用同会话消息）、`mentions`（提及成员 ID 数组）、`blocks`（图文混排，见下文） |
 | GET | `/conversations/{id}/messages/{message_id}/thread?limit=100&after_seq=0` | 回复对话窗口：返回根消息与该消息的全部回复（升序分页），见下文 |
 | POST | `/conversations/{id}/messages/{seq}/recall` | 撤回消息；发送者本人在 2 分钟内可撤回，群主/管理员可撤回本群任意消息；已撤回的消息内容不再返回 |
 | POST | `/conversations/{id}/media?file_name=photo.png` | 上传图片或视频：请求体为文件原始字节，`Content-Length` 必填，`Content-Type` 决定类型；成功 201 返回附件元数据，见下文 |
@@ -91,6 +91,16 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 - 免打扰只影响客户端的提示与未读角标，**不影响消息投递、接收游标与已读状态**。
 
 偏好是本机可见的视图设置，因此不产生 outbox 事件，也不做广播。**归档功能已移除**（迁移 000014）：它只增加第二个生命周期，却不改变任何成员能看到或能做的事，因此不值得保留。当前也没有：按会话自定义提醒级别、免打扰时间段与文件夹分组。
+
+## 图文混排消息（blocks）
+
+一条消息可以按发送者书写的顺序包含多张图片与多段文字，因此「先说明、再贴图、再补充、再贴图」能保持原样显示。
+
+- 请求体用 `blocks` 数组表示顺序，元素为 `{"type":"text","text":"..."}` 或 `{"type":"image","media_id":"..."}`。`content` 由服务端从所有 `text` 段用换行拼接得到，因此客户端不必同时传 `content`；传了也会被覆盖。使用 `blocks` 时 `media_id` 会被清空，避免同一条消息被渲染两次。
+- 服务端校验：最多 20 段；`text` 段去除首尾空白后为空的会被丢弃；文字合计不超过 4000 字符；`type` 只接受 `text` 与 `image`；`image` 段必须带 `media_id`，且该附件必须属于发送者本人并在同一会话，否则返回 404 `not_found`。
+- `image` 段的 `file_name`、`media_type`、`content_type`、`byte_size` **由服务端从数据库填充**，客户端传入的值会被忽略，因此不能伪造附件名或类型。
+- 读取时每条消息带 `blocks`（顺序与写入一致）；`blocks` 为空的响应不带该字段，表示按旧的单附件或纯文本方式渲染。撤回会同时清空 `blocks`，因为每个 `image` 段都指向一个被撤回的附件。
+- 幂等重试会比较 `blocks` 的段类型、文字与 `media_id`，任一段不同即返回 409 `message_conflict`。
 
 ## 回复对话窗口（话题串）
 
