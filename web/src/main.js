@@ -11,6 +11,7 @@ import { activeMentionToken, applyMention, canRecall, mentionCandidates, message
 import { hasThread, hiddenReplyCount, replyTargetForWindow, threadHasMore, threadLabel, threadPreview, threadRootID } from './thread.js'
 import { availableInitials, filterCandidates, groupByInitial, keepSelectable, OTHER_INITIAL, selectAllCandidates, selectionSummary, toggleSelection } from './invite.js'
 import { formatBytes, mediaPreview, mediaURL, validateMediaFile } from './media.js'
+import { collectImages, hasTransferableFiles, prepareImage, shouldSendRightAway } from './image-input.js'
 import { api, uploadMedia } from './api.js'
 import { template } from './template.js'
 import './style.css'
@@ -596,6 +597,81 @@ createApp({
       } catch (cause) { if (version === epoch) showError(cause) }
       finally { if (version === epoch) uploadBusy.value = false }
     }
+    // True while a file is being dragged over the chat, used to show the drop hint.
+    const dragging = ref(false)
+    // Re-encodes an image the server would not treat as a photo (bmp, avif, heic)
+    // into PNG. Returns null when the browser cannot decode it, in which case the
+    // original bytes are sent and the message falls back to a file.
+    async function convertImageToPNG(file) {
+      try {
+        const bitmap = await createImageBitmap(file)
+        const canvas = document.createElement('canvas')
+        canvas.width = bitmap.width
+        canvas.height = bitmap.height
+        const context = canvas.getContext('2d')
+        if (!context) return null
+        context.drawImage(bitmap, 0, 0)
+        bitmap.close?.()
+        return await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+      } catch { return null }
+    }
+    // Uploads images arriving from the clipboard or a drop. A single image into an
+    // empty composer is posted at once, which is the "paste and it is sent"
+    // behaviour; with text in the box the image is attached so the text becomes its
+    // caption. Several images are always sent, one message each.
+    async function acceptImages(files) {
+      const id = active.value
+      if (!id || !files.length) return
+      if (pendingSend.value?.conversation_id === id) { showError({ message: '上一条发送结果未确认，请先恢复或放弃' }); return }
+      const version = epoch
+      const autoSend = shouldSendRightAway(draft.value) || files.length > 1
+      uploadBusy.value = true
+      try {
+        for (const candidate of files) {
+          const prepared = await prepareImage(candidate, convertImageToPNG)
+          const check = validateMediaFile(prepared)
+          if (!check.ok) { showError({ message: check.error }); continue }
+          const uploaded = await uploadMedia(id, prepared)
+          if (version !== epoch || active.value !== id) return
+          releaseAttachment()
+          attachment.value = uploaded
+          previewFile.value = URL.createObjectURL(prepared)
+          if (autoSend) {
+            // send() refuses while an upload is marked busy, so the flag is lowered
+            // around it and raised again for the next image.
+            uploadBusy.value = false
+            await send()
+            uploadBusy.value = true
+          }
+        }
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { if (version === epoch) uploadBusy.value = false }
+    }
+    // Pasting an image keeps it out of the text box and sends it as a photo.
+    function onComposerPaste(event) {
+      const images = collectImages(event.clipboardData)
+      if (!images.length) return
+      event.preventDefault()
+      acceptImages(images).catch(showError)
+    }
+    function onDragOver(event) {
+      if (!active.value || !hasTransferableFiles(event.dataTransfer)) return
+      event.preventDefault()
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+      dragging.value = true
+    }
+    function onDragLeave(event) {
+      // Ignore the leave events produced while moving between child elements.
+      if (event.currentTarget?.contains?.(event.relatedTarget)) return
+      dragging.value = false
+    }
+    function onDrop(event) {
+      dragging.value = false
+      const images = collectImages(event.dataTransfer)
+      if (!images.length || !active.value) return
+      event.preventDefault()
+      acceptImages(images).catch(showError)
+    }
     // Reply, mention and recall helpers.
     const replyPreview = item => replyExcerpt(item)
     const replyAuthor = item => replyLabel(item, sender)
@@ -1165,7 +1241,7 @@ createApp({
       window.addEventListener('focus', onVisible)
     })
     onUnmounted(() => { resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, inviteQuery, inviteInitial, inviteVisible, inviteGroups, inviteInitials, inviteSummary, inviteSelectedCount, inviteSelectedPeople, chooseInviteInitial, toggleInvite, selectAllInvites, clearInvites, resetInviteFilters, OTHER_INITIAL, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, draftArea, startReply, replyPreview, replyAuthor, bodyOf, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
+    return { showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, inviteQuery, inviteInitial, inviteVisible, inviteGroups, inviteInitials, inviteSummary, inviteSelectedCount, inviteSelectedPeople, chooseInviteInitial, toggleInvite, selectAllInvites, clearInvites, resetInviteFilters, OTHER_INITIAL, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, dragging, onComposerPaste, onDragOver, onDragLeave, onDrop, draftArea, startReply, replyPreview, replyAuthor, bodyOf, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
   },
   template,
 }).mount('#app')
