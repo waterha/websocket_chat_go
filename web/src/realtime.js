@@ -76,6 +76,17 @@ export class Requests {
   }
 }
 
+// sameBlocks compares two block lists by shape and content, so a retry of the same
+// message matches while an edit to any segment is treated as a different message.
+function sameBlocks(left, right) {
+  const first = left || []
+  const second = right || []
+  if (first.length !== second.length) return false
+  return first.every((block, index) => block.type === second[index].type
+    && (block.text || '') === (second[index].text || '')
+    && (block.media_id || '') === (second[index].media_id || ''))
+}
+
 // sameMentions compares two mention lists by content, ignoring order, so a retry
 // of the same message is not rejected over ordering.
 function sameMentions(left, right) {
@@ -104,19 +115,21 @@ export class PendingSends {
   }
 
   // The stored record IS the payload sent over the socket, so it must carry every
-  // field the server reads for a send: the attachment id, the quoted message and
-  // the mentions. Storing only content and media previously meant a WebSocket
-  // send silently lost quoting and mentions, while the HTTP fallback kept them.
+  // field the server reads for a send: the attachment id, the quoted message, the
+  // mentions and the ordered blocks. Storing only content and media previously meant
+  // a WebSocket send silently lost quoting and mentions, while the HTTP fallback
+  // kept them.
   //
   // The fields also participate in the "did the user change the message" check,
   // so an uncertain send cannot silently be retried as a different message.
-  save(conversationID, content, mediaID = '', replyToID = '', mentions = []) {
+  save(conversationID, content, mediaID = '', replyToID = '', mentions = [], blocks = []) {
     const existing = this.get(conversationID)
     if (existing && (
       existing.content !== content
       || (existing.media_id || '') !== mediaID
       || (existing.reply_to_id || '') !== replyToID
       || !sameMentions(existing.mentions, mentions)
+      || !sameBlocks(existing.blocks, blocks)
     )) throw new Error('上一条发送结果未确认，请先恢复原文重试或明确放弃')
     if (existing) return existing
     const item = {
@@ -126,6 +139,7 @@ export class PendingSends {
       media_id: mediaID,
       reply_to_id: replyToID,
       mentions: [...(mentions || [])],
+      blocks: (blocks || []).map(block => ({ ...block })),
     }
     this.storage.setItem(this.key, JSON.stringify({ ...this.entries(), [conversationID]: item }))
     return item
