@@ -140,11 +140,3 @@ function rebuild(file, type) {
   const extension = TYPE_EXTENSIONS[type] || 'png'
   return new File([file], `${base}.${extension}`, { type, lastModified: file?.lastModified || Date.now() })
 }
-
-// shouldSendRightAway decides whether a pasted image goes out immediately. With an
-// empty composer it is sent at once, which is the "paste and it is posted"
-// behaviour people expect; with text in the box the image is attached so the text
-// can become its caption.
-export function shouldSendRightAway(draftText) {
-  return String(draftText || '').trim() === ''
-}
