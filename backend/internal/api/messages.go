@@ -169,20 +169,22 @@ func (server *Server) recall(writer http.ResponseWriter, request *http.Request, 
 
 func (server *Server) send(writer http.ResponseWriter, request *http.Request, caller identity) {
 	var input struct {
-		ClientMsgID  string   `json:"client_msg_id"`
-		Content      string   `json:"content"`
-		MediaID      string   `json:"media_id"`
-		ReplyToID    string   `json:"reply_to_id"`
-		ThreadRootID string   `json:"thread_root_id"`
-		Mentions     []string `json:"mentions"`
+		ClientMsgID  string        `json:"client_msg_id"`
+		Content      string        `json:"content"`
+		MediaID      string        `json:"media_id"`
+		Blocks       []model.Block `json:"blocks"`
+		ReplyToID    string        `json:"reply_to_id"`
+		ThreadRootID string        `json:"thread_root_id"`
+		Mentions     []string      `json:"mentions"`
 	}
 	if !decode(writer, request, &input) {
 		return
 	}
 	// ThreadRootID is accepted for forward compatibility but the server derives
 	// the real root from ReplyToID, so a client cannot file a reply into an
-	// unrelated window.
-	item, duplicate, err := server.Services.Chat.Send(request.Context(), caller.account.ID, model.SendInput{ConversationID: request.PathValue("id"), ClientMsgID: input.ClientMsgID, Content: input.Content, MediaID: input.MediaID, ReplyToID: input.ReplyToID, ThreadRootID: input.ThreadRootID, Mentions: input.Mentions})
+	// unrelated window. Blocks carry the ordered text and images; when present the
+	// server derives content from them.
+	item, duplicate, err := server.Services.Chat.Send(request.Context(), caller.account.ID, model.SendInput{ConversationID: request.PathValue("id"), ClientMsgID: input.ClientMsgID, Content: input.Content, MediaID: input.MediaID, Blocks: input.Blocks, ReplyToID: input.ReplyToID, ThreadRootID: input.ThreadRootID, Mentions: input.Mentions})
 	if err != nil {
 		fail(writer, err)
 		return
