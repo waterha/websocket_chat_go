@@ -1,0 +1,10 @@
+fix: place the group panel beside the chat, not below it
+
+The detail panel was inserted inside the main chat element, so it stacked under
+the message stream instead of forming the right-hand column. A legacy 720px
+breakpoint also forced the layout to a single column with explicit rows, which
+put the panel below the chat on narrow screens.
+
+The panel is now a sibling of the chat element inside the layout grid, the third
+column collapses to zero when the panel is absent so direct chats keep full
+width, and the breakpoints keep the panel beside the chat instead of under it.
