@@ -12,6 +12,30 @@ export function messageCopyText(message) {
     : `[${segment.type === 'image' ? '图片' : segment.type === 'video' ? '视频' : '文件'}]${segment.fileName ? ' ' + segment.fileName : ''}`).join('\n')
 }
 
+const escapeHTML = value => String(value).replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character])
+
+async function imageDataURL(segment) {
+  const response = await fetch(mediaURL(segment.mediaId), { credentials: 'same-origin' })
+  if (!response.ok) throw new Error('图片加载失败，请稍后重试')
+  const blob = await response.blob()
+  const bytes = new Uint8Array(await blob.arrayBuffer())
+  let binary = ''
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000))
+  return `data:${blob.type || 'image/png'};base64,${btoa(binary)}`
+}
+
+export async function messageCopyHTML(items) {
+  const rows = await Promise.all(items.filter(isActionableMessage).map(async message => {
+    const segments = await Promise.all(messageSegments(message).map(async segment => segment.type === 'text'
+      ? escapeHTML(segment.text).replace(/\r?\n/g, '<br>')
+      : segment.type === 'image'
+        ? `<img src="${await imageDataURL(segment)}" alt="${escapeHTML(segment.fileName || '图片')}" />`
+        : `<span>[${segment.type === 'video' ? '视频' : '文件'}] ${escapeHTML(segment.fileName || '')}</span>`))
+    return `<div>${segments.join('')}</div>`
+  }))
+  return `<html><body>${rows.join('<br>')}</body></html>`
+}
+
 export async function prepareForward(message, conversationID, clientMsgID = crypto.randomUUID()) {
   if (!isActionableMessage(message)) throw new Error('该消息无法转发')
   const payload = { client_msg_id: clientMsgID, content: message.content || '', media_id: '', blocks: [], reply_to_id: '', mentions: [] }
@@ -96,10 +120,18 @@ export function useMessageActions({ messages, threadRoot, threadReplies, active,
   }
 
   async function copyMessages(items) {
-    const text = items.filter(isActionableMessage).map(messageCopyText).join('\n')
-    if (!text) return
+    const valid = items.filter(isActionableMessage)
+    const text = valid.map(messageCopyText).join('\n')
+    if (!valid.length || !text) return
     try {
-      if (window.navigator.clipboard?.writeText) await window.navigator.clipboard.writeText(text)
+      const hasImages = valid.some(message => messageSegments(message).some(segment => segment.type === 'image'))
+      if (hasImages) {
+        if (!window.navigator.clipboard?.write || !window.ClipboardItem) throw new Error('当前浏览器不支持复制图片，请使用最新版 Chrome 或 Edge')
+        await window.navigator.clipboard.write([new window.ClipboardItem({
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+          'text/html': messageCopyHTML(valid).then(html => new Blob([html], { type: 'text/html' })),
+        })])
+      } else if (window.navigator.clipboard?.writeText) await window.navigator.clipboard.writeText(text)
       else {
         const previous = document.activeElement
         const area = document.createElement('textarea')
