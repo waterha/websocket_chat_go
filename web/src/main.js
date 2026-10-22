@@ -732,30 +732,34 @@ createApp({
       mentionQuery.value = null
       mentionList.value = []
     }
-    function pasteRichHTML(html) {
+    function pasteRichHTML(html, clipboardImages = []) {
       const source = new DOMParser().parseFromString(html, 'text/html')
       const fragment = document.createDocumentFragment()
-      const files = []
-      const placeholders = []
+      const images = []
       const addBreak = () => {
         if (fragment.lastChild?.nodeName !== 'BR') fragment.append(document.createElement('br'))
       }
       const walk = node => {
         if (node.nodeType === Node.TEXT_NODE) { fragment.append(document.createTextNode(node.nodeValue || '')); return }
-        if (node.nodeType !== Node.ELEMENT_NODE) return
+        if (node.nodeType !== Node.ELEMENT_NODE || node.hasAttribute('data-composer-chrome') || ['SCRIPT', 'STYLE'].includes(node.tagName)) return
         if (node.tagName === 'BR') { addBreak(); return }
         if (node.tagName === 'IMG') {
-          const match = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/is.exec(node.getAttribute('src') || '')
-          if (!match || match[2].length > 14 * 1024 * 1024) return
-          const bytes = Uint8Array.from(atob(match[2].replace(/\s/g, '')), character => character.charCodeAt(0))
+          const src = node.getAttribute('src') || ''
+          const match = /^data:(image\/[a-z0-9.+-]+);base64,(.*)$/is.exec(src)
           const name = (node.getAttribute('alt') || 'pasted.png').replace(/[\\/:*?"<>|]/g, '_').slice(0, 128) || 'pasted.png'
           const placeholder = document.createElement('span')
           placeholder.setAttribute('contenteditable', 'false')
           placeholder.setAttribute('data-composer-chrome', '')
-          placeholder.setAttribute('data-rich-paste-image', String(files.length))
+          placeholder.setAttribute('data-rich-paste-image', String(images.length))
           placeholder.textContent = '图片加载中…'
-          files.push(new File([bytes], name, { type: match[1] }))
-          placeholders.push(placeholder)
+          let file = null
+          if (match && match[2].length <= 14 * 1024 * 1024) {
+            try {
+              const bytes = Uint8Array.from(atob(match[2].replace(/\s/g, '')), character => character.charCodeAt(0))
+              file = new File([bytes], name, { type: match[1] })
+            } catch {}
+          }
+          images.push({ src, file: file || clipboardImages[images.length] || null, name, placeholder })
           fragment.append(placeholder)
           return
         }
@@ -765,9 +769,19 @@ createApp({
         if (block && node.nextSibling && node.nextSibling.nodeName !== 'BR') addBreak()
       }
       for (const child of source.body.childNodes) walk(child)
-      if (!files.length) return false
+      if (!images.length) {
+        for (const file of clipboardImages) {
+          const placeholder = document.createElement('span')
+          placeholder.setAttribute('contenteditable', 'false')
+          placeholder.setAttribute('data-composer-chrome', '')
+          placeholder.setAttribute('data-rich-paste-image', String(images.length))
+          placeholder.textContent = '图片加载中…'
+          images.push({ file, name: file.name || 'pasted.png', placeholder })
+          fragment.append(placeholder)
+        }
+      }
       const root = draftArea.value
-      if (!root) return false
+      if (!root || !fragment.childNodes.length) return false
       const range = caretRange(root, window.getSelection())
       range.deleteContents()
       const last = fragment.lastChild
@@ -781,20 +795,41 @@ createApp({
       }
       root.focus()
       root.dispatchEvent(new window.Event('input', { bubbles: true }))
-      acceptImages(files, placeholders).catch(showError)
+      if (images.length) {
+        Promise.all(images.map(async image => {
+          if (image.file) return image.file
+          try {
+            const url = new URL(image.src, location.href)
+            if (url.origin !== location.origin || !(url.pathname.startsWith('/api/v1/media/') || url.protocol === 'blob:')) return null
+            const response = await fetch(url.href, { credentials: 'same-origin' })
+            if (!response.ok) return null
+            const blob = await response.blob()
+            if (!blob.type.startsWith('image/')) return null
+            return new File([blob], image.name, { type: blob.type })
+          } catch { return null }
+        })).then(files => {
+          const readyFiles = []
+          const placeholders = []
+          files.forEach((file, index) => {
+            if (file) { readyFiles.push(file); placeholders.push(images[index].placeholder) }
+            else images[index].placeholder.remove()
+          })
+          if (readyFiles.length) acceptImages(readyFiles, placeholders).catch(showError)
+        }).catch(showError)
+      }
       return true
     }
     // Pasting an image keeps it out of the text box and holds it for sending.
     function onComposerPaste(event) {
+      const html = event.clipboardData?.getData?.('text/html') || ''
       const images = collectImages(event.clipboardData)
+      if (html && pasteRichHTML(html, images)) {
+        event.preventDefault()
+        return
+      }
       if (images.length) {
         event.preventDefault()
         acceptImages(images).catch(showError)
-        return
-      }
-      const html = event.clipboardData?.getData('text/html') || ''
-      if (html.includes('data:image/') && pasteRichHTML(html)) {
-        event.preventDefault()
       }
     }
     function onDragOver(event) {
