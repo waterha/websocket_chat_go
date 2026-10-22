@@ -301,6 +301,58 @@ test('the remove control deletes the picture from the draft', async () => {
   assert.equal(vm.composerImages.length, 0, 'the composer still holds the image')
 })
 
+// Backspace is the deletion a user reaches for first, so it must delete the picture as
+// one unit rather than editing around it or doing nothing visible.
+function press(key, init = {}) {
+  const event = new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init })
+  composer().dispatchEvent(event)
+  return event
+}
+
+test('Backspace deletes a pasted picture instead of a character', async () => {
+  reset()
+  type('看这张')
+  caretToEnd()
+  paste(new File([new Uint8Array(8)], 'pasted.png', { type: 'image/png' }))
+  await new Promise(resolve => realSetTimeout(resolve, 450))
+  assert.equal(composer().querySelectorAll('.composer-image').length, 1)
+
+  const event = press('Backspace')
+  await new Promise(resolve => realSetTimeout(resolve, 150))
+
+  assert.equal(event.defaultPrevented, true, 'Backspace was not handled by the composer')
+  assert.equal(composer().querySelectorAll('.composer-image').length, 0, 'the picture is still in the draft')
+  assert.equal(vm.composerImages.length, 0, 'the composer still holds the removed image')
+  // The text that introduced the picture is untouched.
+  assert.equal(vm.draft, '看这张')
+})
+
+test('Backspace in ordinary text is left to the browser', async () => {
+  reset()
+  type('普通文字')
+  caretToEnd()
+  const event = press('Backspace')
+  await new Promise(resolve => realSetTimeout(resolve, 100))
+  // Nothing was prevented: the browser performs the edit, as it does in any text field.
+  assert.equal(event.defaultPrevented, false)
+  assert.equal(vm.draft, '普通文字')
+})
+
+test('an image-only draft can be sent and then deleted with Backspace', async () => {
+  reset()
+  paste(new File([new Uint8Array(8)], 'solo.png', { type: 'image/png' }))
+  await new Promise(resolve => realSetTimeout(resolve, 450))
+  // A picture alone enables the send button, which the plain draft text cannot express.
+  const button = document.querySelector('.composer .primary')
+  assert.equal(button.disabled, false, 'a picture-only draft is not sendable')
+
+  press('Backspace')
+  await new Promise(resolve => realSetTimeout(resolve, 150))
+  assert.equal(composer().querySelectorAll('.composer-image').length, 0)
+  assert.equal(vm.composerImages.length, 0)
+  assert.equal(document.querySelector('.composer .primary').disabled, true, 'an emptied draft is still sendable')
+})
+
 test.after(() => {
   for (const handle of timers) { clearInterval(handle); clearTimeout(handle) }
   globalThis.setInterval = realSetInterval
