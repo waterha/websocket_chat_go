@@ -20,12 +20,14 @@ import { api, uploadMedia } from './api.js'
 import { onImageLinkClick } from './image-viewer.js'
 import { chatStorage, createSocket, installDesktopDownloads } from './desktop.js'
 import { DesktopSettings } from './desktop-settings.js'
+import { OrganizationDirectory } from './organization-directory.js'
 import { template } from './template.js'
 import './style.css'
 import './desktop.css'
+import './organization-directory.css'
 
 createApp({
-  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Download, Check, DesktopSettings },
+  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Download, Check, DesktopSettings, OrganizationDirectory },
   setup() {
     const me = ref(null)
     const mode = ref('login')
