@@ -28,6 +28,7 @@ func (server *Server) Handler() http.Handler {
 		respond(writer, 200, caller.account)
 	}))
 	mux.HandleFunc("GET /api/v1/users", server.auth(server.users))
+	mux.HandleFunc("GET /api/v1/directory", server.auth(server.directory))
 	mux.HandleFunc("GET /api/v1/friends", server.auth(server.friends))
 	mux.HandleFunc("POST /api/v1/friends", server.auth(server.addFriend))
 	mux.HandleFunc("GET /api/v1/friends/requests", server.auth(server.friendRequests))
