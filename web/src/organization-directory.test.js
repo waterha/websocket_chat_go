@@ -90,3 +90,19 @@ test('new searches and closing invalidate stale requests even if abort is ignore
   assert.equal(vm.opened, false)
   assert.equal(vm.entries.length, 0)
 })
+
+test('newer profile requests win and Escape closes and restores focus', async () => {
+  click('.org-entry'); await settle()
+  let finishOld
+  handler = () => new Promise(resolve => { finishOld = resolve })
+  const old = vm.loadProfile()
+  handler = async () => response({ department: '新部门', job_title: '新职位' })
+  await vm.loadProfile()
+  finishOld(response({ department: '旧部门', job_title: '旧职位' }))
+  await old; await settle()
+  assert.equal(vm.workDepartment, '新部门')
+  document.querySelector('[role="dialog"]').dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  await settle()
+  assert.equal(document.querySelector('[role="dialog"]'), null)
+  assert.equal(document.activeElement, document.querySelector('.org-entry'))
+})
