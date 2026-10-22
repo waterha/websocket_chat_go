@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"time"
 	"websocket_chat_go/backend/internal/model"
 )
@@ -36,12 +37,46 @@ func (server *Server) friends(writer http.ResponseWriter, request *http.Request,
 }
 
 func (server *Server) directory(writer http.ResponseWriter, request *http.Request, caller identity) {
-	entries, err := server.Services.Auth.Directory(request.Context(), caller.account.ID)
+	params := request.URL.Query()
+	offset, limit := 0, 50
+	for key, target := range map[string]*int{"offset": &offset, "limit": &limit} {
+		if params.Has(key) {
+			value, err := strconv.Atoi(params.Get(key))
+			if err != nil {
+				fail(writer, model.Fail(400, "invalid_directory_query"))
+				return
+			}
+			*target = value
+		}
+	}
+	entries, err := server.Services.Auth.Directory(request.Context(), caller.account.ID, params.Get("q"), params.Get("department"), offset, limit)
 	if err != nil {
 		fail(writer, err)
 		return
 	}
 	respond(writer, 200, entries)
+}
+
+func (server *Server) workProfile(writer http.ResponseWriter, request *http.Request, caller identity) {
+	profile, err := server.Services.Auth.WorkProfile(request.Context(), caller.account.ID)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, profile)
+}
+
+func (server *Server) updateWorkProfile(writer http.ResponseWriter, request *http.Request, caller identity) {
+	var input model.WorkProfile
+	if !decode(writer, request, &input) {
+		return
+	}
+	profile, err := server.Services.Auth.UpdateWorkProfile(request.Context(), caller.account.ID, input)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, profile)
 }
 
 func (server *Server) addFriend(writer http.ResponseWriter, request *http.Request, caller identity) {
