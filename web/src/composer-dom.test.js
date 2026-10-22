@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { JSDOM } from 'jsdom'
 import {
-  caretRange, collectPieces, hasContent, imageCount, insertImageAtCaret,
+  caretRange, collectPieces, hasContent, imageCount, insertImageAtCaret, insertTextAtCaret,
   MEDIA_ATTRIBUTE, piecesToBlocks, piecesToText, placeCaretAfter,
   removeImageFromComposer, renderInto, textBeforeCaret,
 } from './composer-dom.js'
@@ -30,6 +30,25 @@ test('typed text and line breaks become pieces in order', () => {
   element.appendChild(document.createElement('br'))
   element.appendChild(document.createTextNode('第二行'))
   assert.deepEqual(collectPieces(element), [{ type: 'text', text: '第一行\n第二行' }])
+})
+
+test('text inserts at the caret and notifies the composer', () => {
+  const element = root()
+  element.textContent = 'AB'
+  const range = document.createRange()
+  range.setStart(element.firstChild, 1)
+  range.collapse(true)
+  const selection = window.getSelection()
+  selection.removeAllRanges()
+  selection.addRange(range)
+  let inputEvents = 0
+  element.addEventListener('input', () => inputEvents++)
+
+  insertTextAtCaret(element, '😊', selection)
+
+  assert.equal(element.textContent, 'A😊B')
+  assert.equal(inputEvents, 1)
+  assert.equal(selection.anchorOffset, 2)
 })
 
 test('a div per line reads as separate lines', () => {
