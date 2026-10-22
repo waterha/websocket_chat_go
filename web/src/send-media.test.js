@@ -8,7 +8,7 @@ import { JSDOM } from 'jsdom'
 register('../css-hook.mjs', import.meta.url)
 
 const dom = new JSDOM('<!doctype html><html><body><div id="app"></div></body></html>', { url: 'http://127.0.0.1:4173' })
-for (const key of ['window', 'document', 'location', 'HTMLElement', 'Element', 'Node', 'SVGElement', 'Text', 'Comment', 'DocumentFragment', 'Document', 'ShadowRoot', 'MutationObserver', 'File', 'Blob', 'Range']) {
+for (const key of ['window', 'document', 'location', 'HTMLElement', 'Element', 'Node', 'SVGElement', 'Text', 'Comment', 'DocumentFragment', 'Document', 'DOMParser', 'ShadowRoot', 'MutationObserver', 'File', 'Blob', 'Range']) {
   globalThis[key] = key === 'window' ? dom.window : key === 'document' ? dom.window.document : key === 'location' ? dom.window.location : dom.window[key]
 }
 globalThis.getComputedStyle = dom.window.getComputedStyle.bind(dom.window)
@@ -66,6 +66,17 @@ function paste(file) {
   const event = new dom.window.Event('paste', { bubbles: true, cancelable: true })
   Object.defineProperty(event, 'clipboardData', {
     value: { items: [{ kind: 'file', type: file.type, getAsFile: () => file }], files: [file], types: ['Files'] },
+    configurable: true,
+  })
+  region.dispatchEvent(event)
+  return event
+}
+
+function pasteHTML(html) {
+  const region = composer()
+  const event = new dom.window.Event('paste', { bubbles: true, cancelable: true })
+  Object.defineProperty(event, 'clipboardData', {
+    value: { items: [], files: [], types: ['text/html'], getData: type => type === 'text/html' ? html : '' },
     configurable: true,
   })
   region.dispatchEvent(event)
@@ -148,6 +159,24 @@ test('text, image, text, image leave as one ordered message', async () => {
   // The composer is emptied once the message is sent.
   assert.equal(vm.composerImages.length, 0, 'the images were not released after sending')
   assert.equal(composer().textContent.trim(), '', 'the draft was not cleared after sending')
+})
+
+test('pasting copied rich text uploads embedded images and sends every segment in order', async () => {
+  reset()
+  const event = pasteHTML('<html><body><div>xx<img src="data:image/png;base64,aW1hZ2U=" alt="image.png" />duds<img src="data:image/png;base64,aW1hZ2U=" alt="image.png" /></div></body></html>')
+  assert.equal(event.defaultPrevented, true, 'the rich image paste was not intercepted')
+  await new Promise(resolve => realSetTimeout(resolve, 900))
+
+  assert.equal(composer().querySelectorAll('.composer-image img').length, 2, 'the pasted images were not uploaded into the draft')
+  assert.equal(composer().querySelectorAll('[data-rich-paste-image]').length, 0, 'an image placeholder remained in the draft')
+  assert.match(composer().textContent, /xx.*duds/s, 'the surrounding text was not preserved')
+
+  await vm.send()
+  await new Promise(resolve => realSetTimeout(resolve, 400))
+  const payload = JSON.parse(String(posted()[0].body))
+  assert.deepEqual(payload.blocks.map(block => block.type), ['text', 'image', 'text', 'image'])
+  assert.equal(payload.blocks[0].text, 'xx')
+  assert.equal(payload.blocks[2].text, 'duds')
 })
 
 test('an image alone is a valid message', async () => {
