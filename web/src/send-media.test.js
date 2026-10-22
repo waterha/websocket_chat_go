@@ -199,6 +199,13 @@ test('pasting selected chat content removes bubble styling and full-width image 
   assert.equal(payload.blocks[2].text, '后文')
 })
 
+test('pasting a fully selected formatted message does not add leading blank lines', async () => {
+  reset()
+  const event = pasteHTML('<html><body>\n  <div class="message-row">\n    <div class="bubble">\n      <div class="block-stack">\n        <p class="block-text">完整消息</p>\n      </div>\n    </div>\n  </div>\n</body></html>')
+  assert.equal(event.defaultPrevented, true)
+  assert.equal(vm.draft, '完整消息')
+})
+
 test('an image alone is a valid message', async () => {
   reset()
   paste(new File([new Uint8Array(8)], 'solo.png', { type: 'image/png' }))
