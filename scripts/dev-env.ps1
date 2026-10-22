@@ -77,28 +77,54 @@ function Get-ListenerPid([int]$Port) {
     return 0
 }
 
-function Find-PgBin {
-    $Candidates = @()
-    if ($env:IM_POSTGRES_BIN) { $Candidates += $env:IM_POSTGRES_BIN }
-    $Candidates += 'D:\Postgresql\bin'
-    $Candidates += (Get-ChildItem 'C:\Program Files\PostgreSQL' -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending | ForEach-Object { Join-Path $_.FullName 'bin' })
-    $PgCtl = Get-Command pg_ctl.exe -ErrorAction SilentlyContinue
-    if ($PgCtl) { $Candidates += (Split-Path -Parent $PgCtl.Source) }
+function Get-ProcessInfo([int]$ProcessId) {
+    Get-CimInstance Win32_Process -Filter "ProcessId = $ProcessId" -ErrorAction SilentlyContinue
+}
+
+function Find-ProgramBin {
+    param([string]$Executable, [string[]]$ExplicitPaths = @(), [string[]]$RootNames = @())
+    $Candidates = @($ExplicitPaths)
+    $Command = Get-Command $Executable -ErrorAction SilentlyContinue
+    if ($Command) { $Candidates += Split-Path -Parent $Command.Source }
+    foreach ($Base in @($env:ProgramFiles, ${env:ProgramFiles(x86)}, $env:ProgramW6432, $env:LOCALAPPDATA)) {
+        if ($Base -and (Test-Path $Base)) {
+            foreach ($Name in $RootNames) {
+                $Candidates += Get-ChildItem -LiteralPath $Base -Directory -Filter $Name -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName }
+            }
+        }
+    }
+    foreach ($Drive in Get-PSDrive -PSProvider FileSystem -ErrorAction SilentlyContinue) {
+        $Candidates += Get-ChildItem -LiteralPath $Drive.Root -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $DirectoryName = $_.Name; $RootNames | Where-Object { $DirectoryName -like $_ } } |
+            ForEach-Object { $_.FullName }
+    }
     foreach ($Candidate in $Candidates) {
-        if ($Candidate -and (Test-Path (Join-Path $Candidate 'pg_ctl.exe'))) { return $Candidate }
+        if (-not $Candidate) { continue }
+        $Directories = @($Candidate, (Join-Path $Candidate 'bin'))
+        $Directories += Get-ChildItem -LiteralPath $Candidate -Directory -Filter '*pgsql*' -ErrorAction SilentlyContinue |
+            ForEach-Object { Join-Path $_.FullName 'bin' }
+        foreach ($Directory in $Directories) {
+            if (Test-Path (Join-Path $Directory $Executable)) { return $Directory }
+        }
     }
     return ''
 }
 
+function Find-PgBin {
+    $Explicit = @()
+    if ($env:IM_POSTGRES_BIN) { $Explicit += $env:IM_POSTGRES_BIN }
+    $Explicit += Get-ChildItem -LiteralPath $Root -Directory -Filter '*pgsql*' -ErrorAction SilentlyContinue | ForEach-Object { Join-Path $_.FullName 'pgsql\bin' }
+    return Find-ProgramBin 'pg_ctl.exe' $Explicit @('PostgreSQL*', '*pgsql*')
+}
+
 function Find-RedisServer {
-    if ($env:IM_REDIS_DIR -and (Test-Path (Join-Path $env:IM_REDIS_DIR 'redis-server.exe'))) { return $env:IM_REDIS_DIR }
+    $Explicit = @()
+    if ($env:IM_REDIS_DIR) { $Explicit += $env:IM_REDIS_DIR }
     if (Test-Path $RedisRoot) {
         $Found = Get-ChildItem $RedisRoot -Recurse -Filter 'redis-server.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($Found) { return $Found.DirectoryName }
+        if ($Found) { $Explicit += $Found.DirectoryName }
     }
-    $Redis = Get-Command redis-server.exe -ErrorAction SilentlyContinue
-    if ($Redis) { return (Split-Path -Parent $Redis.Source) }
-    return ''
+    return Find-ProgramBin 'redis-server.exe' $Explicit @('*redis*')
 }
 
 function Ensure-EnvFile {
