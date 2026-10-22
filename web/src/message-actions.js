@@ -27,13 +27,13 @@ async function imageDataURL(segment) {
 export async function messageCopyHTML(items) {
   const rows = await Promise.all(items.filter(isActionableMessage).map(async message => {
     const segments = await Promise.all(messageSegments(message).map(async segment => segment.type === 'text'
-      ? escapeHTML(segment.text).replace(/\r?\n/g, '<br>')
+      ? `<p class="block-text">${escapeHTML(segment.text)}</p>`
       : segment.type === 'image'
-        ? `<img src="${await imageDataURL(segment)}" alt="${escapeHTML(segment.fileName || '图片')}" />`
+        ? `<a class="block-image"><img src="${await imageDataURL(segment)}" alt="${escapeHTML(segment.fileName || '图片')}" /></a>`
         : `<span>[${segment.type === 'video' ? '视频' : '文件'}] ${escapeHTML(segment.fileName || '')}</span>`))
-    return `<div>${segments.join('')}</div>`
+    return `<div><div class="block-stack">${segments.join('')}</div></div>`
   }))
-  return `<html><body>${rows.join('<br>')}</body></html>`
+  return `<html><body>${rows.join('')}</body></html>`
 }
 
 export async function prepareForward(message, conversationID, clientMsgID = crypto.randomUUID()) {
