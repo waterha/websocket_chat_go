@@ -1,0 +1,14 @@
+.desktop-bar { height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 20px; border-bottom: 1px solid var(--line); background: #fcf8f1; color: var(--muted); font-size: 12px; }
+.desktop-bar > span { display: flex; align-items: center; gap: 8px; white-space: nowrap; }
+.desktop-bar button { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 0; border: 0; background: none; color: var(--accent-dark); font-size: 12px; }
+.desktop-indicator { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.desktop-client .layout { height: calc(100dvh - 38px); }
+.desktop-client .auth-layout { min-height: calc(100dvh - 38px); }
+.desktop-settings-backdrop { z-index: 1000; }
+.desktop-settings > .subtle { margin-top: 16px; }
+.desktop-settings details { color: var(--muted); font-size: 13px; }
+.desktop-settings summary { cursor: pointer; margin-bottom: 12px; }
+.desktop-settings details .subtle { font-size: 12px; margin: 8px 0 0; overflow-wrap: anywhere; }
+.desktop-settings-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.desktop-settings-status { margin: 0; color: #a33c2c; font-size: 13px; overflow-wrap: anywhere; }
+.desktop-settings-status.success { color: #43694e; }
