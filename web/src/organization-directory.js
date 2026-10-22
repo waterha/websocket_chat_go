@@ -10,10 +10,10 @@ export const OrganizationDirectory = {
     const profileReady = ref(false), profileBusy = ref(false), profileError = ref(''), saved = ref(false)
     const workDepartment = ref(''), jobTitle = ref('')
     const appliedQuery = ref(''), appliedDepartment = ref('')
-    let directoryRequest, profileRequest, generation = 0, lifetime = 0
+    let directoryRequest, profileRequest, generation = 0, profileGeneration = 0, lifetime = 0
 
     function cancel() {
-      generation++; lifetime++
+      generation++; profileGeneration++; lifetime++
       directoryRequest?.abort(); profileRequest?.abort()
     }
     async function load(append = false) {
@@ -39,15 +39,15 @@ export const OrganizationDirectory = {
     }
     async function loadProfile() {
       profileRequest?.abort(); profileRequest = new AbortController()
-      const version = lifetime
+      const version = ++profileGeneration
       profileReady.value = false; profileBusy.value = true; profileError.value = ''
       try {
         const profile = await api('/directory/me', { signal: profileRequest.signal })
-        if (version !== lifetime) return
+        if (version !== profileGeneration) return
         workDepartment.value = profile.department; jobTitle.value = profile.job_title; profileReady.value = true
       } catch (cause) {
-        if (version === lifetime && cause.name !== 'AbortError') profileError.value = '工作资料加载失败，请重试。'
-      } finally { if (version === lifetime) profileBusy.value = false }
+        if (version === profileGeneration && cause.name !== 'AbortError') profileError.value = '工作资料加载失败，请重试。'
+      } finally { if (version === profileGeneration) profileBusy.value = false }
     }
     async function saveProfile() {
       if (profileBusy.value || !profileReady.value) return
@@ -98,7 +98,7 @@ export const OrganizationDirectory = {
             <label>职位<input v-model="jobTitle" maxlength="100" :disabled="!profileReady || profileBusy" @input="saved = false" placeholder="例如：产品经理" /></label>
             <button class="primary" :disabled="!profileReady || profileBusy">{{ profileBusy ? '处理中…' : '保存工作资料' }}</button>
           </form>
-          <p v-if="profileError" role="alert" class="org-error">{{ profileError }} <button v-if="!profileReady" type="button" @click="loadProfile">重试加载资料</button></p>
+          <p v-if="profileError" role="alert" class="org-error">{{ profileError }} <button v-if="!profileReady" type="button" :disabled="profileBusy" @click="loadProfile">重试加载资料</button></p>
           <p v-if="saved" role="status">工作资料已保存</p>
         </details>
         <form class="org-search" role="search" @submit.prevent="load()">
