@@ -1,7 +1,8 @@
 // Extracted from main.js so the component logic stays readable. It remains a
 // plain string because the component is compiled at runtime; template.test.js
 // asserts it parses with the real Vue compiler.
-export const template = `\n    <div v-if="!me" class="auth-layout">
+export const template = `\n    <DesktopSettings :logged-in="!!me" />
+    <div v-if="!me" class="auth-layout">
       <div class="auth-card">
         <div class="brand-mark">✦</div><p class="eyebrow">OPEN SOURCE · REAL-TIME</p>
         <h1>让沟通，自然发生。</h1><p class="subtle">websocket_chat_go · 开源即时通讯初版</p>
