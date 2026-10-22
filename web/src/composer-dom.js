@@ -129,6 +129,19 @@ export function caretRange(root, selection) {
   return fallback
 }
 
+export function insertTextAtCaret(root, text, selection) {
+  const range = caretRange(root, selection)
+  const node = document.createTextNode(text)
+  range.deleteContents()
+  range.insertNode(node)
+  range.setStartAfter(node)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+  root.focus()
+  root.dispatchEvent(new root.ownerDocument.defaultView.Event('input', { bubbles: true }))
+}
+
 // insertImageAtCaret places an image chip at the caret and returns the chip element.
 //
 // The chip is non-editable so it behaves as one unit: Backspace removes it whole
