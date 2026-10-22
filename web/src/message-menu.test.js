@@ -27,6 +27,7 @@ let threadRoot
 globalThis.fetch = async (url, options = {}) => {
   const path = String(url)
   calls.push({ path, method: options.method || 'GET', body: options.body })
+  if (path.includes('/api/v1/media/photo')) return { ok: true, blob: async () => new Blob(['image'], { type: 'image/png' }) }
   let data = []
   if (path.endsWith('/me')) data = me
   else if (path.endsWith('/conversations')) data = [group, target]
@@ -106,6 +107,39 @@ test('copy closes the menu and preserves message text', async () => {
   await choose('复制')
   assert.deepEqual(copied, ['你好 😀'])
   assert.equal(menu(), null)
+})
+
+test('copying a message with images writes embedded image data to the clipboard', async () => {
+  await reset([fresh('one', { content: '前后', blocks: [
+    { type: 'text', text: '前' },
+    { type: 'image', media_id: 'photo', file_name: 'image.png' },
+    { type: 'text', text: '后' },
+  ] })])
+  const writes = []
+  const originalClipboard = dom.window.navigator.clipboard
+  const originalClipboardItem = globalThis.ClipboardItem
+  const originalWindowClipboardItem = dom.window.ClipboardItem
+  class TestClipboardItem {
+    constructor(parts) { this.parts = parts }
+  }
+  Object.defineProperty(dom.window.navigator, 'clipboard', { value: { write: async items => writes.push(items) }, configurable: true })
+  globalThis.ClipboardItem = TestClipboardItem
+  dom.window.ClipboardItem = TestClipboardItem
+  try {
+    await rightClick()
+    await choose('复制')
+    await new Promise(resolve => realSetTimeout(resolve, 50))
+    assert.equal(writes.length, 1)
+    const parts = writes[0][0].parts
+    assert.ok(parts['text/html'])
+    assert.match(await (await parts['text/html']).text(), /data:image\/png;base64,aW1hZ2U=/)
+    assert.match(await (await parts['text/html']).text(), /前<img/)
+    assert.equal(await (await parts['text/plain']).text(), '前\n[图片] image.png\n后')
+  } finally {
+    Object.defineProperty(dom.window.navigator, 'clipboard', { value: originalClipboard, configurable: true })
+    globalThis.ClipboardItem = originalClipboardItem
+    dom.window.ClipboardItem = originalWindowClipboardItem
+  }
 })
 
 test('reply opens its conversation window only after choosing the menu action', async () => {
