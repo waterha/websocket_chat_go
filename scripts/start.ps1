@@ -106,7 +106,8 @@ if (Test-TcpPort $FrontendPort) {
         'chcp 65001 >nul',
         'title IM 前端',
         "cd /d `"$Root\web`"",
-        "npm run dev >> `"$Logs\frontend.log`" 2>&1"
+        "set BACKEND_HTTP_ADDR=http://127.0.0.1:$BackendPort",
+        "npm run dev -- --port $FrontendPort >> `"$Logs\frontend.log`" 2>&1"
     )
     [IO.File]::WriteAllLines($RunFrontend, $RunLines, (New-Object System.Text.UTF8Encoding($false)))
     Start-Process -FilePath 'cmd.exe' -ArgumentList '/c', "`"$RunFrontend`"" -WindowStyle Minimized | Out-Null
