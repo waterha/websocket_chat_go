@@ -16,7 +16,12 @@ export async function api(path, options = {}) {
     ...options,
     headers: requestHeaders({ 'Content-Type': 'application/json', ...(options.headers || {}) }),
   })
-  const body = await response.json()
+  let body
+  try {
+    body = await response.json()
+  } catch {
+    throw new Error('服务器返回了非 JSON 响应，请检查前后端代理配置')
+  }
   if (!response.ok) {
     const error = new Error(body.error?.message || '请求失败')
     error.status = response.status
