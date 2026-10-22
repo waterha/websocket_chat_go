@@ -17,7 +17,7 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .drop-hint { position: absolute; inset: 12px; display: grid; place-items: center; border: 2px dashed var(--accent); border-radius: 18px; background: #fffaf2d9; pointer-events: none; z-index: 5; }
 .drop-hint-box { display: grid; gap: 6px; padding: 18px 24px; border-radius: 16px; background: var(--card); box-shadow: 0 14px 40px #302c2926; text-align: center; }
 .drop-hint-box strong { color: var(--accent-dark); font-size: 15px; }
-.drop-hint-box small { color: var(--muted); font-size: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; max-width: 760px; margin: 0 auto 20px; }.message-row.mine { justify-content: flex-end; }.message-row.mine > div { text-align: right; }.message-meta { margin-bottom: 6px; color: var(--muted); font-size: 11px; }.bubble { display: inline-block; max-width: min(590px, 78vw); padding: 12px 15px; color: var(--ink); background: #f4ece2; border-radius: 5px 17px 17px 17px; line-height: 1.55; white-space: pre-wrap; text-align: left; }.mine .bubble { color: white; background: var(--accent); border-radius: 17px 5px 17px 17px; }.older { display: block; margin: 0 auto 24px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--accent-dark); background: transparent; font-size: 12px; }.empty-chat, .welcome { display: grid; place-items: center; align-content: center; height: 100%; color: var(--muted); text-align: center; }.welcome .brand-mark { margin-bottom: 22px; }.composer { gap: 10px; margin: 0 auto 24px; width: min(760px, calc(100% - 48px)); }.composer textarea { min-height: 66px; resize: vertical; border-radius: 16px; background: #fff; }.composer div { display: flex; justify-content: space-between; align-items: center; color: var(--muted); font-size: 11px; }.composer .primary { padding: 9px 14px; }
+.drop-hint-box small { color: var(--muted); font-size: 12px; }.message-row { display: flex; align-items: flex-start; gap: 10px; max-width: 760px; margin: 0 auto 20px; }.message-row.mine { justify-content: flex-end; }.message-row.mine > div { text-align: right; }.message-meta { margin-bottom: 6px; color: var(--muted); font-size: 11px; }.bubble { display: inline-block; max-width: min(590px, 78vw); padding: 12px 15px; color: var(--ink); background: #f4ece2; border-radius: 5px 17px 17px 17px; line-height: 1.55; white-space: pre-wrap; text-align: left; }.mine .bubble { color: white; background: var(--accent); border-radius: 17px 5px 17px 17px; }.older { display: block; margin: 0 auto 24px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--accent-dark); background: transparent; font-size: 12px; }.empty-chat, .welcome { display: grid; place-items: center; align-content: center; height: 100%; color: var(--muted); text-align: center; }.welcome .brand-mark { margin-bottom: 22px; }.composer { gap: 8px; margin: 0 auto 24px; width: min(760px, calc(100% - 48px)); }.composer textarea { min-height: 66px; resize: vertical; border-radius: 16px; background: #fff; }.composer .primary { padding: 9px 14px; }
 .modal-backdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; background: #302c2988; }.modal { width: min(460px, 100%); max-height: calc(100vh - 48px); overflow: auto; padding: 26px; border-radius: 22px; background: var(--card); box-shadow: 0 25px 80px #302c2940; }.modal-head { display: flex; justify-content: space-between; align-items: center; }.modal-head h2 { margin: 0; }.user-list { display: grid; gap: 8px; margin: 18px 0; }.user-list label { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }.user-list label span:last-child { display: grid; gap: 3px; }.user-list small { color: var(--muted); font-weight: 400; }.toast { position: fixed; right: 24px; bottom: 24px; max-width: 360px; padding: 13px 16px; border-radius: 12px; color: white; background: #8f4735; box-shadow: 0 12px 28px #302c2940; }
 /* The third column exists only when the panel is rendered: in a direct chat the
    panel is absent, so the chat takes the whole remaining width instead of leaving
@@ -126,19 +126,28 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .media-video { display: block; width: 100%; max-height: 320px; border-radius: 12px; background: #000; }
 .media-caption { margin: 8px 6px 4px; color: inherit; line-height: 1.5; white-space: pre-wrap; text-align: left; }
 .media-input { display: none; }
-.composer .media-button { margin-left: auto; margin-right: 8px; }
+.composer-foot { display: flex; align-items: center; gap: 8px; }
+.composer-hint { margin-right: auto; color: var(--muted); font-size: 11px; }
+.composer .media-button { margin: 0; }
 .attachment-preview { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
 .attachment-preview img, .attachment-preview video { width: 74px; height: 56px; flex: none; object-fit: cover; border-radius: 9px; background: #000; }
 .attachment-info { display: flex; flex-direction: column; min-width: 0; }
 .attachment-info strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .attachment-info small { color: var(--muted); font-size: 11px; }
 .attachment-hint { display: block; margin-top: 2px; color: var(--accent-dark); font-style: normal; font-size: 11px; font-weight: 600; }
-/* A message whose images sit between its text, in the order it was written. */
-.block-stack { display: flex; flex-direction: column; gap: 8px; }
-.block-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.block-image { display: block; }
-.block-image img { display: block; max-width: min(320px, 100%); max-height: 320px; border-radius: 12px; object-fit: cover; }
-.block-file { display: inline-flex; align-items: center; gap: 6px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 12px; }
+/* A message whose images sit between its text, in the order it was written. Text and
+   pictures share the bubble's line flow, so a picture stays next to the words that
+   introduce it instead of being pushed onto a line of its own. The picture is kept to
+   thumbnail size and centred on the text line: a full-height photo would otherwise
+   stretch the line box and strand the words at its bottom edge. */
+.block-stack { display: block; }
+.block-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.block-image { display: inline-block; max-width: 100%; margin: 3px 7px 3px 0; vertical-align: middle; line-height: 0; }
+.block-image img { display: block; max-width: min(200px, 100%); max-height: 140px; border-radius: 10px; object-fit: cover; background: #fff; }
+.block-file { display: inline-flex; align-items: center; gap: 6px; margin: 3px 7px 3px 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 12px; vertical-align: middle; }
+.mine .block-file { border-color: #ffffff66; }
+/* A picture that ends the message keeps a little air under the text before it. */
+.block-stack > .block-image:last-child, .block-stack > .block-file:last-child { margin-bottom: 2px; }
 /* The images the draft references, shown above the text box. */
 .composer-images { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .composer-images figure { position: relative; display: flex; flex-direction: column; gap: 3px; margin: 0; }
@@ -151,14 +160,23 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .announcement p { flex: 1; margin: 0; color: var(--ink); font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .announcement.editing { flex-direction: column; align-items: stretch; }
 .announcement textarea { min-height: 66px; resize: vertical; }
-/* The composer is a rich region so an image shows as a picture inside the draft. */
-.rich-composer { width: 100%; min-height: 52px; max-height: 220px; overflow-y: auto; padding: 12px 14px; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 12px; outline: none; font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* The composer is a rich region so an image shows as a picture inside the draft. It
+   uses the same 12px radius and spacing the sent bubble uses, so the draft and the
+   message it becomes read as the same thing. */
+.rich-composer { width: 100%; min-height: 54px; max-height: 220px; overflow-y: auto; padding: 9px 12px; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 12px; outline: none; font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .rich-composer:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #b7654c20; }
 .rich-composer:empty::before { content: attr(data-placeholder); color: var(--muted); pointer-events: none; }
-/* An image inside the draft: one non-editable unit with a remove control. */
-.composer-image { position: relative; display: inline-block; margin: 2px 4px 2px 0; vertical-align: bottom; }
-.composer-image img { display: block; max-width: 180px; max-height: 140px; border: 1px solid var(--line); border-radius: 10px; object-fit: cover; }
-.composer-image-remove { position: absolute; top: -6px; right: -6px; display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); background: #fff; font-size: 13px; line-height: 1; cursor: pointer; }
+/* An image inside the draft: one non-editable unit with a remove control. It uses the
+   same thumbnail size and inline alignment as a picture in a sent message, so the draft
+   reads as the message it is about to become instead of reflowing once it is sent. */
+.composer-image { position: relative; display: inline-block; margin: 3px 7px 3px 0; vertical-align: middle; line-height: 0; }
+.composer-image img { display: block; max-width: 200px; max-height: 140px; border: 1px solid var(--line); border-radius: 10px; object-fit: cover; }
+/* The remove control is quiet until the picture is hovered or focused, so the draft
+   reads as the message rather than as a form with a button stamped on every picture.
+   It stays faintly visible otherwise, because a touch screen has no hover. */
+.composer-image-remove { position: absolute; top: -7px; right: -7px; display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); background: #fff; font-size: 13px; line-height: 1; cursor: pointer; opacity: .55; transition: opacity .12s, color .12s, background .12s; }
+.composer-image:hover .composer-image-remove, .composer-image:focus-within .composer-image-remove, .composer-image-remove:focus-visible { opacity: 1; }
+.composer-image-remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .composer-image-remove:hover { color: #fff; background: var(--accent); border-color: var(--accent); }
 .announcement-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .announcement.empty { justify-content: flex-start; border-left-color: var(--line); background: transparent; }
