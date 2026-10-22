@@ -24,10 +24,20 @@ func main() {
 		log.Fatal(err)
 	}
 	root = filepath.Join(root, "WebsocketChat")
-	webviewPath := filepath.Join(os.TempDir(), "WebsocketChat-WebView2")
-	if err := os.MkdirAll(webviewPath, 0700); err != nil {
-		log.Printf("无法创建 WebView2 数据目录 %q，将使用系统默认目录：%v", webviewPath, err)
-		webviewPath = ""
+	// Keep the WebView2 profile beside the app settings so its cookies and local
+	// storage survive restarts. A fresh temp profile is safer than WebView2's
+	// default fallback when a previous profile has unusable permissions.
+	if err := os.MkdirAll(root, 0755); err != nil {
+		log.Printf("无法创建应用数据目录 %q：%v", root, err)
+	}
+	webviewPath := filepath.Join(root, "WebView2")
+	if err := os.MkdirAll(webviewPath, 0755); err != nil {
+		fallback, fallbackErr := os.MkdirTemp("", "WebsocketChat-WebView2-")
+		if fallbackErr != nil {
+			log.Fatalf("无法创建 WebView2 数据目录 %q：%v；临时目录也不可用：%v", webviewPath, err, fallbackErr)
+		}
+		log.Printf("应用数据目录不可用，将使用临时 WebView2 数据目录 %q：%v", fallback, err)
+		webviewPath = fallback
 	}
 	path := filepath.Join(root, "settings.json")
 	config, err := client.Load(path)
@@ -44,7 +54,7 @@ func main() {
 		AssetServer:      &assetserver.Options{Assets: assets, Handler: http.HandlerFunc(app.serveHTTP)},
 		OnStartup:        app.startup, OnShutdown: app.shutdown, Bind: []interface{}{app},
 		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "5ac5da33-3af2-4e70-a638-f883d41f1026", OnSecondInstanceLaunch: func(options.SecondInstanceData) { runtime.WindowUnminimise(app.ctx); runtime.WindowShow(app.ctx) }},
-		Windows: &windows.Options{WebviewUserDataPath: webviewPath, WebviewGpuIsDisabled: true, Theme: windows.Light},
+		Windows:            &windows.Options{WebviewUserDataPath: webviewPath, WebviewGpuIsDisabled: true, Theme: windows.Light},
 	})
 	if err != nil {
 		log.Fatal(err)
