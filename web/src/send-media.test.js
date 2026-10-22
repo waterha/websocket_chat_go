@@ -113,6 +113,25 @@ function reset() {
 
 const posted = () => calls.filter(call => call.method === 'POST' && call.path.endsWith('/messages'))
 
+test('Ctrl+Z restores the previous composer text', () => {
+  reset()
+  type('撤销测试')
+  const event = new dom.window.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true })
+  composer().dispatchEvent(event)
+  assert.equal(event.defaultPrevented, true)
+  assert.equal(vm.draft, '')
+})
+
+test('Ctrl+Z removes a pasted image from the composer', async () => {
+  reset()
+  paste(new File([new Uint8Array(8)], 'undo.png', { type: 'image/png' }))
+  await new Promise(resolve => realSetTimeout(resolve, 500))
+  assert.equal(vm.composerImages.length, 1)
+  composer().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }))
+  assert.equal(vm.composerImages.length, 0)
+  assert.equal(composer().querySelector('.composer-image'), null)
+})
+
 test('pasting an image shows it inside the draft without sending', async () => {
   reset()
   const event = paste(new File([new Uint8Array(8)], 'image.png', { type: 'image/png' }))
