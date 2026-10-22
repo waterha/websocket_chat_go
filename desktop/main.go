@@ -2,10 +2,12 @@ package main
 
 import (
 	"embed"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -18,12 +20,48 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+func writableDataDir() (string, error) {
+	var candidates []string
+	if configDir, err := os.UserConfigDir(); err == nil {
+		candidates = append(candidates, filepath.Join(configDir, "WebsocketChat"))
+	}
+	if executable, err := os.Executable(); err == nil {
+		candidates = append(candidates, filepath.Join(filepath.Dir(executable), "WebsocketChat-data"))
+	}
+	if temp := os.TempDir(); temp != "" {
+		candidates = append(candidates, filepath.Join(temp, "WebsocketChat-data"))
+	}
+	var failures []string
+	for _, candidate := range candidates {
+		if err := os.MkdirAll(candidate, 0755); err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", candidate, err))
+			continue
+		}
+		probe, err := os.CreateTemp(candidate, ".write-test-*")
+		if err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", candidate, err))
+			continue
+		}
+		probeName := probe.Name()
+		if err := probe.Close(); err != nil {
+			_ = os.Remove(probeName)
+			failures = append(failures, fmt.Sprintf("%s: %v", candidate, err))
+			continue
+		}
+		if err := os.Remove(probeName); err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", candidate, err))
+			continue
+		}
+		return candidate, nil
+	}
+	return "", fmt.Errorf("没有可写的应用数据目录：%s", strings.Join(failures, "; "))
+}
+
 func main() {
-	root, err := os.UserConfigDir()
+	root, err := writableDataDir()
 	if err != nil {
 		log.Fatal(err)
 	}
-	root = filepath.Join(root, "WebsocketChat")
 	// Keep the WebView2 profile beside the app settings so its cookies and local
 	// storage survive restarts. A fresh temp profile is safer than WebView2's
 	// default fallback when a previous profile has unusable permissions.
@@ -32,9 +70,9 @@ func main() {
 	}
 	webviewPath := filepath.Join(root, "WebView2")
 	if err := os.MkdirAll(webviewPath, 0755); err != nil {
-		fallback, fallbackErr := os.MkdirTemp("", "WebsocketChat-WebView2-")
+		fallback, fallbackErr := os.MkdirTemp(root, "WebsocketChat-WebView2-")
 		if fallbackErr != nil {
-			log.Fatalf("无法创建 WebView2 数据目录 %q：%v；临时目录也不可用：%v", webviewPath, err, fallbackErr)
+			log.Fatalf("无法创建 WebView2 数据目录 %q：%v；备用目录也不可用：%v", webviewPath, err, fallbackErr)
 		}
 		log.Printf("应用数据目录不可用，将使用临时 WebView2 数据目录 %q：%v", fallback, err)
 		webviewPath = fallback
