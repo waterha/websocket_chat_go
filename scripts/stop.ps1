@@ -14,18 +14,24 @@ $FrontendPort = 4173
 $WebUrl = Get-EnvValue 'FRONTEND_ORIGIN' 'http://127.0.0.1:4173'
 if ($WebUrl -match ':(\d+)\s*$') { $FrontendPort = [int]$Matches[1] }
 
-# Frontend and backend are started in their own windows; stop the listeners
-# first so the dev servers shut down cleanly, then the compiled backend.
+# Stop only listeners whose process command belongs to this checkout.
 foreach ($Port in @($FrontendPort, $BackendPort)) {
     $ListenerPid = Get-ListenerPid $Port
     if ($ListenerPid -gt 0) {
-        Stop-Process -Id $ListenerPid -Force -ErrorAction SilentlyContinue
-        Write-Ok "端口 $Port 已停止（PID $ListenerPid）"
+        $Process = Get-ProcessInfo $ListenerPid
+        $IsProjectBackend = $Process -and ($Process.ExecutablePath -eq (Join-Path $BinDir 'im-server.exe') -or $Process.CommandLine -like "*$Root*backend*")
+        $WebDirectory = (Join-Path $Root 'web').TrimEnd('\')
+        $IsProjectFrontend = $Process -and $Process.CommandLine -like "*$WebDirectory*"
+        if ($IsProjectBackend -or $IsProjectFrontend) {
+            Stop-Process -Id $ListenerPid -Force -ErrorAction SilentlyContinue
+            Write-Ok "项目端口 $Port 已停止（PID $ListenerPid）"
+        } else {
+            Write-Step "端口 $Port 属于其他程序，跳过（PID $ListenerPid）"
+        }
     } else {
         Write-Step "端口 $Port 未在运行"
     }
 }
-Get-Process im-server -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
 # PostgreSQL: use the private cluster only, never an unrelated installation.
 $PgBin = Find-PgBin
@@ -41,7 +47,10 @@ if ($PgBin -and (Test-Path $PgData)) {
 # Redis: shut down only the instance on our configured port.
 $RedisDir = Find-RedisServer
 if ($RedisDir) {
-    if (Test-RedisPong $RedisDir $RedisPort) {
+    $RedisProcess = Get-CimInstance Win32_Process -Filter "Name = 'redis-server.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.ExecutablePath -eq (Join-Path $RedisDir 'redis-server.exe') -and $_.CommandLine -like "*$(Join-Path $RedisData '*')*" } |
+        Select-Object -First 1
+    if ($RedisProcess -and (Test-RedisPong $RedisDir $RedisPort)) {
         & (Join-Path $RedisDir 'redis-cli.exe') -h 127.0.0.1 -p $RedisPort shutdown nosave 2>$null | Out-Null
         Write-Ok "Redis 已停止（端口 $RedisPort）"
     } else {
