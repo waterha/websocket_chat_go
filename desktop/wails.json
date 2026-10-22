@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "WebsocketChat",
+  "outputfilename": "WebsocketChat",
+  "frontend:dir": "../web",
+  "frontend:install": "npm ci",
+  "frontend:build": "npm run build:desktop",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "wailsjsdir": "../desktop/frontend",
+  "author": { "name": "Websocket Chat contributors" },
+  "info": { "companyName": "Websocket Chat", "productName": "协作聊天", "productVersion": "0.1.0", "copyright": "MIT License", "comments": "Lightweight Go + system WebView desktop client" }
+}
