@@ -18,11 +18,14 @@ import { installEmojiPicker } from './emoji-picker.js'
 import { useMessageActions } from './message-actions.js'
 import { api, uploadMedia } from './api.js'
 import { onImageLinkClick } from './image-viewer.js'
+import { chatStorage, createSocket, installDesktopDownloads } from './desktop.js'
+import { DesktopSettings } from './desktop-settings.js'
 import { template } from './template.js'
 import './style.css'
+import './desktop.css'
 
 createApp({
-  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Download, Check },
+  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Download, Check, DesktopSettings },
   setup() {
     const me = ref(null)
     const mode = ref('login')
@@ -121,8 +124,10 @@ createApp({
     let highlightTimer
     const unreadCounts = ref({})
     const cacheVersion = ref(0)
-    const deviceID = sessionStorage.getItem('im.device') || crypto.randomUUID()
-    sessionStorage.setItem('im.device', deviceID)
+    const session = chatStorage()
+    const saved = chatStorage(true)
+    const deviceID = session.getItem('im.device') || crypto.randomUUID()
+    session.setItem('im.device', deviceID)
     const cache = new Map()
     const syncing = new SyncTasks()
     let socket
@@ -554,11 +559,11 @@ createApp({
     // user is not pushed by a conversation they deliberately silenced.
     const showsBadge = item => showsUnreadBadge(item, unreadCounts.value[item.id] || 0)
     const seenKey = id => `im.seen.${me.value?.id}.${id}`
-    const seenSeq = id => Number(localStorage.getItem(seenKey(id)) || 0)
+    const seenSeq = id => Number(saved.getItem(seenKey(id)) || 0)
     const markSeen = (id, seq) => {
       if (!me.value || !seq) return
       const previous = seenSeq(id)
-      if (seq > previous) localStorage.setItem(seenKey(id), String(seq))
+      if (seq > previous) saved.setItem(seenKey(id), String(seq))
       if (unreadCounts.value[id]) unreadCounts.value = { ...unreadCounts.value, [id]: 0 }
     }
     const addUnread = (id, count) => {
@@ -1283,7 +1288,7 @@ createApp({
     const onVisible = () => { if (me.value) reconcile().catch(showError) }
     function connect() {
       if (disposed || !me.value) return
-      const connection = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws?device_id=${deviceID}`)
+      const connection = createSocket(deviceID)
       socket = connection
       const channel = new Requests(connection)
       requests = channel
@@ -1319,7 +1324,7 @@ createApp({
         const path = mode.value === 'login' ? '/auth/login' : '/auth/register'
         me.value = await api(path, { method: 'POST', body: JSON.stringify({ email: email.value, password: password.value, name: name.value }) })
         epoch++
-        pendingStore = new PendingSends(sessionStorage, me.value.id)
+        pendingStore = new PendingSends(session, me.value.id)
         password.value = ''
         connect()
         await refresh()
@@ -1549,7 +1554,7 @@ createApp({
       }
     }
     onMounted(async () => {
-      try { me.value = await api('/me'); pendingStore = new PendingSends(sessionStorage, me.value.id); await refresh(); if (active.value) await select(active.value) }
+      try { me.value = await api('/me'); pendingStore = new PendingSends(session, me.value.id); await refresh(); if (active.value) await select(active.value) }
       catch (cause) { if (cause.status === 401) me.value = null; else showError(cause) }
       if (me.value) connect()
       refreshTimer = setInterval(async () => {
@@ -1567,7 +1572,8 @@ createApp({
     onUpdated(() => {
       if (draftArea.value) { installEmojiPicker(draftArea.value); installComposerUndo(draftArea.value) }
     })
-    onUnmounted(() => { document.getElementById('app')?.removeEventListener('click', onImageLinkClick); resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
+    const removeDesktopDownloads = installDesktopDownloads(showError)
+    onUnmounted(() => { removeDesktopDownloads(); document.getElementById('app')?.removeEventListener('click', onImageLinkClick); resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
     return { messageActions, showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, inviteQuery, inviteInitial, inviteVisible, inviteGroups, inviteInitials, inviteSummary, inviteSelectedCount, inviteSelectedPeople, chooseInviteInitial, toggleInvite, selectAllInvites, clearInvites, resetInviteFilters, OTHER_INITIAL, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, discardPending, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, composerImages, removeComposerImage, clearComposerImages, syncDraftFromDom, onComposerInput, onComposerClick, onComposerBlur, restorePending, dragging, onComposerPaste, onDragOver, onDragLeave, onDrop, draftArea, startReply, replyPreview, replyAuthor, bodyOf, segmentsOf, usesBlocks, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
   },
   template,
