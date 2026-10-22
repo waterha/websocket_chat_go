@@ -24,7 +24,7 @@ func main() {
 		log.Fatal(err)
 	}
 	root = filepath.Join(root, "WebsocketChat")
-	webviewPath := filepath.Join(root, "WebView2")
+	webviewPath := filepath.Join(os.TempDir(), "WebsocketChat-WebView2")
 	if err := os.MkdirAll(webviewPath, 0700); err != nil {
 		log.Printf("无法创建 WebView2 数据目录 %q，将使用系统默认目录：%v", webviewPath, err)
 		webviewPath = ""
