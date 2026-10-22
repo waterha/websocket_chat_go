@@ -19,10 +19,12 @@ import { useMessageActions } from './message-actions.js'
 import { api, uploadMedia } from './api.js'
 import { onImageLinkClick } from './image-viewer.js'
 import { template } from './template.js'
+import { OrganizationDirectory } from './organization-directory.js'
 import './style.css'
+import './organization-directory.css'
 
 createApp({
-  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Download, Check },
+  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Download, Check, OrganizationDirectory },
   setup() {
     const me = ref(null)
     const mode = ref('login')
