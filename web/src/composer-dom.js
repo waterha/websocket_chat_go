@@ -106,6 +106,11 @@ export function imageCount(pieces) {
 // textBeforeCaret returns the text between the start of the composer and the caret,
 // which the mention lookup needs because a contenteditable region has no
 // selectionStart.
+//
+// The walk is the one the draft uses, so the remove control inside an image chip does
+// not leak its `×` into the measured text: reading `range.toString()` used to shift the
+// mention offsets by one character per picture. An image reads as a line break, which
+// ends a mention token just as a picture between "@" and the caret should.
 export function textBeforeCaret(root, selection) {
   if (!root || !selection || !selection.rangeCount) return ''
   const range = selection.getRangeAt(0)
@@ -113,7 +118,87 @@ export function textBeforeCaret(root, selection) {
   const measure = document.createRange()
   measure.selectNodeContents(root)
   measure.setEnd(range.endContainer, range.endOffset)
-  return measure.toString()
+  const pieces = collectPieces(measure.cloneContents())
+  return pieces.map(piece => (piece.type === 'image' ? '\n' : piece.text)).join('')
+}
+
+// replaceMentionToken replaces the "@..." token that ends at the caret with `text`, and
+// returns the inserted node, or null when no such token is there.
+//
+// The draft is edited in place instead of being rewritten from its text. A
+// contenteditable region's text says nothing about the pictures inside it, so rewriting
+// the region from `piecesToText` used to delete every image in the draft silently.
+export function replaceMentionToken(root, selection, typed, text) {
+  if (!root || !selection || !selection.rangeCount) return null
+  const caret = selection.getRangeAt(0)
+  if (!caret.collapsed || !root.contains(caret.startContainer)) return null
+  // `typed` is what the user wrote after the "@": the "@" itself is one more character.
+  let remaining = [...String(typed || '')].length + 1
+  let node = caret.startContainer
+  let offset = caret.startOffset
+  if (node.nodeType !== 3) {
+    node = adjacentTextBefore(root, node)
+    if (!node) return null
+    offset = (node.nodeValue || '').length
+  }
+  let startNode = null
+  let startOffset = 0
+  for (;;) {
+    const take = Math.min(offset, remaining)
+    remaining -= take
+    offset -= take
+    if (remaining === 0) { startNode = node; startOffset = offset; break }
+    // The token is contiguous text: a picture or a line break in the middle means the
+    // walk overshot and the mention is no longer a single token.
+    const previous = offset === 0 ? adjacentTextBefore(root, node) : node
+    if (!previous) return null
+    node = previous
+    offset = (node.nodeValue || '').length
+  }
+  const range = document.createRange()
+  range.setStart(startNode, startOffset)
+  range.setEnd(caret.startContainer, caret.startOffset)
+  range.deleteContents()
+  const inserted = document.createTextNode(text)
+  range.insertNode(inserted)
+  return inserted
+}
+
+// adjacentTextBefore returns the text node that ends just before `node`, or null when a
+// picture, an image or a line break comes first. Nothing but text nodes may sit between,
+// which is what makes a mention token contiguous.
+function adjacentTextBefore(root, node) {
+  let cursor = node
+  while (cursor && cursor !== root) {
+    let sibling = cursor.previousSibling
+    while (sibling) {
+      if (sibling.nodeType === 3) return sibling
+      if (sibling.nodeType === 1) {
+        if (isChip(sibling) || sibling.tagName === 'BR' || sibling.tagName === 'IMG') return null
+        const inner = lastTextIn(sibling)
+        if (!inner) return null
+        return inner
+      }
+      sibling = sibling.previousSibling
+    }
+    cursor = cursor.parentNode
+  }
+  return null
+}
+
+// lastTextIn returns the last text node inside a block element, or null when the element
+// ends with something that is not text.
+function lastTextIn(element) {
+  for (let index = element.childNodes.length - 1; index >= 0; index--) {
+    const child = element.childNodes[index]
+    if (child.nodeType === 3) return child
+    if (child.nodeType === 1 && !isChip(child) && child.tagName !== 'BR' && child.tagName !== 'IMG') {
+      const inner = lastTextIn(child)
+      if (inner) return inner
+    }
+    return null
+  }
+  return null
 }
 
 // caretRange returns the current range when it sits inside the composer, otherwise a
@@ -182,10 +267,147 @@ export function insertImageAtCaret(root, range, image) {
 export function removeImageFromComposer(root, mediaId) {
   const chip = root.querySelector(`[${MEDIA_ATTRIBUTE}="${mediaId}"]`)
   if (!chip) return false
-  const next = chip.nextSibling
-  chip.remove()
-  if (next && next.nodeType === 3 && next.nodeValue === '\u00A0') next.remove()
+  detachChip(chip)
   return true
+}
+
+// isChip reports whether a node is one of the pictures the composer holds.
+function isChip(node) {
+  return node.nodeType === 1 && typeof node.hasAttribute === 'function' && node.hasAttribute(MEDIA_ATTRIBUTE)
+}
+
+// detachChip removes a picture and the spacer the insert left after it. The spacer is
+// invisible, so keeping it would make the next Backspace do nothing visible.
+function detachChip(chip) {
+  const next = chip.nextSibling
+  if (next && next.nodeType === 3 && next.nodeValue === '\u00A0') next.remove()
+  chip.remove()
+}
+
+// caretInGap puts the caret where a removed picture used to be, so typing continues at
+// that point instead of jumping to the edge of the region.
+function caretInGap(parent, previous, next, selection) {
+  if (!selection || !parent) return
+  const range = document.createRange()
+  if (previous && previous.nodeType === 3) range.setStart(previous, (previous.nodeValue || '').length)
+  else if (previous) range.setStartAfter(previous)
+  else if (next && next.parentNode === parent) range.setStartBefore(next)
+  else range.setStart(parent, 0)
+  range.collapse(true)
+  selection.removeAllRanges()
+  selection.addRange(range)
+}
+
+// unitLength counts what Backspace and Delete remove one at a time: the characters of
+// a text node, one line break, or one whole picture chip.
+function unitLength(node) {
+  if (node.nodeType === 3) return (node.nodeValue || '').length
+  if (node.nodeType !== 1) return 0
+  if (isChip(node) || node.tagName === 'BR') return 1
+  let total = 0
+  for (const child of node.childNodes) total += unitLength(child)
+  return total
+}
+
+// caretUnitIndex turns a caret into the position it occupies in that unit sequence, so
+// the node next to it can be identified without relying on pixel geometry.
+function caretUnitIndex(root, container, offset) {
+  let index = 0
+  let found = -1
+  const walk = node => {
+    if (found >= 0) return
+    if (node === container) {
+      if (node.nodeType === 3) { found = index + Math.min(offset, (node.nodeValue || '').length); return }
+      for (let i = 0; i < Math.min(offset, node.childNodes.length); i++) index += unitLength(node.childNodes[i])
+      found = index
+      return
+    }
+    if (node.nodeType === 3) { index += (node.nodeValue || '').length; return }
+    if (node.nodeType !== 1) return
+    if (isChip(node) || node.tagName === 'BR') { index += 1; return }
+    for (const child of node.childNodes) walk(child)
+  }
+  walk(root)
+  return found
+}
+
+// unitAt returns the single unit at a linear index.
+function unitAt(root, target) {
+  let index = 0
+  let hit = null
+  const walk = node => {
+    if (hit || index > target) return
+    if (node.nodeType === 3) {
+      const text = node.nodeValue || ''
+      if (target < index + text.length) hit = { type: 'text', node, char: text[target - index] }
+      index += text.length
+      return
+    }
+    if (node.nodeType !== 1) return
+    if (isChip(node)) { if (index === target) hit = { type: 'chip', node }; index += 1; return }
+    if (node.tagName === 'BR') { if (index === target) hit = { type: 'break', node }; index += 1; return }
+    for (const child of node.childNodes) walk(child)
+  }
+  walk(root)
+  return hit
+}
+
+// spacerFollowingPicture reports whether a text node is exactly the single spacer the
+// insert left directly after a picture. Only that spacer is skipped, so spaces the user
+// typed later still delete one character at a time.
+function spacerFollowingPicture(node) {
+  if (node.nodeValue !== '\u00A0') return null
+  const previous = node.previousSibling
+  return previous && isChip(previous) ? previous : null
+}
+
+// deleteImageNearCaret removes a whole picture when Backspace or Delete is pressed next
+// to it, and returns the upload id that went away. It returns null when the keystroke
+// is an ordinary edit the browser must perform.
+export function deleteImageNearCaret(root, selection, direction = 'backward') {
+  if (!root || !selection || !selection.rangeCount) return null
+  const range = selection.getRangeAt(0)
+  // A selection that spans a picture is left to the browser; the caller reconciles the
+  // visible pictures with what is left in the region afterwards.
+  if (!range.collapsed || !root.contains(range.startContainer)) return null
+  const caret = caretUnitIndex(root, range.startContainer, range.startOffset)
+  if (caret < 0) return null
+  const limit = unitLength(root)
+  let target = direction === 'forward' ? caret : caret - 1
+  if (direction !== 'forward') {
+    // The invisible spacer right after a picture must not swallow the keystroke.
+    let unit = target >= 0 ? unitAt(root, target) : null
+    while (unit && unit.type === 'text' && spacerFollowingPicture(unit.node)) {
+      target -= 1
+      unit = target >= 0 ? unitAt(root, target) : null
+    }
+  }
+  if (target < 0 || target >= limit) return null
+  const unit = unitAt(root, target)
+  if (!unit || unit.type !== 'chip') return null
+  const mediaId = unit.node.getAttribute(MEDIA_ATTRIBUTE)
+  const parent = unit.node.parentNode
+  const previous = unit.node.previousSibling
+  const spacer = unit.node.nextSibling
+  const next = spacer && spacer.nodeType === 3 && spacer.nodeValue === '\u00A0' ? spacer.nextSibling : spacer
+  detachChip(unit.node)
+  // An empty region keeps showing its placeholder, so the caret is simply put back at
+  // the start without adding filler nodes the next walk would have to ignore.
+  caretInGap(parent, previous, next, selection)
+  return mediaId
+}
+
+// imageIDsIn lists the uploads the region currently shows, in document order. It is
+// what keeps the component's picture list in step with a draft the browser edited
+// (Backspace, Delete, cut) without going through the remove control.
+export function imageIDsIn(root) {
+  if (!root) return []
+  const ids = []
+  for (const chip of root.querySelectorAll(`[${MEDIA_ATTRIBUTE}]`)) {
+    const id = chip.getAttribute(MEDIA_ATTRIBUTE)
+    if (id) ids.push(id)
+  }
+  return ids
 }
 
 // placeCaretAfter moves the caret just past a node, so typing continues after the
