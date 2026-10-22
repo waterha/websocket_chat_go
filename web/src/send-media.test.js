@@ -132,6 +132,52 @@ test('Ctrl+Z removes a pasted image from the composer', async () => {
   assert.equal(composer().querySelector('.composer-image'), null)
 })
 
+test('undoing an image removal restores a sendable image and Shift+Ctrl+Z redoes it', async () => {
+  reset()
+  paste(new File([new Uint8Array(8)], 'restore.png', { type: 'image/png' }))
+  await new Promise(resolve => realSetTimeout(resolve, 500))
+  const mediaID = vm.composerImages[0].mediaId
+  composer().querySelector('[data-remove-media]').click()
+  assert.equal(vm.composerImages.length, 0)
+  composer().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }))
+  assert.equal(vm.composerImages[0].mediaId, mediaID)
+  assert.equal(composer().querySelector('.composer-image img').getAttribute('src'), '/api/v1/media/' + mediaID)
+  composer().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Z', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }))
+  assert.equal(vm.composerImages.length, 0)
+  composer().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }))
+  await vm.send()
+  const payload = JSON.parse(String(posted()[0].body))
+  assert.deepEqual(payload.blocks, [{ type: 'image', media_id: mediaID }])
+  composer().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }))
+  assert.equal(composer().textContent, '')
+  assert.equal(vm.composerImages.length, 0)
+})
+
+test('undoing rich paste restores the preceding text in a single step', async () => {
+  reset()
+  type('原文')
+  caretToEnd()
+  pasteHTML('<p>粘贴文字</p><img src="data:image/png;base64,aW1hZ2U=" alt="undo.png" />')
+  await new Promise(resolve => realSetTimeout(resolve, 500))
+  assert.equal(vm.composerImages.length, 1)
+  composer().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }))
+  assert.equal(vm.draft, '原文')
+  assert.equal(vm.composerImages.length, 0)
+  assert.equal(composer().textContent, '原文')
+})
+
+test('Chinese composition is undone as one edit rather than restoring partial input', () => {
+  reset()
+  composer().dispatchEvent(new dom.window.CompositionEvent('compositionstart', { bubbles: true }))
+  type('zhong')
+  composer().textContent = '中文'
+  composer().dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+  composer().dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true }))
+  composer().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }))
+  assert.equal(vm.draft, '')
+  assert.equal(composer().textContent, '')
+})
+
 test('pasting an image shows it inside the draft without sending', async () => {
   reset()
   const event = paste(new File([new Uint8Array(8)], 'image.png', { type: 'image/png' }))
