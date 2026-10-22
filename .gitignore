@@ -8,6 +8,14 @@
 .vscode/
 node_modules/
 dist/
+!desktop/frontend/dist/
+desktop/frontend/dist/*
+!desktop/frontend/dist/.gitkeep
+desktop/frontend/wailsjs/
+desktop/build/bin/
+desktop/build/
+desktop/build/windows/*.syso
+desktop/*.syso
 coverage/
 *.log
 *.exe
