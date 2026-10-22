@@ -740,7 +740,11 @@ createApp({
         if (fragment.lastChild?.nodeName !== 'BR') fragment.append(document.createElement('br'))
       }
       const walk = node => {
-        if (node.nodeType === Node.TEXT_NODE) { fragment.append(document.createTextNode(node.nodeValue || '')); return }
+        if (node.nodeType === Node.TEXT_NODE) {
+          if (!node.nodeValue.trim() && /[\r\n]/.test(node.nodeValue)) return
+          fragment.append(document.createTextNode(node.nodeValue || ''))
+          return
+        }
         if (node.nodeType !== Node.ELEMENT_NODE || node.hasAttribute('data-composer-chrome') || ['SCRIPT', 'STYLE'].includes(node.tagName)) return
         if (node.tagName === 'BR') { addBreak(); return }
         if (node.tagName === 'IMG') {
@@ -766,7 +770,9 @@ createApp({
         const block = ['DIV', 'P', 'LI', 'BLOCKQUOTE'].includes(node.tagName)
         if (block && fragment.childNodes.length) addBreak()
         for (const child of node.childNodes) walk(child)
-        if (block && node.nextSibling && node.nextSibling.nodeName !== 'BR') addBreak()
+        let nextSibling = node.nextSibling
+        while (nextSibling?.nodeType === Node.TEXT_NODE && !nextSibling.nodeValue.trim() && /[\r\n]/.test(nextSibling.nodeValue)) nextSibling = nextSibling.nextSibling
+        if (block && nextSibling && nextSibling.nodeName !== 'BR') addBreak()
       }
       for (const child of source.body.childNodes) walk(child)
       if (!images.length) {
