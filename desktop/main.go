@@ -10,6 +10,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/windows"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"websocket_chat_go/desktop/internal/client"
 )
@@ -23,6 +24,11 @@ func main() {
 		log.Fatal(err)
 	}
 	root = filepath.Join(root, "WebsocketChat")
+	webviewPath := filepath.Join(root, "WebView2")
+	if err := os.MkdirAll(webviewPath, 0700); err != nil {
+		log.Printf("无法创建 WebView2 数据目录 %q，将使用系统默认目录：%v", webviewPath, err)
+		webviewPath = ""
+	}
 	path := filepath.Join(root, "settings.json")
 	config, err := client.Load(path)
 	if err != nil {
@@ -38,6 +44,7 @@ func main() {
 		AssetServer:      &assetserver.Options{Assets: assets, Handler: http.HandlerFunc(app.serveHTTP)},
 		OnStartup:        app.startup, OnShutdown: app.shutdown, Bind: []interface{}{app},
 		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "5ac5da33-3af2-4e70-a638-f883d41f1026", OnSecondInstanceLaunch: func(options.SecondInstanceData) { runtime.WindowUnminimise(app.ctx); runtime.WindowShow(app.ctx) }},
+		Windows: &windows.Options{WebviewUserDataPath: webviewPath, WebviewGpuIsDisabled: true, Theme: windows.Light},
 	})
 	if err != nil {
 		log.Fatal(err)
