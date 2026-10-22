@@ -13,7 +13,7 @@ import { availableInitials, filterCandidates, groupByInitial, keepSelectable, OT
 import { formatBytes, mediaPreview, mediaURL, validateMediaFile } from './media.js'
 import { collectImages, hasTransferableFiles, prepareImage } from './image-input.js'
 import { hasBlocks, messageSegments, nextImageIndex } from './composer-blocks.js'
-import { caretRange, collectPieces, hasContent, insertImageAtCaret, piecesToBlocks, piecesToText, placeCaretAfter, removeImageFromComposer, renderInto, textBeforeCaret } from './composer-dom.js'
+import { caretRange, collectPieces, deleteImageNearCaret, hasContent, imageIDsIn, insertImageAtCaret, piecesToBlocks, piecesToText, placeCaretAfter, removeImageFromComposer, renderInto, textBeforeCaret } from './composer-dom.js'
 import { installEmojiPicker } from './emoji-picker.js'
 import { useMessageActions } from './message-actions.js'
 import { api, uploadMedia } from './api.js'
@@ -789,7 +789,29 @@ createApp({
       const root = draftArea.value
       return root ? hasContent(collectPieces(root)) : false
     }
+    // Keep uploads owned by the component in step with edits the browser performs
+    // itself, such as cutting a selected picture or deleting a selected range.
+    function syncComposerImagesWithDom() {
+      const ids = new Set(imageIDsIn(draftArea.value))
+      const removed = composerImages.value.filter(image => !ids.has(image.mediaId))
+      if (!removed.length) return
+      for (const image of removed) if (image.previewURL) URL.revokeObjectURL(image.previewURL)
+      composerImages.value = composerImages.value.filter(image => ids.has(image.mediaId))
+    }
     function onComposerInput() {
+      syncComposerImagesWithDom()
+      syncDraftFromDom()
+      updateMentionState()
+    }
+    function onComposerKeydown(event) {
+      if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return
+      if (event.key !== 'Backspace' && event.key !== 'Delete') return
+      const mediaId = deleteImageNearCaret(draftArea.value, window.getSelection(), event.key === 'Delete' ? 'forward' : 'backward')
+      if (!mediaId) return
+      event.preventDefault()
+      const image = composerImages.value.find(entry => entry.mediaId === mediaId)
+      if (image?.previewURL) URL.revokeObjectURL(image.previewURL)
+      composerImages.value = composerImages.value.filter(entry => entry.mediaId !== mediaId)
       syncDraftFromDom()
       updateMentionState()
     }
