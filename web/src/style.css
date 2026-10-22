@@ -315,3 +315,12 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .member-self { flex: none; padding: 1px 6px; border-radius: 4px; color: var(--accent-dark); background: #f1e6da; font-size: 10px; font-weight: 800; }
 .empty-member { margin: 0; padding: 14px 10px; color: var(--muted); font-size: 13px; text-align: center; }
 .member-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
+.composer { position: relative; gap: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.composer::before { position: absolute; inset: 0 0 auto; height: 38px; border-bottom: 1px solid #f0e9e1; background: #fffdf9; content: ''; pointer-events: none; }
+.composer .media-button { position: absolute; z-index: 1; top: 4px; left: 8px; width: 30px; height: 30px; margin: 0; border: 0; border-radius: 7px; }
+.composer .media-button:hover { background: #f1e6da; }
+.composer > div:last-child { min-height: 46px; justify-content: flex-end; gap: 8px; padding: 6px 10px; border-top: 1px solid #f0e9e1; background: #fffdf9; }
+.composer > div:last-child > span { margin-right: auto; }
+.rich-composer { min-height: 130px; max-height: 260px; padding: 48px 14px 14px; border: 0; border-radius: 0; }
+.rich-composer:focus { box-shadow: none; }
