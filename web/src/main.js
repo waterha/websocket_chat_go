@@ -629,14 +629,14 @@ createApp({
     // Uploads images and inserts each one as a real picture at the caret, so several
     // images can be interleaved with text in the order they are added and the draft
     // reads exactly as the message will. Nothing is sent here.
-    async function acceptImages(files) {
+    async function acceptImages(files, placeholders = []) {
       const id = active.value
       if (!id || !files.length) return
       if (pendingSend.value?.conversation_id === id) { showError({ message: '上一条发送结果未确认，请先恢复或放弃' }); return }
       const version = epoch
       uploadBusy.value = true
       try {
-        for (const candidate of files) {
+        for (const [fileIndex, candidate] of files.entries()) {
           // One message holds at most 20 segments on the server, and each image is
           // one segment, so the composer stops at that many images.
           if (composerImages.value.length >= MAX_COMPOSER_IMAGES) {
@@ -645,7 +645,7 @@ createApp({
           }
           const prepared = await prepareImage(candidate, convertImageToPNG)
           const check = validateMediaFile(prepared)
-          if (!check.ok) { showError({ message: check.error }); continue }
+          if (!check.ok) { placeholders[fileIndex]?.remove(); showError({ message: check.error }); continue }
           const uploaded = await uploadMedia(id, prepared)
           if (version !== epoch || active.value !== id) return
           const index = nextImageIndex(composerImages.value)
@@ -660,7 +660,9 @@ createApp({
           // pasted it.
           const root = draftArea.value
           if (root) {
-            const range = caretRange(root, window.getSelection())
+            const placeholder = placeholders[fileIndex]
+            const range = placeholder?.isConnected ? document.createRange() : caretRange(root, window.getSelection())
+            if (placeholder?.isConnected) range.selectNode(placeholder)
             const chip = insertImageAtCaret(root, range, image)
             placeCaretAfter(root, chip, window.getSelection())
             root.focus()
@@ -668,7 +670,13 @@ createApp({
           }
         }
       } catch (cause) { if (version === epoch) showError(cause) }
-      finally { if (version === epoch) uploadBusy.value = false }
+      finally {
+        if (version === epoch) {
+          for (const placeholder of placeholders) placeholder.remove()
+          if (placeholders.length && active.value === id) syncDraftFromDom()
+          uploadBusy.value = false
+        }
+      }
     }
     // Removing an image drops its picture from the draft as well as its entry.
     function removeComposerImage(image) {
@@ -719,12 +727,70 @@ createApp({
       mentionQuery.value = null
       mentionList.value = []
     }
+    function pasteRichHTML(html) {
+      const source = new DOMParser().parseFromString(html, 'text/html')
+      const fragment = document.createDocumentFragment()
+      const files = []
+      const placeholders = []
+      const addBreak = () => {
+        if (fragment.lastChild?.nodeName !== 'BR') fragment.append(document.createElement('br'))
+      }
+      const walk = node => {
+        if (node.nodeType === Node.TEXT_NODE) { fragment.append(document.createTextNode(node.nodeValue || '')); return }
+        if (node.nodeType !== Node.ELEMENT_NODE) return
+        if (node.tagName === 'BR') { addBreak(); return }
+        if (node.tagName === 'IMG') {
+          const match = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/is.exec(node.getAttribute('src') || '')
+          if (!match || match[2].length > 14 * 1024 * 1024) return
+          const bytes = Uint8Array.from(atob(match[2].replace(/\s/g, '')), character => character.charCodeAt(0))
+          const name = (node.getAttribute('alt') || 'pasted.png').replace(/[\\/:*?"<>|]/g, '_').slice(0, 128) || 'pasted.png'
+          const placeholder = document.createElement('span')
+          placeholder.setAttribute('contenteditable', 'false')
+          placeholder.setAttribute('data-composer-chrome', '')
+          placeholder.setAttribute('data-rich-paste-image', String(files.length))
+          placeholder.textContent = '图片加载中…'
+          files.push(new File([bytes], name, { type: match[1] }))
+          placeholders.push(placeholder)
+          fragment.append(placeholder)
+          return
+        }
+        const block = ['DIV', 'P', 'LI', 'BLOCKQUOTE'].includes(node.tagName)
+        if (block && fragment.childNodes.length) addBreak()
+        for (const child of node.childNodes) walk(child)
+        if (block && node.nextSibling && node.nextSibling.nodeName !== 'BR') addBreak()
+      }
+      for (const child of source.body.childNodes) walk(child)
+      if (!files.length) return false
+      const root = draftArea.value
+      if (!root) return false
+      const range = caretRange(root, window.getSelection())
+      range.deleteContents()
+      const last = fragment.lastChild
+      range.insertNode(fragment)
+      if (last) {
+        range.setStartAfter(last)
+        range.collapse(true)
+        const selection = window.getSelection()
+        selection.removeAllRanges()
+        selection.addRange(range)
+      }
+      root.focus()
+      root.dispatchEvent(new window.Event('input', { bubbles: true }))
+      acceptImages(files, placeholders).catch(showError)
+      return true
+    }
     // Pasting an image keeps it out of the text box and holds it for sending.
     function onComposerPaste(event) {
       const images = collectImages(event.clipboardData)
-      if (!images.length) return
-      event.preventDefault()
-      acceptImages(images).catch(showError)
+      if (images.length) {
+        event.preventDefault()
+        acceptImages(images).catch(showError)
+        return
+      }
+      const html = event.clipboardData?.getData('text/html') || ''
+      if (html.includes('data:image/') && pasteRichHTML(html)) {
+        event.preventDefault()
+      }
     }
     function onDragOver(event) {
       if (!active.value || !hasTransferableFiles(event.dataTransfer)) return
