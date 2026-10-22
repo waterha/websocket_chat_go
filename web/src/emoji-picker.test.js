@@ -1,10 +1,14 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import { JSDOM } from 'jsdom'
 import { installEmojiPicker } from './emoji-picker.js'
 
-test('emoji picker inserts an emoji at the saved caret', () => {
+test('emoji picker stays hidden until opened and inserts an emoji at the saved caret', () => {
   const dom = new JSDOM('<form class="composer"><div contenteditable="true">AB</div><div><span>Send</span></div></form>')
+  const style = dom.window.document.createElement('style')
+  style.textContent = readFileSync(new URL('./style.css', import.meta.url), 'utf8')
+  dom.window.document.head.append(style)
   const originalDocument = globalThis.document
   const originalWindow = globalThis.window
   globalThis.document = dom.window.document
@@ -21,9 +25,18 @@ test('emoji picker inserts an emoji at the saved caret', () => {
     installEmojiPicker(editor)
     const picker = dom.window.document.querySelector('.emoji-picker')
     const toggle = picker.querySelector('.emoji-picker-toggle')
+    const grid = picker.querySelector('.emoji-picker-grid')
+    assert.equal(toggle.getAttribute('aria-expanded'), 'false')
+    assert.equal(dom.window.getComputedStyle(grid).display, 'none')
     const down = new dom.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true })
     toggle.dispatchEvent(down)
     assert.equal(down.defaultPrevented, true)
+    toggle.click()
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true')
+    assert.equal(dom.window.getComputedStyle(grid).display, 'grid')
+    toggle.click()
+    assert.equal(toggle.getAttribute('aria-expanded'), 'false')
+    assert.equal(dom.window.getComputedStyle(grid).display, 'none')
     toggle.click()
     picker.querySelector('.emoji-option').click()
 
@@ -31,6 +44,7 @@ test('emoji picker inserts an emoji at the saved caret', () => {
     assert.equal(inputEvents, 1)
     assert.equal(picker.classList.contains('open'), false)
     assert.equal(toggle.getAttribute('aria-expanded'), 'false')
+    assert.equal(dom.window.getComputedStyle(grid).display, 'none')
   } finally {
     globalThis.document = originalDocument
     globalThis.window = originalWindow
