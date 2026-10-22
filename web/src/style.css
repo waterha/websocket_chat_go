@@ -316,10 +316,17 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .empty-member { margin: 0; padding: 14px 10px; color: var(--muted); font-size: 13px; text-align: center; }
 .member-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 
-.composer { position: relative; gap: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.composer { position: relative; gap: 0; overflow: visible; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .composer::before { position: absolute; inset: 0 0 auto; height: 38px; border-bottom: 1px solid #f0e9e1; background: #fffdf9; content: ''; pointer-events: none; }
 .composer .media-button { position: absolute; z-index: 1; top: 4px; left: 8px; width: 30px; height: 30px; margin: 0; border: 0; border-radius: 7px; }
 .composer .media-button:hover { background: #f1e6da; }
+.emoji-picker { position: absolute; z-index: 2; top: 4px; left: 44px; }
+.emoji-picker-toggle { width: 30px; height: 30px; border: 0; border-radius: 7px; color: var(--ink); background: transparent; font-size: 21px; line-height: 1; }
+.emoji-picker-toggle:hover, .emoji-picker.open .emoji-picker-toggle { background: #f1e6da; }
+.emoji-picker-grid { position: absolute; top: 36px; left: 0; display: none; grid-template-columns: repeat(8, 34px); gap: 3px; width: max-content; padding: 8px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 10px 30px #302c2930; }
+.emoji-picker.open .emoji-picker-grid { display: grid; }
+.emoji-option { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 6px; background: transparent; font-size: 22px; }
+.emoji-option:hover, .emoji-option:focus-visible { background: #f1e6da; }
 .composer > div:last-child { min-height: 46px; justify-content: flex-end; gap: 8px; padding: 6px 10px; border-top: 1px solid #f0e9e1; background: #fffdf9; }
 .composer > div:last-child > span { margin-right: auto; }
 .rich-composer { min-height: 130px; max-height: 260px; padding: 48px 14px 14px; border: 0; border-radius: 0; }
