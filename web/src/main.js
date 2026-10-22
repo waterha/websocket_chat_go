@@ -678,8 +678,8 @@ createApp({
       finally {
         if (version === epoch) {
           for (const placeholder of placeholders) placeholder.remove()
-          if (placeholders.length && active.value === id) syncDraftFromDom()
           uploadBusy.value = false
+          if (active.value === id) syncDraftFromDom()
         }
       }
     }
@@ -691,9 +691,87 @@ createApp({
       composerImages.value = composerImages.value.filter(entry => entry.mediaId !== image.mediaId)
       syncDraftFromDom()
     }
+    let undoRoot = null
+    let undoHistory = []
+    let undoPosition = -1
+    let composerComposing = false
+    function composerSnapshot() {
+      const root = draftArea.value
+      const selection = window.getSelection()
+      const offsets = node => {
+        const path = []
+        while (node && node !== root) {
+          path.unshift(Array.prototype.indexOf.call(node.parentNode.childNodes, node))
+          node = node.parentNode
+        }
+        return path
+      }
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+      const caret = range && root.contains(range.startContainer) && root.contains(range.endContainer)
+        ? { start: offsets(range.startContainer), startOffset: range.startOffset, end: offsets(range.endContainer), endOffset: range.endOffset } : null
+      return { html: root.innerHTML, images: composerImages.value.map(image => ({ ...image })), caret }
+    }
+    function resetComposerUndo() {
+      undoHistory = draftArea.value ? [composerSnapshot()] : []
+      undoPosition = undoHistory.length - 1
+      composerComposing = false
+    }
+    function recordComposerUndo() {
+      const root = draftArea.value
+      if (!root || composerComposing || uploadBusy.value || root.querySelector('[data-rich-paste-image]')) return
+      const snapshot = composerSnapshot()
+      if (undoHistory[undoPosition]?.html === snapshot.html) return
+      undoHistory.splice(undoPosition + 1)
+      undoHistory.push(snapshot)
+      if (undoHistory.length > 100) undoHistory.shift()
+      undoPosition = undoHistory.length - 1
+    }
+    function onComposerUndoKey(event) {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing || event.key.toLowerCase() !== 'z') return
+      event.preventDefault()
+      const root = draftArea.value
+      if (composerComposing || uploadBusy.value || root.querySelector('[data-rich-paste-image]')) return
+      const position = undoPosition + (event.shiftKey ? 1 : -1)
+      const snapshot = undoHistory[position]
+      if (!snapshot) return
+      undoPosition = position
+      for (const image of composerImages.value) if (image.previewURL?.startsWith('blob:')) URL.revokeObjectURL(image.previewURL)
+      composerImages.value = snapshot.images.map(image => ({ ...image, previewURL: mediaURL(image.mediaId) }))
+      root.innerHTML = snapshot.html
+      for (const image of composerImages.value) {
+        const chip = [...root.querySelectorAll('[data-media-id]')].find(node => node.getAttribute('data-media-id') === image.mediaId)
+        if (chip?.querySelector('img')) chip.querySelector('img').src = image.previewURL
+      }
+      snapshot.html = root.innerHTML
+      draft.value = piecesToText(collectPieces(root))
+      root.focus()
+      const range = document.createRange()
+      const caret = snapshot.caret
+      const resolve = path => path.reduce((node, index) => node?.childNodes[index], root)
+      if (caret && resolve(caret.start) && resolve(caret.end)) {
+        range.setStart(resolve(caret.start), caret.startOffset)
+        range.setEnd(resolve(caret.end), caret.endOffset)
+      } else { range.selectNodeContents(root); range.collapse(false) }
+      const selection = window.getSelection()
+      selection.removeAllRanges()
+      selection.addRange(range)
+      updateMentionState()
+    }
+    function installComposerUndo(root) {
+      if (undoRoot === root) return
+      undoRoot = root
+      resetComposerUndo()
+      root.addEventListener('keydown', onComposerUndoKey)
+      root.addEventListener('compositionstart', () => { composerComposing = true })
+      root.addEventListener('compositionend', () => { composerComposing = false; recordComposerUndo() })
+      root.addEventListener('beforeinput', () => {
+        if (undoHistory[undoPosition]?.html === root.innerHTML) undoHistory[undoPosition].caret = composerSnapshot().caret
+      })
+    }
     function clearComposerImages() {
       for (const image of composerImages.value) if (image.previewURL) URL.revokeObjectURL(image.previewURL)
       composerImages.value = []
+      resetComposerUndo()
     }
     // The rich region is the source of truth while editing, so the draft string the
     // rest of the component reads is derived from it after every change.
@@ -701,6 +779,7 @@ createApp({
       const root = draftArea.value
       if (!root) return
       draft.value = piecesToText(collectPieces(root))
+      recordComposerUndo()
     }
     function composerBlocks() {
       const root = draftArea.value
@@ -899,6 +978,7 @@ createApp({
       if (!area) return
       area.textContent = applied.text
       draft.value = applied.text
+      recordComposerUndo()
       nextTick(() => {
         const root = draftArea.value
         if (!root) return
@@ -1462,6 +1542,7 @@ createApp({
         if (!(pending.blocks || []).length) {
           root.textContent = pending.content || ''
           draft.value = pending.content || ''
+          recordComposerUndo()
         }
       } else {
         draft.value = pending.content || ''
@@ -1483,7 +1564,9 @@ createApp({
       window.addEventListener('focus', onVisible)
       document.getElementById('app')?.addEventListener('click', onImageLinkClick)
     })
-    onUpdated(() => { if (draftArea.value) installEmojiPicker(draftArea.value) })
+    onUpdated(() => {
+      if (draftArea.value) { installEmojiPicker(draftArea.value); installComposerUndo(draftArea.value) }
+    })
     onUnmounted(() => { document.getElementById('app')?.removeEventListener('click', onImageLinkClick); resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
     return { messageActions, showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, inviteQuery, inviteInitial, inviteVisible, inviteGroups, inviteInitials, inviteSummary, inviteSelectedCount, inviteSelectedPeople, chooseInviteInitial, toggleInvite, selectAllInvites, clearInvites, resetInviteFilters, OTHER_INITIAL, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, discardPending, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, composerImages, removeComposerImage, clearComposerImages, syncDraftFromDom, onComposerInput, onComposerClick, onComposerBlur, restorePending, dragging, onComposerPaste, onDragOver, onDragLeave, onDrop, draftArea, startReply, replyPreview, replyAuthor, bodyOf, segmentsOf, usesBlocks, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
   },
