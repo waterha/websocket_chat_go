@@ -19,6 +19,7 @@
 - `conversation_members.last_read_seq/read_at`：用户在一个会话中的单调已读游标。
 - `device_cursors.received_seq`：同一用户、会话、设备的单调接收游标，绝不代替已读。
 - `message_outbox`：事务内记录成员快照和事件 JSON；未发布事件由单实例 worker 逐批扫描。`published_at` 不是设备确认。
+- `user_profiles`：迁移 `000019` 新增，以 `user_id` 为主键并引用 `users`（删除用户时级联删除）。保存本人维护的 `department`、`job_title` 和 `updated_at`；没有资料行时读取为空字符串。应用限制部门和职位各 100 字。它用于同事检索，不是企业组织架构或权限来源，不影响已有用户、会话和好友数据。
 - `friendships`：每个好友关系保存双向两行，同意好友申请时写入。
 - `friend_requests`：保存好友申请、可选申请信息和处理状态；同一方向同时只能有一条待处理申请。
 
