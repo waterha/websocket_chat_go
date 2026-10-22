@@ -324,3 +324,4 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .composer > div:last-child > span { margin-right: auto; }
 .rich-composer { min-height: 130px; max-height: 260px; padding: 48px 14px 14px; border: 0; border-radius: 0; }
 .rich-composer:focus { box-shadow: none; }
+.composer .rich-composer { display: block; }
