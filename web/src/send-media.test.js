@@ -31,7 +31,9 @@ globalThis.fetch = async (url, options = {}) => {
   const path = String(url)
   calls.push({ path, method: options.method || 'GET', body: options.body })
   let data = null
-  if (path.includes('/media')) {
+  if (path.includes('/api/v1/media/')) {
+    return { ok: true, blob: async () => new Blob([new Uint8Array(8)], { type: 'image/png' }) }
+  } else if (path.includes('/media')) {
     uploadCount++
     data = { id: 'media-' + uploadCount, file_name: 'pasted-' + uploadCount + '.png', media_type: 'image', content_type: 'image/png', byte_size: 8 }
   } else if (path.endsWith('/messages') && options.method === 'POST') {
@@ -177,6 +179,24 @@ test('pasting copied rich text uploads embedded images and sends every segment i
   assert.deepEqual(payload.blocks.map(block => block.type), ['text', 'image', 'text', 'image'])
   assert.equal(payload.blocks[0].text, 'xx')
   assert.equal(payload.blocks[2].text, 'duds')
+})
+
+test('pasting selected chat content removes bubble styling and full-width image links', async () => {
+  reset()
+  const event = pasteHTML('<div class="message-row mine"><div class="bubble" style="background-color: rgb(183, 101, 76)"><div class="block-stack"><p class="block-text">前文</p><a class="block-image" href="/api/v1/media/photo"><img src="/api/v1/media/photo" alt="photo.png" /></a><p class="block-text">后文</p></div></div></div>')
+  assert.equal(event.defaultPrevented, true, 'chat HTML should be handled by the composer')
+  await new Promise(resolve => realSetTimeout(resolve, 900))
+
+  assert.equal(composer().querySelector('.bubble, .message-row, .block-stack, .block-image'), null, 'chat styling or a full-width image link leaked into the draft')
+  assert.equal(composer().querySelector('[style*="background"]'), null, 'the copied bubble background leaked into the draft')
+  assert.ok(composer().querySelector('.composer-image img'), 'the selected image was not converted to a draft attachment')
+
+  await vm.send()
+  await new Promise(resolve => realSetTimeout(resolve, 400))
+  const payload = JSON.parse(String(posted()[0].body))
+  assert.deepEqual(payload.blocks.map(block => block.type), ['text', 'image', 'text'])
+  assert.equal(payload.blocks[0].text, '前文')
+  assert.equal(payload.blocks[2].text, '后文')
 })
 
 test('an image alone is a valid message', async () => {
