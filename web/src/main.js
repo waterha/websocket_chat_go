@@ -998,6 +998,9 @@ createApp({
       searchInput.value?.focus()
     }
     watch([active, me], () => {
+      messageActions.cancelSelection()
+      messageActions.closeMenu()
+      messageActions.closeForward()
       clearAttachment()
       // Switching conversation closes the window; its replies belong to the old one.
       closeThread()
