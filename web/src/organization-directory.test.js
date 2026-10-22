@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { JSDOM } from 'jsdom'
 
 const dom = new JSDOM('<body><div id="app"></div></body>', { url: 'http://127.0.0.1:4173' })
-for (const key of ['window', 'document', 'Element', 'HTMLElement', 'SVGElement', 'Node']) globalThis[key] = key === 'window' ? dom.window : dom.window[key]
+for (const key of ['window', 'document', 'Document', 'Element', 'HTMLElement', 'SVGElement', 'Node']) globalThis[key] = key === 'window' ? dom.window : dom.window[key]
 const { createApp, nextTick } = await import('vue/dist/vue.esm-bundler.js')
 const { OrganizationDirectory } = await import('./organization-directory.js')
 const bob = { id: 'bob', name: 'Bob', email: 'bob@example.test', department: '研发部', job_title: '工程师' }
