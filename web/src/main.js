@@ -632,7 +632,12 @@ createApp({
     async function acceptImages(files, placeholders = []) {
       const id = active.value
       if (!id || !files.length) return
-      if (pendingSend.value?.conversation_id === id) { showError({ message: '上一条发送结果未确认，请先恢复或放弃' }); return }
+      if (pendingSend.value?.conversation_id === id) {
+        for (const placeholder of placeholders) placeholder.remove()
+        if (placeholders.length) syncDraftFromDom()
+        showError({ message: '上一条发送结果未确认，请先恢复或放弃' })
+        return
+      }
       const version = epoch
       uploadBusy.value = true
       try {
