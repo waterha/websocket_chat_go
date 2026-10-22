@@ -155,7 +155,8 @@ export function useMessageActions({ messages, threadRoot, threadReplies, active,
         forwardQueue.value = forwardQueue.value.slice(1)
       }
       cancelSelection()
-      await syncConversation(target)
+      forwardPayloads.clear()
+      try { await syncConversation(target) } catch (cause) { showError(cause) }
     } catch (cause) {
       if (version === forwardVersion) forwardError.value = `${cause.message || '转发失败'}。已成功的消息不会重发，请重试剩余消息。`
     } finally { if (version === forwardVersion) forwardBusy.value = false }
