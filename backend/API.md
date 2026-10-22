@@ -1,5 +1,7 @@
 # API 参考
 
+通讯录仅限已登录账号，范围是当前服务器的全部其他账号；当前没有企业租户隔离。`q` 为最多 200 字的大小写不敏感字面子串（`%`、`_` 不作为通配符），`department` 为最多 100 字的精确部门名，留空表示不筛选；`offset` 默认 0，范围 0–1000000；`limit` 默认 50，范围 1–100，非法参数返回 400 `invalid_directory_query`。`departments` 为其他账号已填写的非空部门名，不受当前搜索条件影响；`entries` 中每项包含 `id,email,name,department,job_title`。继续加载时沿用筛选条件并传入 `next_offset`；成员资料实时变化时偏移分页不提供快照保证。工作资料由本人维护，不赋予企业权限，保存会去除首尾空白，拒绝控制字符和超过 100 字的字段（400 `invalid_work_profile`）；不能指定其他用户 ID。
+
 HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","message":"..."}}`。受保护接口使用 `session` HttpOnly Cookie。JSON 使用 `snake_case`；同一 Cookie 的会话主体由服务端确定，客户端不能指定发送者。请求体不超过 64 KiB（媒体上传例外）；请求的 `Origin` 必须匹配 `FRONTEND_ORIGIN`（CLI 请求可以省略）。
 
 ## 会话、CSRF 与限流
@@ -22,6 +24,9 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | GET | `/me` | 当前用户 |
 | PATCH | `/me` | 修改当前用户的用户名和用户账号：`{"name":"新用户名","email":"new@example.com"}`；用户 ID 不变，账号重复返回 `email_exists` |
 | GET | `/users` | 用户列表（当前最多 1000 条） |
+| GET | `/directory?q=工程师&department=研发部&offset=0&limit=50` | 同事通讯录，搜索姓名、账号、部门、职位；不含本人，无需好友关系；返回 `entries,departments,has_more,next_offset` |
+| GET | `/directory/me` | 本人的工作资料：`{"department":"","job_title":""}`；未填写时返回空字符串 |
+| PATCH | `/directory/me` | 保存本人的工作资料：`{"department":"研发部","job_title":"工程师"}`；两项均为替换值，可传空字符串清空 |
 | GET | `/friends` | 当前用户已添加的好友 |
 | POST | `/friends` | 发送好友申请：`{"user_id":"用户ID","message":"可选申请信息"}`；同一对用户的待处理申请重复提交返回原申请 |
 | GET | `/friends/requests` | 返回当前用户收到的待处理申请，以及自己发出的全部申请及状态 |
