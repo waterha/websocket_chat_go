@@ -133,7 +133,8 @@ test('copying a message with images writes embedded image data to the clipboard'
     const parts = writes[0][0].parts
     assert.ok(parts['text/html'])
     assert.match(await (await parts['text/html']).text(), /data:image\/png;base64,aW1hZ2U=/)
-    assert.match(await (await parts['text/html']).text(), /前<img/)
+    const html = await (await parts['text/html']).text()
+    assert.match(html, /<div class="block-stack"><p class="block-text">前<\/p><a class="block-image"><img[^>]+data:image\/png;base64,aW1hZ2U=[^>]*><\/a><p class="block-text">后<\/p><\/div>/)
     assert.equal(await (await parts['text/plain']).text(), '前\n[图片] image.png\n后')
   } finally {
     Object.defineProperty(dom.window.navigator, 'clipboard', { value: originalClipboard, configurable: true })
