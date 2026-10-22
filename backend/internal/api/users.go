@@ -35,6 +35,15 @@ func (server *Server) friends(writer http.ResponseWriter, request *http.Request,
 	respond(writer, 200, friends)
 }
 
+func (server *Server) directory(writer http.ResponseWriter, request *http.Request, caller identity) {
+	entries, err := server.Services.Auth.Directory(request.Context(), caller.account.ID)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, entries)
+}
+
 func (server *Server) addFriend(writer http.ResponseWriter, request *http.Request, caller identity) {
 	var input model.AddFriendInput
 	if !decode(writer, request, &input) {
