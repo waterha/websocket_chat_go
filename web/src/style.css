@@ -172,8 +172,22 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .reply-quote span { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bubble.recalled { color: var(--muted); background: #f0eee9; font-style: italic; }
 .mine .bubble.recalled { color: #fff; background: #b9a894; }
-.message-actions { display: flex; gap: 10px; margin-top: 5px; }
-.message-actions .danger { color: #a33; }
+.message-context-menu { position: fixed; z-index: 120; display: grid; width: 156px; padding: 5px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); box-shadow: 0 12px 32px #302c2940; }
+.message-context-menu button { width: 100%; padding: 9px 11px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); text-align: left; }
+.message-context-menu button:hover, .message-context-menu button:focus-visible { background: #f1e6da; }
+.message-context-menu button.danger { color: #a33; }
+.message-selected { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 5px; }
+.message-selectable, .thread-window-item.message-selectable, .thread-window-root.message-selectable { cursor: pointer; }
+.message-select-toggle { display: grid; place-items: center; flex: 0 0 22px; width: 22px; height: 22px; margin: 14px 3px 0; border: 1px solid var(--line); border-radius: 50%; color: white; background: var(--accent); }
+.message-selection-bar { position: sticky; z-index: 10; bottom: 0; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--line); background: #fffdf9f2; box-shadow: 0 -5px 20px #302c2910; }
+.message-selection-bar > span { margin-right: auto; color: var(--muted); font-size: 13px; }
+.forward-backdrop { z-index: 110; }
+.forward-modal { display: grid; gap: 16px; }
+.forward-modal .subtle { margin: 0; }
+.forward-modal label { display: grid; gap: 7px; font-size: 13px; }
+.forward-modal select { min-height: 42px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; color: var(--ink); background: #fff; }
+.forward-modal .profile-actions { margin-top: 4px; }
+.forward-error { margin: 0; padding: 10px; border-radius: 8px; color: #8f4735; background: #fbe9e6; font-size: 12px; }
 .reply-banner { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; background: #fffaf2; }
 .reply-banner-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .reply-banner-text strong { color: var(--accent-dark); font-size: 11px; }
