@@ -1,5 +1,6 @@
 ﻿param(
     [switch]$NoBrowser,
+    [switch]$NoFrontend,
     [switch]$SkipBuild
 )
 
@@ -89,9 +90,11 @@ if (Test-TcpPort $BackendPort) {
 }
 
 # ---- frontend -----------------------------------------------------------
-Ensure-FrontendDependencies
+if (-not $NoFrontend) { Ensure-FrontendDependencies }
 
-if (Test-TcpPort $FrontendPort) {
+if ($NoFrontend) {
+    Write-Step '桌面模式使用系统 WebView，不启动浏览器前端服务'
+} elseif (Test-TcpPort $FrontendPort) {
     if (Test-HttpOk $WebUrl) {
         Write-Ok "前端已在运行（端口 $FrontendPort）"
     } else {
@@ -123,12 +126,16 @@ $Elapsed = [int]((Get-Date) - $StartedAt).TotalSeconds
 Write-Host ''
 Write-Host "启动完成，用时 $Elapsed 秒" -ForegroundColor Green
 Write-Host ''
-Write-Host "  前端页面    $WebUrl" -ForegroundColor Cyan
 Write-Host "  后端接口    http://127.0.0.1:$BackendPort" -ForegroundColor DarkCyan
 Write-Host "  健康检查    http://127.0.0.1:$BackendPort/healthz" -ForegroundColor DarkCyan
 Write-Host "  数据库      PostgreSQL 127.0.0.1:$PgPort / $DbName" -ForegroundColor DarkCyan
 Write-Host "  缓存        $RedisAddr" -ForegroundColor DarkCyan
 Write-Host ''
-Write-Host '  关闭服务请双击 停止项目.bat；窗口会自动：后端、前端（最小化，日志在里面）。' -ForegroundColor DarkGray
+if ($NoFrontend) {
+    Write-Host '  关闭本地服务请双击 停止项目.bat。桌面应用可单独退出。' -ForegroundColor DarkGray
+} else {
+    Write-Host "  前端页面    $WebUrl" -ForegroundColor Cyan
+    Write-Host '  关闭服务请双击 停止项目.bat。' -ForegroundColor DarkGray
+}
 
 if (-not $NoBrowser) { Start-Process $WebUrl }
