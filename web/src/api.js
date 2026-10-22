@@ -1,3 +1,5 @@
+import { isDesktop } from './desktop.js'
+
 // The CSRF token is issued in a readable cookie at login and echoed back in a
 // header on every state-changing request. Safe methods do not need it.
 function csrfToken() {
@@ -45,7 +47,7 @@ export async function uploadMedia(conversationID, file) {
   const response = await fetch(`/api/v1/conversations/${conversationID}/media?${params}`, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: requestHeaders({ 'Content-Type': file.type }),
+    headers: requestHeaders({ 'Content-Type': file.type, ...(isDesktop() ? { 'X-Upload-Size': String(file.size) } : {}) }),
     body: file,
   })
   const body = await response.json().catch(() => ({}))
