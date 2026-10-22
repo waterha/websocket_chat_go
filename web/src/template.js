@@ -4,7 +4,7 @@
 export const template = `\n    <div v-if="!me" class="auth-layout">
       <div class="auth-card">
         <div class="brand-mark">✦</div><p class="eyebrow">OPEN SOURCE · REAL-TIME</p>
-        <h1>让沟通，自然发生。</h1><p class="subtle">websocket_chat_go · 开源即时通讯初版</p>
+        <h1>让团队协作，自然发生。</h1><p class="subtle">企业内部沟通 · 同事通讯录 · 团队群聊</p>
         <form @submit.prevent="authenticate">
           <label v-if="mode === 'register'">昵称<input v-model="name" required maxlength="64" placeholder="你的称呼" /></label>
           <label>邮箱<input v-model="email" type="email" required maxlength="254" placeholder="you@example.com" /></label>
@@ -17,6 +17,7 @@ export const template = `\n    <div v-if="!me" class="auth-layout">
     <div v-else class="layout">
       <aside class="sidebar">
         <header class="sidebar-head"><span class="brand-mark small">✦</span><div><strong>websocket_chat_go</strong><small>让团队更靠近</small></div></header>
+        <OrganizationDirectory @chat="openDirect" />
           <div class="side-title"><span>{{ conversationFilter === 'current' ? '当前会话' : conversationFilter === 'friends' ? '好友' : '群聊' }}</span><div class="side-actions"><button @click="openGlobalSearch" title="全局搜索">搜索</button><button @click="openAddUser" title="添加用户">添加</button><button @click="openFriendRequests" title="好友申请">申请<span v-if="pendingIncomingRequests.length" class="request-count">{{ pendingIncomingRequests.length > 99 ? '99+' : pendingIncomingRequests.length }}</span></button><button @click="openCreate" title="创建群聊">建群</button></div></div>
           <div class="conversation-tabs"><button :class="{ active: conversationFilter === 'current' }" @click="conversationFilter = 'current'">当前</button><button :class="{ active: conversationFilter === 'friends' }" @click="conversationFilter = 'friends'">好友</button><button :class="{ active: conversationFilter === 'group' }" @click="conversationFilter = 'group'">群聊</button></div>
           <div class="directory-search" role="search" aria-label="查找好友和群聊"><Search :size="17" aria-hidden="true" /><input ref="directoryInput" v-model="directoryQuery" type="search" maxlength="100" :placeholder="directoryPlaceholder" :aria-label="directoryPlaceholder" @keydown.esc.prevent="clearDirectorySearch" /><button v-if="directoryQuery" type="button" class="icon-button" title="清除搜索" aria-label="清除列表搜索" @click="clearDirectorySearch"><X :size="16" aria-hidden="true" /></button></div>
