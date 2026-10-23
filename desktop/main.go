@@ -86,10 +86,19 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	apiMiddleware := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+			if strings.HasPrefix(request.URL.Path, "/api/v1/") {
+				app.serveHTTP(writer, request)
+				return
+			}
+			next.ServeHTTP(writer, request)
+		})
+	}
 	err = wails.Run(&options.App{
 		Title: "协作聊天", Width: 1280, Height: 820, MinWidth: 900, MinHeight: 600,
 		BackgroundColour: options.NewRGB(247, 242, 234),
-		AssetServer:      &assetserver.Options{Assets: assets, Handler: http.HandlerFunc(app.serveHTTP)},
+		AssetServer:      &assetserver.Options{Assets: assets, Handler: http.HandlerFunc(app.serveHTTP), Middleware: apiMiddleware},
 		OnStartup:        app.startup, OnShutdown: app.shutdown, Bind: []interface{}{app},
 		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "5ac5da33-3af2-4e70-a638-f883d41f1026", OnSecondInstanceLaunch: func(options.SecondInstanceData) { runtime.WindowUnminimise(app.ctx); runtime.WindowShow(app.ctx) }},
 		Windows:            &windows.Options{WebviewUserDataPath: webviewPath, WebviewGpuIsDisabled: true, Theme: windows.Light},
