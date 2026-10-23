@@ -17,8 +17,13 @@ $PgPort = [int](Get-EnvValue 'PGPORT' '5433')
 $DbUser = Get-EnvValue 'PGUSER' 'websocket_chat_go'
 $DbName = Get-EnvValue 'PGDATABASE' 'websocket_chat_go'
 $DbPassword = Get-EnvValue 'POSTGRES_PASSWORD' ''
-$RedisPort = [int](Get-EnvValue 'REDIS_PORT' '6379')
 $RedisAddr = Get-EnvValue 'REDIS_ADDR' '127.0.0.1:6379'
+$RedisPortText = Get-EnvValue 'REDIS_PORT' ''
+if (-not $RedisPortText -and $RedisAddr -match ':(\d+)\s*$') { $RedisPortText = $Matches[1] }
+if (-not $RedisPortText -or $RedisPortText -notmatch '^\d+$') {
+    throw "无法从 REDIS_ADDR/REDIS_PORT 解析 Redis 端口：$RedisAddr"
+}
+$RedisPort = [int]$RedisPortText
 $WebUrl = Get-EnvValue 'FRONTEND_ORIGIN' 'http://127.0.0.1:4173'
 
 $HttpAddr = Get-EnvValue 'HTTP_ADDR' '127.0.0.1:8080'

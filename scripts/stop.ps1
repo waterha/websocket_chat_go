@@ -6,7 +6,10 @@ Write-Host '停止 IM 项目服务' -ForegroundColor Cyan
 Write-Host '================' -ForegroundColor Cyan
 
 $PgPort = [int](Get-EnvValue 'PGPORT' '5433')
-$RedisPort = [int](Get-EnvValue 'REDIS_PORT' '6379')
+$RedisAddr = Get-EnvValue 'REDIS_ADDR' '127.0.0.1:6379'
+$RedisPortText = Get-EnvValue 'REDIS_PORT' ''
+if (-not $RedisPortText -and $RedisAddr -match ':(\d+)\s*$') { $RedisPortText = $Matches[1] }
+$RedisPort = if ($RedisPortText -match '^\d+$') { [int]$RedisPortText } else { 6379 }
 $HttpAddr = Get-EnvValue 'HTTP_ADDR' '127.0.0.1:8080'
 $BackendPort = 8080
 if ($HttpAddr -match ':(\d+)\s*$') { $BackendPort = [int]$Matches[1] }
