@@ -1,4 +1,4 @@
-param([switch]$SkipInstall)
+﻿param([switch]$SkipInstall)
 
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot

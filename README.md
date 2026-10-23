@@ -34,19 +34,19 @@ Go + PostgreSQL + Redis + Vue 的企业内部协作项目，提供网页版和�
 
 ## Windows 桌面端
 
-可直接双击根目录的 `启动桌面端.bat`，在本机启动聊天服务并打开桌面客户端；或运行 `构建桌面端.bat` 生成独立 Windows 程序及分发包。桌面端使用 Go + Wails 和系统 WebView，客户端压缩包约数 MB，数据库与 Redis 保留在服务端。构建要求、服务器设置与分发流程见 [desktop/README.md](desktop/README.md)。
+桌面端使用 Go + Wails 和系统 WebView。构建完成后直接运行 `desktop/build/bin/WebsocketChat.exe`；客户端不内置数据库，连接已运行的聊天服务。构建要求、服务器设置与分发流程见 [desktop/README.md](desktop/README.md)。
 
 ## 本地运行
 
 需要 Go 1.26 和 Node.js 22+。数据库和缓存由启动脚本在项目内的 `.dev/` 目录中准备，不需要提前安装 PostgreSQL 或 Redis。
 
-**双击根目录的 `启动项目.bat`** 即可：
+运行 `scripts/start.ps1` 即可：
 
 - 首次运行会初始化独立的 PostgreSQL 数据目录、下载便携版 Redis、安装前端依赖（不会触碰机器上已有的数据库）；
 - 随后启动 PostgreSQL、Redis、后端和前端，健康检查通过后自动打开 `http://127.0.0.1:4173`；
 - 已在运行的服务自动跳过，不会重复启动。
 
-停止时双击 `停止项目.bat`，会关闭本项目的前端、后端、数据库和缓存。数据、日志和编译产物都在 `.dev/`（已被 git 忽略），删除该目录即可重置本地环境。
+停止时运行 `scripts/stop.ps1`，会关闭本项目的前端、后端、数据库和缓存。数据、日志和编译产物都在 `.dev/`（已被 git 忽略），删除该目录即可重置本地环境。
 
 命令行等价用法：
 

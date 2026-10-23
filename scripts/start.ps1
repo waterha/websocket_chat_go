@@ -132,10 +132,10 @@ Write-Host "  数据库      PostgreSQL 127.0.0.1:$PgPort / $DbName" -Foreground
 Write-Host "  缓存        $RedisAddr" -ForegroundColor DarkCyan
 Write-Host ''
 if ($NoFrontend) {
-    Write-Host '  关闭本地服务请双击 停止项目.bat。桌面应用可单独退出。' -ForegroundColor DarkGray
+    Write-Host '  关闭本地服务请运行 scripts\stop.ps1。桌面应用可单独退出。' -ForegroundColor DarkGray
 } else {
     Write-Host "  前端页面    $WebUrl" -ForegroundColor Cyan
-    Write-Host '  关闭服务请双击 停止项目.bat。' -ForegroundColor DarkGray
+    Write-Host '  关闭服务请运行 scripts\stop.ps1。' -ForegroundColor DarkGray
 }
 
 if (-not $NoBrowser) { Start-Process $WebUrl }

@@ -2,11 +2,15 @@
 
 桌面程序使用 **Go + Wails + Windows WebView2**。它复用 `web/` 中的完整聊天应用，以系统 WebView 显示界面，不将 Chromium 打包进程序。数据库、Redis 和业务 API 仍由服务端托管；桌面程序保存服务器地址，登录后连接现有服务。
 
-双击项目根目录的 `启动桌面端.bat` 可在本机启动服务并打开桌面窗口。此操作会用现有本机开发服务：PostgreSQL、Redis、Go、Node.js 和 Microsoft Edge WebView2 Runtime。
+构建完成后直接双击 `desktop/build/bin/WebsocketChat.exe` 即可运行。该程序独立运行，不会替你启动本地数据库。
 
-需要手动打开已有服务器时，双击 `desktop/build/bin/WebsocketChat.exe` 即可。该程序独立运行，不会替你启动本地数据库。
+使用 PowerShell 构建 Windows x64 可执行文件和分发压缩包：
 
-双击 `构建桌面端.bat` 可打包 Windows x64 可执行文件和分发压缩包：
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build-desktop.ps1
+```
+
+构建产物：
 
 - `desktop/build/bin/WebsocketChat.exe`
 - `desktop/build/bin/WebsocketChat-windows-amd64.zip`
