@@ -31,6 +31,9 @@ func (chat *Chat) History(ctx context.Context, userID, conversationID string, be
 	if err = chat.attachThreads(ctx, messages); err != nil {
 		return nil, err
 	}
+	if err = chat.attachReactions(ctx, chat.Store.DB, messages); err != nil {
+		return nil, err
+	}
 	return messages, rows.Err()
 }
 
@@ -85,6 +88,9 @@ func (chat *Chat) Sync(ctx context.Context, userID, conversationID string, after
 	}
 	page.HasMore = page.NextSeq < lastSeq
 	if err = chat.attachThreads(ctx, page.Messages); err != nil {
+		return page, err
+	}
+	if err = chat.attachReactions(ctx, chat.Store.DB, page.Messages); err != nil {
 		return page, err
 	}
 	return page, rows.Err()

@@ -99,6 +99,22 @@ type Message struct {
 	// RecalledAt is set once the sender recalls the message. Callers must treat
 	// a recalled message's content as unavailable and render a placeholder.
 	RecalledAt *time.Time `json:"recalled_at,omitempty"`
+	// Reactions aggregates the emoji responses the message received. Each entry
+	// lists every reacting user so a client can highlight its own reaction.
+	Reactions []Reaction `json:"reactions,omitempty"`
+}
+
+// Reaction is one emoji with everyone who reacted to the message with it.
+type Reaction struct {
+	Emoji string   `json:"emoji"`
+	Count int      `json:"count"`
+	Users []string `json:"users"`
+}
+
+// ReactionInput names the emoji to add or remove. The caller is taken from the
+// session.
+type ReactionInput struct {
+	Emoji string `json:"emoji"`
 }
 
 type SearchPage struct {

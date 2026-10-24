@@ -211,3 +211,9 @@ func noMessages(t *testing.T, client *peer) {
 		}
 	}
 }
+
+// addMembersResult adapts the two-value AddMembers signature for status checks.
+func addMembersResult(ctx context.Context, services *svc.ServiceContext, caller, conversation string, input model.AddMembersInput) error {
+	_, err := services.Chat.AddMembers(ctx, caller, conversation, input)
+	return err
+}

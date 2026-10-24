@@ -60,6 +60,26 @@ func (server *Server) handleCommand(ctx context.Context, client *realtime.Client
 		}
 		cursor, err := server.Services.Chat.MarkReceived(ctx, client.UserID, body.ConversationID, client.DeviceID, body.Seq)
 		return model.Event{Event: "message.received.ack", Data: cursor}, err
+	case "typing.send":
+		// Typing is ephemeral: it is relayed to the conversation's members
+		// directly and never touches the outbox, so a dropped frame costs
+		// nothing and the notification dies with the connection.
+		var body struct {
+			ConversationID string `json:"conversation_id"`
+		}
+		if err := parseJSON(input.Data, &body); err != nil {
+			return model.Event{}, err
+		}
+		members, err := server.Services.Chat.MemberIDs(ctx, client.UserID, body.ConversationID)
+		if err != nil {
+			return model.Event{}, err
+		}
+		event := model.Event{Event: "typing", Data: map[string]string{"conversation_id": body.ConversationID, "user_id": client.UserID}}
+		server.Services.Hub.Publish(members, event)
+		// The broadcast skips the publishing instance, which is correct here:
+		// the local hub already delivered the frame above.
+		_ = server.Services.Broadcast.Publish(ctx, members, event)
+		return model.Event{Event: "typing.ack", Data: map[string]string{"conversation_id": body.ConversationID}}, nil
 	case "ping":
 		return model.Event{Event: "pong", Data: map[string]any{"server_time": time.Now().UTC()}}, nil
 	default:

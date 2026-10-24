@@ -195,3 +195,32 @@ func (server *Server) send(writer http.ResponseWriter, request *http.Request, ca
 	}
 	respond(writer, status, item)
 }
+
+// react adds the caller's emoji response to one message and returns the
+// refreshed message.
+func (server *Server) react(writer http.ResponseWriter, request *http.Request, caller identity) {
+	var input model.ReactionInput
+	if !decode(writer, request, &input) {
+		return
+	}
+	message, err := server.Services.Chat.React(request.Context(), caller.account.ID, request.PathValue("id"), request.PathValue("message_id"), input.Emoji)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, message)
+}
+
+// unreact removes the caller's emoji response from one message.
+func (server *Server) unreact(writer http.ResponseWriter, request *http.Request, caller identity) {
+	var input model.ReactionInput
+	if !decode(writer, request, &input) {
+		return
+	}
+	message, err := server.Services.Chat.Unreact(request.Context(), caller.account.ID, request.PathValue("id"), request.PathValue("message_id"), input.Emoji)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, message)
+}
