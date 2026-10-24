@@ -11,6 +11,18 @@ const minimise = () => win()?.WindowMinimise?.()
 const toggleMaximise = () => { win()?.WindowToggleMaximise?.(); setTimeout(refreshMaximised, 150) }
 const closeWindow = () => win()?.WindowClose?.()
 const toggleAlwaysOnTop = () => { const next = !alwaysOnTop.value; win()?.WindowSetAlwaysOnTop?.(next); alwaysOnTop.value = next }
+let lastTitleBarClick = 0
+// Wails 的拖拽 CSS 不带双击最大化，这里补上：350ms 内两次按下即切换，窗口按钮除外。
+const onTitleBarMouseDown = event => {
+  if (event.target.closest?.('button')) { lastTitleBarClick = 0; return }
+  const now = Date.now()
+  if (now - lastTitleBarClick < 350) {
+    lastTitleBarClick = 0
+    toggleMaximise()
+  } else {
+    lastTitleBarClick = now
+  }
+}
 
 export const DesktopSettings = {
   props: { loggedIn: Boolean },
@@ -80,11 +92,11 @@ export const DesktopSettings = {
       bootstrap.value = { stage: 'running', message: '正在准备本机聊天服务…' }
       retryBootstrap()
     }
-    return { enabled, current, opened, serverURL, origin, busy, status, succeeded, bootstrap, open, serverChanged, act, retry, alwaysOnTop, maximised, minimise, toggleMaximise, closeWindow, toggleAlwaysOnTop }
+    return { enabled, current, opened, serverURL, origin, busy, status, succeeded, bootstrap, open, serverChanged, act, retry, alwaysOnTop, maximised, minimise, toggleMaximise, closeWindow, toggleAlwaysOnTop, onTitleBarMouseDown }
   },
   template: `
     <template v-if="enabled">
-      <header class="title-bar">
+      <header class="title-bar" @mousedown="onTitleBarMouseDown">
         <span class="title-bar-title"><span class="brand-mark small">✦</span>协作聊天</span>
         <div class="title-bar-actions">
           <button type="button" :class="{ active: alwaysOnTop }" :title="alwaysOnTop ? '取消置顶' : '窗口置顶'" :aria-label="alwaysOnTop ? '取消置顶' : '窗口置顶'" @click="toggleAlwaysOnTop"><Pin :size="15" /></button>

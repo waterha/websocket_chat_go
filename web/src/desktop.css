@@ -16,7 +16,7 @@
 .desktop-settings-status.success { color: #43694e; }
 
 /* 无边框窗口的自定义标题栏：可拖拽，按钮不参与拖拽 */
-.title-bar { height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); background: #fcf8f1; --wails-draggable: drag; }
+.title-bar { height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); background: #fcf8f1; --wails-draggable: drag; user-select: none; }
 .title-bar-title { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 13px; font-weight: 800; }
 .title-bar-actions { display: flex; align-items: center; gap: 2px; --wails-draggable: no-drag; }
 .title-bar-actions button { display: grid; place-items: center; width: 34px; height: 30px; padding: 0; border: 0; border-radius: 7px; color: var(--muted); background: transparent; }
