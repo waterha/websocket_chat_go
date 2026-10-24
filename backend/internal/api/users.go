@@ -116,6 +116,61 @@ func (server *Server) decideFriendRequest(writer http.ResponseWriter, request *h
 	respond(writer, 200, friendRequest)
 }
 
+// setFriendRemark updates the caller's private note for one friend.
+func (server *Server) setFriendRemark(writer http.ResponseWriter, request *http.Request, caller identity) {
+	var input model.FriendRemarkInput
+	if !decode(writer, request, &input) {
+		return
+	}
+	friend, err := server.Services.Auth.SetFriendRemark(request.Context(), caller.account.ID, request.PathValue("friend_id"), input.Remark)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, friend)
+}
+
+// deleteFriend ends a friendship in both directions; shared conversations stay.
+func (server *Server) deleteFriend(writer http.ResponseWriter, request *http.Request, caller identity) {
+	if err := server.Services.Auth.DeleteFriend(request.Context(), caller.account.ID, request.PathValue("friend_id")); err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, map[string]string{"id": request.PathValue("friend_id")})
+}
+
+// blocks lists the caller's blocked users.
+func (server *Server) blocks(writer http.ResponseWriter, request *http.Request, caller identity) {
+	blocks, err := server.Services.Auth.Blocks(request.Context(), caller.account.ID)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, blocks)
+}
+
+// block adds a user to the caller's block list.
+func (server *Server) block(writer http.ResponseWriter, request *http.Request, caller identity) {
+	var input model.BlockInput
+	if !decode(writer, request, &input) {
+		return
+	}
+	if err := server.Services.Auth.Block(request.Context(), caller.account.ID, input.UserID); err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 201, map[string]string{"id": input.UserID})
+}
+
+// unblock removes a user from the caller's block list.
+func (server *Server) unblock(writer http.ResponseWriter, request *http.Request, caller identity) {
+	if err := server.Services.Auth.Unblock(request.Context(), caller.account.ID, request.PathValue("user_id")); err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, map[string]string{"id": request.PathValue("user_id")})
+}
+
 func (server *Server) updateMe(writer http.ResponseWriter, request *http.Request, caller identity) {
 	var input model.ProfileInput
 	if !decode(writer, request, &input) {

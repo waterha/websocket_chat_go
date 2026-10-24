@@ -71,6 +71,16 @@ func (chat *Chat) Thread(ctx context.Context, userID, conversationID, rootID str
 		page.NextAfter = replies[len(replies)-1].Seq
 	}
 	page.Root = root
+	// Reactions live in their own table and are attached per page, keeping the
+	// hot message read paths free of correlated aggregates.
+	if err = chat.attachReactions(ctx, chat.Store.DB, page.Replies); err != nil {
+		return page, err
+	}
+	withRoot := []model.Message{page.Root}
+	if err = chat.attachReactions(ctx, chat.Store.DB, withRoot); err != nil {
+		return page, err
+	}
+	page.Root = withRoot[0]
 	return page, nil
 }
 

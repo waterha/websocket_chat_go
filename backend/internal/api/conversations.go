@@ -68,7 +68,18 @@ func (server *Server) addMembers(writer http.ResponseWriter, request *http.Reque
 	if !decode(writer, request, &input) {
 		return
 	}
-	if err := server.Services.Chat.AddMembers(request.Context(), caller.account.ID, request.PathValue("id"), input); err != nil {
+	result, err := server.Services.Chat.AddMembers(request.Context(), caller.account.ID, request.PathValue("id"), input)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, result)
+}
+
+// deleteConversation removes one conversation from the caller's own sidebar.
+// The other members keep theirs, and the next message restores it.
+func (server *Server) deleteConversation(writer http.ResponseWriter, request *http.Request, caller identity) {
+	if err := server.Services.Chat.DeleteConversation(request.Context(), caller.account.ID, request.PathValue("id")); err != nil {
 		fail(writer, err)
 		return
 	}

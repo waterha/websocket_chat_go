@@ -54,7 +54,7 @@ func messageColumnsFor(alias string) string {
 		`(SELECT jsonb_build_object('id',mm.id,'file_name',mm.file_name,'media_type',mm.media_type,'content_type',mm.content_type,'byte_size',mm.byte_size)
 	 FROM message_media mm WHERE mm.id=`+prefix("media_id")+`)`,
 		`(SELECT jsonb_build_object('id',r.id,'seq',r.seq,'sender_id',r.sender_id,'kind',r.kind,'recalled',r.recalled_at IS NOT NULL,
-		'media_type',COALESCE((SELECT mm.media_type FROM message_media mm WHERE mm.id=r.media_id),''),
+		'media_type',COALESCE((SELECT mm.media_type FROM message_media mm WHERE mm.id=`+prefix("media_id")+`),''),
 		'excerpt',CASE WHEN r.recalled_at IS NOT NULL THEN '' ELSE left(r.content,120) END)
 	 FROM messages r WHERE r.id=`+prefix("reply_to_id")+`)`,
 	)

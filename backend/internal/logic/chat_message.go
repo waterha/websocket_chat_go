@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"slices"
 	"strings"
+	"time"
 	"websocket_chat_go/backend/internal/model"
 )
 
@@ -132,6 +133,45 @@ func (chat *Chat) Send(ctx context.Context, userID string, input model.SendInput
 	}
 	if !member {
 		return model.Message{}, false, model.Fail(404, "not_found")
+	}
+	// A muted member of a muted group, or a member under a timed mute, cannot
+	// speak until an admin lifts the mute.
+	var role string
+	var mutedUntil *time.Time
+	var allMuted, dismissed bool
+	if err = tx.QueryRow(ctx, `SELECT cm.role,cm.muted_until,c.all_muted,c.dismissed_at IS NOT NULL FROM conversation_members cm JOIN conversations c ON c.id=cm.conversation_id
+		WHERE cm.conversation_id=$1 AND cm.user_id=$2`, input.ConversationID, userID).Scan(&role, &mutedUntil, &allMuted, &dismissed); err != nil {
+		return model.Message{}, false, err
+	}
+	if dismissed {
+		return model.Message{}, false, model.Fail(403, "conversation_dismissed")
+	}
+	if mutedUntil != nil && mutedUntil.After(time.Now()) {
+		return model.Message{}, false, model.Fail(403, "member_muted")
+	}
+	if allMuted && role == model.RoleMember {
+		return model.Message{}, false, model.Fail(403, "conversation_muted")
+	}
+	// Blocking only silences one-to-one traffic: a group is every member's room.
+	var conversationKind string
+	if err = tx.QueryRow(ctx, "SELECT kind FROM conversations WHERE id=$1", input.ConversationID).Scan(&conversationKind); err != nil {
+		return model.Message{}, false, err
+	}
+	if conversationKind == "direct" {
+		var otherID string
+		if err = tx.QueryRow(ctx, "SELECT user_id FROM conversation_members WHERE conversation_id=$1 AND user_id<>$2", input.ConversationID, userID).Scan(&otherID); err != nil {
+			return model.Message{}, false, err
+		}
+		if blocked, err := blockedBetween(ctx, tx, otherID, userID); err != nil {
+			return model.Message{}, false, err
+		} else if blocked {
+			return model.Message{}, false, model.Fail(403, "blocked_by_user")
+		}
+	}
+	// A message reopens the conversation for everyone who had deleted it, which
+	// is what turns "delete for me" into a view filter instead of a leave.
+	if _, err = tx.Exec(ctx, "UPDATE conversation_members SET deleted_at=NULL WHERE conversation_id=$1 AND deleted_at IS NOT NULL", input.ConversationID); err != nil {
+		return model.Message{}, false, err
 	}
 	kind := "user"
 	if len(input.Blocks) > 0 {

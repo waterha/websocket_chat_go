@@ -94,7 +94,8 @@ func TestConcurrentGroupInvitationsRespectCapacityAndRetries(t *testing.T) {
 	for _, memberID := range []string{"invite-999", "invite-1000"} {
 		go func() {
 			<-start
-			results <- result{memberID: memberID, err: services.Chat.AddMembers(ctx, owner.ID, group, model.AddMembersInput{MemberIDs: []string{memberID}})}
+			_, inviteErr := services.Chat.AddMembers(ctx, owner.ID, group, model.AddMembersInput{MemberIDs: []string{memberID}})
+			results <- result{memberID: memberID, err: inviteErr}
 		}()
 	}
 	close(start)
@@ -112,7 +113,7 @@ func TestConcurrentGroupInvitationsRespectCapacityAndRetries(t *testing.T) {
 	if successes != 1 {
 		t.Fatalf("expected one available slot, got %d successful invitations", successes)
 	}
-	if err = services.Chat.AddMembers(ctx, owner.ID, group, model.AddMembersInput{MemberIDs: []string{winner}}); err != nil {
+	if _, err = services.Chat.AddMembers(ctx, owner.ID, group, model.AddMembersInput{MemberIDs: []string{winner}}); err != nil {
 		t.Fatalf("retry in full group: %v", err)
 	}
 	var total int
@@ -127,7 +128,8 @@ func TestConcurrentGroupInvitationsRespectCapacityAndRetries(t *testing.T) {
 	failures := make(chan error, 8)
 	for range 8 {
 		wait.Go(func() {
-			failures <- services.Chat.AddMembers(ctx, owner.ID, retryGroup, model.AddMembersInput{MemberIDs: []string{"invite-1"}})
+			_, addErr := services.Chat.AddMembers(ctx, owner.ID, retryGroup, model.AddMembersInput{MemberIDs: []string{"invite-1"}})
+			failures <- addErr
 		})
 	}
 	wait.Wait()
@@ -155,7 +157,7 @@ func TestBatchInvitationCreatesOneNoticePerNewMember(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := services.Chat.AddMembers(ctx, owner.ID, group, model.AddMembersInput{MemberIDs: []string{bob.ID, alice.ID}}); err != nil {
+	if _, err := services.Chat.AddMembers(ctx, owner.ID, group, model.AddMembersInput{MemberIDs: []string{bob.ID, alice.ID}}); err != nil {
 		t.Fatal(err)
 	}
 	page, err := services.Chat.Sync(ctx, bob.ID, group, 0, 100)
@@ -170,7 +172,7 @@ func TestBatchInvitationCreatesOneNoticePerNewMember(t *testing.T) {
 	if page.Messages[0].Content == page.Messages[1].Content {
 		t.Fatal("batch notices were duplicated")
 	}
-	if err := services.Chat.AddMembers(ctx, owner.ID, group, model.AddMembersInput{MemberIDs: []string{bob.ID, alice.ID}}); err != nil {
+	if _, err := services.Chat.AddMembers(ctx, owner.ID, group, model.AddMembersInput{MemberIDs: []string{bob.ID, alice.ID}}); err != nil {
 		t.Fatal(err)
 	}
 	page, err = services.Chat.Sync(ctx, alice.ID, group, 0, 100)
