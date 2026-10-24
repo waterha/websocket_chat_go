@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -20,6 +21,20 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// Migrations are copied from database/migrations by build-desktop.ps1 before
+// the launcher is built; a fresh checkout only carries the .keep placeholder.
+//
+//go:embed all:migrations
+var migrations embed.FS
+
+func migrationFS() (fs.FS, error) {
+	sub, err := fs.Sub(migrations, "migrations")
+	if err != nil {
+		return nil, err
+	}
+	return sub, nil
+}
+
 func writableDataDir() (string, error) {
 	var candidates []string
 	if configDir, err := os.UserConfigDir(); err == nil {
@@ -34,21 +49,25 @@ func writableDataDir() (string, error) {
 	var failures []string
 	for _, candidate := range candidates {
 		if err := os.MkdirAll(candidate, 0755); err != nil {
+			log.Printf("跳过数据目录候选 %s：%v", candidate, err)
 			failures = append(failures, fmt.Sprintf("%s: %v", candidate, err))
 			continue
 		}
 		probe, err := os.CreateTemp(candidate, ".write-test-*")
 		if err != nil {
+			log.Printf("跳过数据目录候选 %s：%v", candidate, err)
 			failures = append(failures, fmt.Sprintf("%s: %v", candidate, err))
 			continue
 		}
 		probeName := probe.Name()
 		if err := probe.Close(); err != nil {
 			_ = os.Remove(probeName)
+			log.Printf("跳过数据目录候选 %s：%v", candidate, err)
 			failures = append(failures, fmt.Sprintf("%s: %v", candidate, err))
 			continue
 		}
 		if err := os.Remove(probeName); err != nil {
+			log.Printf("跳过数据目录候选 %s：%v", candidate, err)
 			failures = append(failures, fmt.Sprintf("%s: %v", candidate, err))
 			continue
 		}
@@ -62,6 +81,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Printf("应用数据目录：%s", root)
 	// Keep the WebView2 profile beside the app settings so its cookies and local
 	// storage survive restarts. A fresh temp profile is safer than WebView2's
 	// default fallback when a previous profile has unusable permissions.
@@ -82,7 +102,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	app, err := newApp(path, config)
+	embeddedMigrations, err := migrationFS()
+	if err != nil {
+		log.Fatal(err)
+	}
+	app, err := newApp(path, root, embeddedMigrations, config)
 	if err != nil {
 		log.Fatal(err)
 	}
