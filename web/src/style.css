@@ -482,3 +482,31 @@ img.avatar { object-fit: cover; flex: none; background: #e8ddce; }
 
 /* 表情弹出面板锚定在工具栏下方 */
 .emoji-picker-panel { top: 40px; left: 4px; }
+
+/* —— 整体美化：顶部“更多”菜单 —— */
+.side-top { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 6px; }
+.side-top-title { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 15px; font-weight: 800; }
+.sidebar-more, .chat-more { position: relative; }
+.top-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 60; display: grid; min-width: 176px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 12px 32px #3a2c1e26; }
+.top-menu button { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font-size: 13px; font-weight: 600; text-align: left; }
+.top-menu button:hover { background: #f7efe6; }
+.top-menu button.danger { color: #8f4735; }
+.top-menu svg { color: var(--muted); flex: none; }
+.top-menu .request-count { margin-left: auto; }
+.head-icon.dot { position: relative; }
+.head-icon.dot::after { content: ''; position: absolute; top: 3px; right: 3px; width: 8px; height: 8px; border-radius: 50%; background: #c0392b; border: 2px solid var(--card); }
+
+/* —— 细节打磨 —— */
+.conversation-tabs { gap: 4px; padding: 4px 20px 10px; }
+.conversation-tabs button { padding: 5px 13px; border-radius: 999px; font-size: 12px; }
+.conversation { padding: 10px 12px; border-radius: 12px; transition: background .12s; }
+.conversation:hover { background: #f7f1e8; }
+.conversation.active { background: #f1e6da; }
+.chat-head { min-height: 72px; padding: 16px 22px; }
+.stream { padding: 22px 26px; }
+.composer-foot { justify-content: flex-end; }
+body { -webkit-font-smoothing: antialiased; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { border-radius: 4px; background: #d8ccbc; }
+::-webkit-scrollbar-thumb:hover { background: #c9b9a4; }
+::-webkit-scrollbar-track { background: transparent; }
