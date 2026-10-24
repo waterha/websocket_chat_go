@@ -22,6 +22,8 @@ desktop/build/
 desktop/build/windows/*.syso
 desktop/*.syso
 coverage/
+# Wails frontend install marker produced by desktop builds.
+web/package.json.md5
 *.log
 *.exe
 backend/bin/
