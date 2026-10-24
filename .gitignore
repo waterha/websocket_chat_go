@@ -12,6 +12,11 @@ dist/
 desktop/frontend/dist/*
 !desktop/frontend/dist/.gitkeep
 desktop/frontend/wailsjs/
+# Migration SQL files are copied from database/migrations by
+# scripts/build-desktop.ps1 before the launcher is built; only the placeholder
+# that lets `go build` compile the embedded filesystem is committed.
+desktop/migrations/*
+!desktop/migrations/.keep
 desktop/build/bin/
 desktop/build/
 desktop/build/windows/*.syso
