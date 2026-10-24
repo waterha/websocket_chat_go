@@ -1,9 +1,12 @@
 package model
 
 type User struct {
-	ID    string `json:"id"`
-	Email string `json:"email"`
-	Name  string `json:"name"`
+	ID string `json:"id"`
+	// Avatar references an upload owned by the user; an empty value means the
+	// client renders the initial-letter placeholder.
+	Avatar string `json:"avatar,omitempty"`
+	Email  string `json:"email"`
+	Name   string `json:"name"`
 }
 
 // DirectoryEntry is a colleague profile shown in the organization directory.

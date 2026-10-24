@@ -94,7 +94,7 @@ func (auth *Auth) Login(ctx context.Context, input Credentials) (model.User, Ses
 	}
 	var account model.User
 	var passwordHash string
-	err := auth.Store.DB.QueryRow(ctx, "SELECT id,email,name,password_hash FROM users WHERE email=$1", email).Scan(&account.ID, &account.Email, &account.Name, &passwordHash)
+	err := auth.Store.DB.QueryRow(ctx, "SELECT id,email,name,COALESCE(avatar_media_id,''),password_hash FROM users WHERE email=$1", email).Scan(&account.ID, &account.Email, &account.Avatar, &account.Name, &passwordHash)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return account, Session{}, err
 	}
@@ -115,7 +115,7 @@ func (auth *Auth) Login(ctx context.Context, input Credentials) (model.User, Ses
 
 func (auth *Auth) Authenticate(ctx context.Context, sessionHash string) (model.User, error) {
 	var account model.User
-	err := auth.Store.DB.QueryRow(ctx, "SELECT u.id,u.email,u.name FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now()", sessionHash).Scan(&account.ID, &account.Email, &account.Name)
+	err := auth.Store.DB.QueryRow(ctx, "SELECT u.id,u.email,u.name,COALESCE(u.avatar_media_id,'') FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.expires_at>now()", sessionHash).Scan(&account.ID, &account.Email, &account.Name, &account.Avatar)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return account, model.Fail(401, "unauthorized")
 	}
@@ -183,7 +183,7 @@ func (auth *Auth) UpdateProfile(ctx context.Context, userID string, input model.
 		return model.User{}, model.Fail(400, "invalid_profile")
 	}
 	var account model.User
-	err = auth.Store.DB.QueryRow(ctx, "UPDATE users SET email=$1,name=$2 WHERE id=$3 RETURNING id,email,name", input.Email, input.Name, userID).Scan(&account.ID, &account.Email, &account.Name)
+	err = auth.Store.DB.QueryRow(ctx, "UPDATE users SET email=$1,name=$2 WHERE id=$3 RETURNING id,email,name,COALESCE(avatar_media_id,'')", input.Email, input.Name, userID).Scan(&account.ID, &account.Email, &account.Name, &account.Avatar)
 	if err != nil {
 		var databaseError *pgconn.PgError
 		if errors.As(err, &databaseError) && databaseError.Code == "23505" {
@@ -200,7 +200,7 @@ func (auth *Auth) Logout(ctx context.Context, sessionHash string) error {
 }
 
 func (auth *Auth) Users(ctx context.Context, userID string) ([]model.User, error) {
-	rows, err := auth.Store.DB.Query(ctx, "SELECT id,email,name FROM users WHERE id<>$1 ORDER BY name,id LIMIT 1000", userID)
+	rows, err := auth.Store.DB.Query(ctx, "SELECT id,email,name,COALESCE(avatar_media_id,'') FROM users WHERE id<>$1 ORDER BY name,id LIMIT 1000", userID)
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +208,7 @@ func (auth *Auth) Users(ctx context.Context, userID string) ([]model.User, error
 	users := []model.User{}
 	for rows.Next() {
 		var account model.User
-		if err := rows.Scan(&account.ID, &account.Email, &account.Name); err != nil {
+		if err := rows.Scan(&account.ID, &account.Email, &account.Name, &account.Avatar); err != nil {
 			return nil, err
 		}
 		users = append(users, account)

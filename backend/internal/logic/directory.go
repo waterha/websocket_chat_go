@@ -17,7 +17,7 @@ func (auth *Auth) Directory(ctx context.Context, userID, query, department strin
 	if offset < 0 || offset > 1000000 || limit < 1 || limit > 100 || utf8.RuneCountInString(query) > 200 || utf8.RuneCountInString(department) > 100 {
 		return page, model.Fail(400, "invalid_directory_query")
 	}
-	rows, err := auth.Store.DB.Query(ctx, `SELECT u.id,u.email,u.name,
+	rows, err := auth.Store.DB.Query(ctx, `SELECT u.id,u.email,u.name,COALESCE(u.avatar_media_id,''),
 		COALESCE(p.department,''),COALESCE(p.job_title,'')
 		FROM users u LEFT JOIN user_profiles p ON p.user_id=u.id
 		WHERE u.id<>$1 AND ($2='' OR
@@ -30,7 +30,7 @@ func (auth *Auth) Directory(ctx context.Context, userID, query, department strin
 	}
 	for rows.Next() {
 		var entry model.DirectoryEntry
-		if err := rows.Scan(&entry.ID, &entry.Email, &entry.Name, &entry.Department, &entry.JobTitle); err != nil {
+		if err := rows.Scan(&entry.ID, &entry.Email, &entry.Name, &entry.Avatar, &entry.Department, &entry.JobTitle); err != nil {
 			rows.Close()
 			return page, err
 		}

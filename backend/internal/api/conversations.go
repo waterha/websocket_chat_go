@@ -85,3 +85,16 @@ func (server *Server) deleteConversation(writer http.ResponseWriter, request *ht
 	}
 	respond(writer, 200, map[string]string{"id": request.PathValue("id")})
 }
+
+// poke sends a playful tap aimed at one member.
+func (server *Server) poke(writer http.ResponseWriter, request *http.Request, caller identity) {
+	var input model.PokeInput
+	if !decode(writer, request, &input) {
+		return
+	}
+	if err := server.Services.Chat.Poke(request.Context(), caller.account.ID, request.PathValue("id"), input.UserID); err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, map[string]string{"id": request.PathValue("id")})
+}

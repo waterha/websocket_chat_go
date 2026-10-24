@@ -10,7 +10,7 @@ import (
 )
 
 const friendRequestColumns = `fr.id,fr.requester_id,fr.recipient_id,fr.message,fr.status,fr.created_at,fr.updated_at,
-	requester.id,requester.email,requester.name,recipient.id,recipient.email,recipient.name`
+	requester.id,requester.email,requester.name,COALESCE(requester.avatar_media_id,''),recipient.id,recipient.email,recipient.name,COALESCE(recipient.avatar_media_id,'')`
 
 type rowScanner interface {
 	Scan(dest ...any) error
@@ -20,8 +20,8 @@ func scanFriendRequest(row rowScanner) (model.FriendRequest, error) {
 	var request model.FriendRequest
 	err := row.Scan(
 		&request.ID, &request.RequesterID, &request.RecipientID, &request.Message, &request.Status, &request.CreatedAt, &request.UpdatedAt,
-		&request.Requester.ID, &request.Requester.Email, &request.Requester.Name,
-		&request.Recipient.ID, &request.Recipient.Email, &request.Recipient.Name,
+		&request.Requester.ID, &request.Requester.Email, &request.Requester.Name, &request.Requester.Avatar,
+		&request.Recipient.ID, &request.Recipient.Email, &request.Recipient.Name, &request.Recipient.Avatar,
 	)
 	return request, err
 }
@@ -31,7 +31,7 @@ func friendRequestQuery() string {
 }
 
 func (auth *Auth) Friends(ctx context.Context, userID string) ([]model.Friend, error) {
-	rows, err := auth.Store.DB.Query(ctx, `SELECT u.id,u.email,u.name,f.remark FROM friendships f JOIN users u ON u.id=f.friend_id WHERE f.user_id=$1 ORDER BY u.name,u.id`, userID)
+	rows, err := auth.Store.DB.Query(ctx, `SELECT u.id,u.email,u.name,COALESCE(u.avatar_media_id,''),f.remark FROM friendships f JOIN users u ON u.id=f.friend_id WHERE f.user_id=$1 ORDER BY u.name,u.id`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (auth *Auth) Friends(ctx context.Context, userID string) ([]model.Friend, e
 	friends := []model.Friend{}
 	for rows.Next() {
 		var friend model.Friend
-		if err := rows.Scan(&friend.ID, &friend.Email, &friend.Name, &friend.Remark); err != nil {
+		if err := rows.Scan(&friend.ID, &friend.Email, &friend.Name, &friend.Avatar, &friend.Remark); err != nil {
 			return nil, err
 		}
 		friends = append(friends, friend)
@@ -64,7 +64,7 @@ func (auth *Auth) SetFriendRemark(ctx context.Context, userID, friendID, remark 
 		return model.Friend{}, model.Fail(404, "not_found")
 	}
 	var friend model.Friend
-	err = auth.Store.DB.QueryRow(ctx, `SELECT u.id,u.email,u.name,f.remark FROM friendships f JOIN users u ON u.id=f.friend_id WHERE f.user_id=$1 AND f.friend_id=$2`, userID, friendID).Scan(&friend.ID, &friend.Email, &friend.Name, &friend.Remark)
+	err = auth.Store.DB.QueryRow(ctx, `SELECT u.id,u.email,u.name,COALESCE(u.avatar_media_id,''),f.remark FROM friendships f JOIN users u ON u.id=f.friend_id WHERE f.user_id=$1 AND f.friend_id=$2`, userID, friendID).Scan(&friend.ID, &friend.Email, &friend.Name, &friend.Avatar, &friend.Remark)
 	return friend, err
 }
 
@@ -85,7 +85,7 @@ func (auth *Auth) DeleteFriend(ctx context.Context, userID, friendID string) err
 
 // Blocks lists the caller's blocked users.
 func (auth *Auth) Blocks(ctx context.Context, userID string) ([]model.BlockEntry, error) {
-	rows, err := auth.Store.DB.Query(ctx, `SELECT u.id,u.email,u.name,b.created_at FROM user_blocks b JOIN users u ON u.id=b.blocked_user_id WHERE b.user_id=$1 ORDER BY b.created_at DESC,u.id`, userID)
+	rows, err := auth.Store.DB.Query(ctx, `SELECT u.id,u.email,u.name,COALESCE(u.avatar_media_id,''),b.created_at FROM user_blocks b JOIN users u ON u.id=b.blocked_user_id WHERE b.user_id=$1 ORDER BY b.created_at DESC,u.id`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func (auth *Auth) Blocks(ctx context.Context, userID string) ([]model.BlockEntry
 	blocks := []model.BlockEntry{}
 	for rows.Next() {
 		var entry model.BlockEntry
-		if err := rows.Scan(&entry.ID, &entry.Email, &entry.Name, &entry.CreatedAt); err != nil {
+		if err := rows.Scan(&entry.ID, &entry.Email, &entry.Name, &entry.Avatar, &entry.CreatedAt); err != nil {
 			return nil, err
 		}
 		blocks = append(blocks, entry)

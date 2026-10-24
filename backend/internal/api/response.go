@@ -28,6 +28,9 @@ func publicError(err error) *model.Error {
 
 func fail(writer http.ResponseWriter, err error) {
 	failure := publicError(err)
+	if failure.Status == 500 {
+		log.Printf("internal error: %v", err)
+	}
 	// A throttling failure carries a suggested wait in a header, not the body.
 	if failure.RetryAfter > 0 {
 		writer.Header().Set("Retry-After", logic.RetrySeconds(failure.RetryAfter))

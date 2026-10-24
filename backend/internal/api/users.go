@@ -4,7 +4,10 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
+
+	"websocket_chat_go/backend/internal/logic"
 	"websocket_chat_go/backend/internal/model"
 )
 
@@ -177,6 +180,47 @@ func (server *Server) updateMe(writer http.ResponseWriter, request *http.Request
 		return
 	}
 	account, err := server.Services.Auth.UpdateProfile(request.Context(), caller.account.ID, input)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, account)
+}
+
+// setAvatar stores an uploaded image as the caller's avatar. The body is the
+// raw image, exactly like a conversation media upload.
+func (server *Server) setAvatar(writer http.ResponseWriter, request *http.Request, caller identity) {
+	contentType := strings.ToLower(strings.TrimSpace(strings.Split(request.Header.Get("Content-Type"), ";")[0]))
+	kind, ok := logic.MediaKind(contentType)
+	if !ok || kind != "image" {
+		fail(writer, model.Fail(415, "unsupported_media_type"))
+		return
+	}
+	size := request.ContentLength
+	if size <= 0 {
+		fail(writer, model.Fail(400, "invalid_upload"))
+		return
+	}
+	if size > logic.MaxAvatarBytes {
+		fail(writer, model.Fail(413, "avatar_too_large"))
+		return
+	}
+	fileName := request.URL.Query().Get("file_name")
+	if fileName == "" {
+		fileName = "avatar" + extensionFor(contentType)
+	}
+	request.Body = http.MaxBytesReader(writer, request.Body, logic.MaxAvatarBytes+(1<<20))
+	account, err := server.Services.Media.UploadAvatar(request.Context(), caller.account.ID, fileName, contentType, size, request.Body)
+	if err != nil {
+		fail(writer, err)
+		return
+	}
+	respond(writer, 200, account)
+}
+
+// clearAvatar removes the caller's avatar reference.
+func (server *Server) clearAvatar(writer http.ResponseWriter, request *http.Request, caller identity) {
+	account, err := server.Services.Media.ClearAvatar(request.Context(), caller.account.ID)
 	if err != nil {
 		fail(writer, err)
 		return

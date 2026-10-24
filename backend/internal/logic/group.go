@@ -503,7 +503,7 @@ func (chat *Chat) JoinRequests(ctx context.Context, callerID, conversationID str
 	if callerRole != model.RoleOwner && callerRole != model.RoleAdmin {
 		return nil, model.Fail(403, "forbidden")
 	}
-	rows, err := tx.Query(ctx, `SELECT jr.id,jr.conversation_id,jr.user_id,jr.message,jr.status,jr.created_at,jr.updated_at,u.id,u.email,u.name
+	rows, err := tx.Query(ctx, `SELECT jr.id,jr.conversation_id,jr.user_id,jr.message,jr.status,jr.created_at,jr.updated_at,u.id,u.email,u.name,COALESCE(u.avatar_media_id,'')
 		FROM conversation_join_requests jr JOIN users u ON u.id=jr.user_id
 		WHERE jr.conversation_id=$1 AND jr.status='pending' ORDER BY jr.created_at,jr.id`, conversationID)
 	if err != nil {
@@ -513,7 +513,7 @@ func (chat *Chat) JoinRequests(ctx context.Context, callerID, conversationID str
 	requests := []model.JoinRequest{}
 	for rows.Next() {
 		var request model.JoinRequest
-		if err = rows.Scan(&request.ID, &request.ConversationID, &request.UserID, &request.Message, &request.Status, &request.CreatedAt, &request.UpdatedAt, &request.User.ID, &request.User.Email, &request.User.Name); err != nil {
+		if err = rows.Scan(&request.ID, &request.ConversationID, &request.UserID, &request.Message, &request.Status, &request.CreatedAt, &request.UpdatedAt, &request.User.ID, &request.User.Email, &request.User.Name, &request.User.Avatar); err != nil {
 			return nil, err
 		}
 		requests = append(requests, request)
@@ -555,7 +555,7 @@ func (chat *Chat) DecideJoinRequest(ctx context.Context, callerID, conversationI
 	if _, err = tx.Exec(ctx, "UPDATE conversation_join_requests SET status=$1,updated_at=now() WHERE id=$2", status, requestID); err != nil {
 		return model.JoinRequest{}, false, err
 	}
-	request, err := scanJoinRequest(tx.QueryRow(ctx, `SELECT jr.id,jr.conversation_id,jr.user_id,jr.message,jr.status,jr.created_at,jr.updated_at,u.id,u.email,u.name
+	request, err := scanJoinRequest(tx.QueryRow(ctx, `SELECT jr.id,jr.conversation_id,jr.user_id,jr.message,jr.status,jr.created_at,jr.updated_at,u.id,u.email,u.name,COALESCE(u.avatar_media_id,'')
 		FROM conversation_join_requests jr JOIN users u ON u.id=jr.user_id WHERE jr.id=$1`, requestID))
 	if err != nil {
 		return model.JoinRequest{}, false, err
@@ -590,6 +590,6 @@ func (chat *Chat) DecideJoinRequest(ctx context.Context, callerID, conversationI
 
 func scanJoinRequest(row pgx.Row) (model.JoinRequest, error) {
 	var request model.JoinRequest
-	err := row.Scan(&request.ID, &request.ConversationID, &request.UserID, &request.Message, &request.Status, &request.CreatedAt, &request.UpdatedAt, &request.User.ID, &request.User.Email, &request.User.Name)
+	err := row.Scan(&request.ID, &request.ConversationID, &request.UserID, &request.Message, &request.Status, &request.CreatedAt, &request.UpdatedAt, &request.User.ID, &request.User.Email, &request.User.Name, &request.User.Avatar)
 	return request, err
 }

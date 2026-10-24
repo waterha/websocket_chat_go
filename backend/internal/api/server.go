@@ -24,6 +24,8 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/logout", server.auth(server.logout))
 	mux.HandleFunc("POST /api/v1/auth/password", server.auth(server.changePassword))
 	mux.HandleFunc("PATCH /api/v1/me", server.auth(server.updateMe))
+	mux.HandleFunc("POST /api/v1/me/avatar", server.auth(server.setAvatar))
+	mux.HandleFunc("DELETE /api/v1/me/avatar", server.auth(server.clearAvatar))
 	mux.HandleFunc("GET /api/v1/me", server.auth(func(writer http.ResponseWriter, request *http.Request, caller identity) {
 		respond(writer, 200, caller.account)
 	}))
@@ -53,6 +55,7 @@ func (server *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/conversations/{id}/roles", server.auth(server.setRole))
 	mux.HandleFunc("PATCH /api/v1/conversations/{id}/settings", server.auth(server.settings))
 	mux.HandleFunc("POST /api/v1/conversations/{id}/dismiss", server.auth(server.dismissGroup))
+	mux.HandleFunc("POST /api/v1/conversations/{id}/poke", server.auth(server.poke))
 	mux.HandleFunc("GET /api/v1/conversations/{id}/join-requests", server.auth(server.joinRequests))
 	mux.HandleFunc("POST /api/v1/conversations/{id}/join-requests/{request_id}/{action}", server.auth(server.decideJoinRequest))
 	mux.HandleFunc("GET /api/v1/conversations/{id}/announcements", server.auth(server.announcements))
