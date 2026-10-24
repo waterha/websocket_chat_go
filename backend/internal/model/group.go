@@ -42,6 +42,11 @@ type ConversationSettingsInput struct {
 	JoinApproval *bool `json:"join_approval"`
 }
 
+// PokeInput names the member to tap on the shoulder.
+type PokeInput struct {
+	UserID string `json:"user_id"`
+}
+
 // ConversationSettings reports the group-wide toggles now in force.
 type ConversationSettings struct {
 	AllMuted     bool `json:"all_muted"`

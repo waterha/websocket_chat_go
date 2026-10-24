@@ -23,7 +23,7 @@ func (chat *Chat) Conversations(ctx context.Context, userID string) ([]model.Con
 	rows, err := chat.Store.DB.Query(ctx, `SELECT c.id,c.name,c.kind,COALESCE(c.created_by,''),c.next_seq,cm.last_read_seq,cm.pinned_at IS NOT NULL,cm.muted,cm.alias,cm.deleted_at,
 		c.all_muted,c.join_approval,c.dismissed_at IS NOT NULL,
 		(SELECT count(*) FROM conversation_join_requests jr WHERE jr.conversation_id=c.id AND jr.status='pending'),
-		(SELECT jsonb_agg(jsonb_build_object('id',u.id,'name',u.name,'email',u.email,'role',members.role,'last_read_seq',members.last_read_seq,'read_at',members.read_at,'alias',members.alias,'muted_until',members.muted_until) ORDER BY (members.role='owner') DESC,(members.role='admin') DESC,u.name,u.id) FROM conversation_members members JOIN users u ON u.id=members.user_id WHERE members.conversation_id=c.id),
+		(SELECT jsonb_agg(jsonb_build_object('id',u.id,'name',u.name,'email',u.email,'role',members.role,'last_read_seq',members.last_read_seq,'read_at',members.read_at,'alias',members.alias,'muted_until',members.muted_until,'avatar',COALESCE(u.avatar_media_id,'')) ORDER BY (members.role='owner') DESC,(members.role='admin') DESC,u.name,u.id) FROM conversation_members members JOIN users u ON u.id=members.user_id WHERE members.conversation_id=c.id),
 		(SELECT count(*) FROM announcements a WHERE a.conversation_id=c.id)
 		FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id WHERE cm.user_id=$1 AND cm.deleted_at IS NULL
 		ORDER BY (cm.pinned_at IS NULL),cm.pinned_at DESC,c.created_at DESC,c.id`, userID)

@@ -14,6 +14,8 @@ type Member struct {
 	Online bool `json:"online"`
 	// Alias is the member's group card, shown inside this conversation only.
 	Alias string `json:"alias"`
+	// Avatar is inherited from the embedded User struct via the JSON payload; the
+	// members query fills it from the user row.
 	// MutedUntil is set when an admin silences this member; nil means the
 	// member may speak.
 	MutedUntil *time.Time `json:"muted_until"`
