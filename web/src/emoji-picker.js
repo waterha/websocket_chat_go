@@ -79,6 +79,10 @@ export function installEmojiPicker(root) {
   renderTabs()
   renderGrid()
 
-  picker.append(toggle, tabs, grid)
+  // 标签和网格同住一个弹出面板，关闭时整体隐藏，不再有内容泄漏到输入框上。
+  const panel = document.createElement('div')
+  panel.className = 'emoji-picker-panel'
+  panel.append(tabs, grid)
+  picker.append(toggle, panel)
   toolbar.prepend(picker)
 }
