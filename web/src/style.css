@@ -338,6 +338,7 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .emoji-picker-toggle { width: 30px; height: 30px; border: 0; border-radius: 7px; color: var(--ink); background: transparent; font-size: 21px; line-height: 1; }
 .emoji-picker-toggle:hover, .emoji-picker.open .emoji-picker-toggle { background: #f1e6da; }
 .emoji-picker-panel { position: absolute; top: 36px; left: 0; display: none; width: max-content; max-width: min(420px, 90vw); padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 10px 30px #302c2930; z-index: 3; }
+.emoji-picker:not(.open) .emoji-picker-panel { display: none !important; }
 .emoji-picker.open .emoji-picker-panel { display: block; }
 .composer .emoji-picker-grid { display: grid; grid-template-columns: repeat(8, 34px); gap: 3px; max-height: 246px; overflow-y: auto; }
 .emoji-option { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 6px; background: transparent; font-size: 22px; }
