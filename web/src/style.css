@@ -348,11 +348,11 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .empty-member { margin: 0; padding: 14px 10px; color: var(--muted); font-size: 13px; text-align: center; }
 .member-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 
-.composer { position: relative; gap: 0; overflow: visible; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.composer { position: relative; display: flex; flex-direction: column; gap: 0; overflow: visible; border-top: 1px solid var(--line); border-radius: 0; background: var(--card); margin: 0; width: auto; padding: 4px 18px 8px; }
 .composer::before { position: absolute; inset: 0 0 auto; height: 38px; border-bottom: 1px solid #f0e9e1; background: #fffdf9; content: ''; pointer-events: none; }
 .composer .media-button { position: absolute; z-index: 1; top: 4px; left: 8px; width: 30px; height: 30px; margin: 0; border: 0; border-radius: 7px; }
 .composer .media-button:hover { background: #f1e6da; }
-.emoji-picker { position: absolute; z-index: 2; top: 4px; left: 44px; }
+.emoji-picker { position: static; }
 .emoji-picker-toggle { width: 30px; height: 30px; border: 0; border-radius: 7px; color: var(--ink); background: transparent; font-size: 21px; line-height: 1; }
 .emoji-picker-toggle:hover, .emoji-picker.open .emoji-picker-toggle { background: #f1e6da; }
 .emoji-picker-panel { position: absolute; top: 36px; left: 0; display: none; width: max-content; max-width: min(420px, 90vw); padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 10px 30px #302c2930; z-index: 3; }
@@ -361,9 +361,7 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .composer .emoji-picker-grid { display: grid; grid-template-columns: repeat(8, 34px); gap: 3px; max-height: 246px; overflow-y: auto; }
 .emoji-option { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 6px; background: transparent; font-size: 22px; }
 .emoji-option:hover, .emoji-option:focus-visible { background: #f1e6da; }
-.composer > div:last-child { min-height: 46px; justify-content: flex-end; gap: 8px; padding: 6px 10px; border-top: 1px solid #f0e9e1; background: #fffdf9; }
-.composer > div:last-child > span { margin-right: auto; }
-.rich-composer { min-height: 130px; max-height: 260px; padding: 48px 14px 14px; border: 0; border-radius: 0; }
+.rich-composer { min-height: 120px; max-height: 280px; padding: 8px 12px; border: 0; border-radius: 0; background: transparent; }
 .rich-composer:focus { box-shadow: none; }
 .composer .rich-composer { display: block; }
 .image-viewer { position: fixed; inset: 0; width: 100vw; height: 100vh; max-width: none; max-height: none; padding: 56px 24px 24px; border: 0; background: #171614ee; }
@@ -451,3 +449,35 @@ img.avatar { object-fit: cover; flex: none; background: #e8ddce; }
 .emoji-picker-tab { padding: 3px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; }
 .emoji-picker-tab.active { color: var(--accent-dark); background: #f1e6da; }
 .emoji-picker-grid { grid-template-columns: repeat(8, 1fr); }
+
+/* QQ NT 式输入区：图标工具栏 + 大输入区 + 底部动作行 */
+.composer-toolbar { display: flex; align-items: center; gap: 2px; padding: 2px 2px 4px; }
+.toolbar-icon { position: relative; z-index: 1; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; color: var(--ink); background: transparent; }
+.emoji-picker-toggle { position: relative; z-index: 1; }
+.toolbar-icon:hover { background: #f1e6da; }
+.toolbar-icon:disabled { opacity: .45; }
+.toolbar-spacer { flex: 1; }
+.composer-foot { display: flex; align-items: center; gap: 12px; padding: 4px 2px 0; }
+.composer-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; position: relative; }
+.send-split { display: flex; position: relative; }
+.send-main { border-radius: 10px 0 0 10px; padding: 9px 18px; }
+.send-arrow { border-radius: 0 10px 10px 0; padding: 9px 7px; border-left: 1px solid #ffffff45; }
+.send-menu { position: absolute; bottom: calc(100% + 6px); right: 0; z-index: 30; display: grid; min-width: 180px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 10px 28px #3a2c1e1f; }
+.send-menu button { padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font-size: 13px; text-align: left; }
+.send-menu button:hover { background: #f7efe6; }
+.send-menu button[aria-checked="true"] { color: var(--accent-dark); background: #f7efe6; font-weight: 700; }
+
+/* 顶栏图标按钮 */
+.chat-head-actions .head-icon { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; color: var(--muted); background: transparent; }
+.chat-head-actions .head-icon:hover { background: #f1e6da; color: var(--accent-dark); }
+.chat-head-actions .head-icon.active { color: var(--accent); background: #f7efe6; }
+.chat-head-text strong { font-size: 17px; font-weight: 800; }
+
+/* 群聊右栏：公告行箭头、成员标题搜索开关 */
+.announcement-block-head { justify-content: space-between; }
+.announcement-block-head svg { color: var(--muted); }
+.member-block-head b { color: var(--ink); }
+.member-search-toggle { width: 26px; height: 26px; }
+
+/* 表情弹出面板锚定在工具栏下方 */
+.emoji-picker-panel { top: 40px; left: 4px; }

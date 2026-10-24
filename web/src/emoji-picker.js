@@ -11,7 +11,7 @@ export const emojiCategories = [
 ]
 
 export function installEmojiPicker(root) {
-  const toolbar = root.closest('.composer')?.querySelector(':scope > div:last-child')
+  const toolbar = root.closest('.composer')?.querySelector('.composer-toolbar') || root.closest('.composer')?.querySelector(':scope > div:last-child')
   if (!toolbar || toolbar.querySelector('.emoji-picker')) return
 
   const picker = document.createElement('div')
