@@ -379,8 +379,28 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .join-request-section { margin-top: 14px; }
 .member-actions { flex-wrap: wrap; }
 .group-settings { display: flex; flex: 1; gap: 14px; align-items: center; }
-.settings-toggle { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; font-weight: 700; }
+.settings-toggle { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; color: var(--muted); font-size: 12px; font-weight: 700; }
 .settings-toggle input { accent-color: var(--accent); }
 .dismiss-button { color: #8f4735; }
 .pending-joins { background: #c77b3a; }
 .mute-mark { margin-left: 6px; padding: 1px 5px; border-radius: 6px; background: #f1e6da; color: var(--muted); font-size: 10px; font-weight: 700; }
+
+/* Conversation header: identity, context and quick actions */
+.chat-head-text { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.chat-head-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+.chat-head-text p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-head-actions { display: flex; flex: none; align-items: center; gap: 4px; }
+.chat-head-actions button { padding: 6px 10px; border: 0; border-radius: 9px; color: var(--accent-dark); background: transparent; font-size: 12px; font-weight: 700; }
+.chat-head-actions button:hover { background: #f1e6da; }
+.pending-pill { padding: 3px 9px; border-radius: 999px; color: #fff; background: #c77b3a; font-size: 11px; font-weight: 700; }
+
+/* Per-member tool dropdown inside the member modal */
+.member-row-actions { position: relative; }
+.member-tool-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; display: grid; min-width: 130px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 10px 28px #3a2c1e1f; }
+.member-tool-menu button { padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font-size: 13px; text-align: left; }
+.member-tool-menu button:hover { background: #f7efe6; }
+.member-tool-menu .danger { color: #8f4735; }
+
+/* Settings row in the member modal footer */
+.member-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; width: 100%; padding: 10px 14px; border: 1px dashed var(--line); border-radius: 12px; }
+.settings-hint { color: var(--muted); font-size: 11px; }
