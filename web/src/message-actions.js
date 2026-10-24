@@ -99,7 +99,7 @@ export function useMessageActions({ messages, threadRoot, threadReplies, active,
     const bounds = menuElement.value.getBoundingClientRect()
     menu.value.x = Math.max(8, Math.min(opened.x, window.innerWidth - bounds.width - 8))
     menu.value.y = Math.max(8, Math.min(opened.y, window.innerHeight - bounds.height - 8))
-    menuElement.value.querySelector('button')?.focus({ preventScroll: true })
+    menuElement.value.querySelector('button[role="menuitem"]')?.focus({ preventScroll: true })
   }
 
   function cancelSelection() {

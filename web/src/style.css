@@ -351,3 +351,36 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .image-viewer img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .image-viewer-close { position: absolute; top: 12px; right: 18px; width: 40px; height: 40px; border: 0; border-radius: 50%; color: #fff; background: #ffffff20; font-size: 28px; line-height: 1; }
 .image-viewer-close:hover { background: #ffffff40; }
+
+/* Contact management dialog */
+.contacts-modal { max-width: 560px; }
+.remark-input { width: 140px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; }
+
+/* Conversation right-click menu reuses the message menu styling */
+.conversation-context-menu .danger { color: #8f4735; }
+
+/* Read receipts in a direct conversation */
+.read-ticks { margin-left: 6px; color: var(--sage); font-size: 11px; font-weight: 700; }
+
+/* Emoji reactions under a bubble */
+.reaction-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.reaction-chip { padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--accent-dark); font-size: 12px; }
+.reaction-chip.mine { border-color: var(--accent); background: #f7efe6; font-weight: 700; }
+.reaction-chip:disabled { opacity: .6; }
+.reaction-picker { display: flex; gap: 2px; padding: 2px 4px 6px; border-bottom: 1px solid var(--line); }
+.reaction-picker button { border: 0; background: transparent; border-radius: 8px; font-size: 17px; padding: 4px 6px; }
+.reaction-picker button:hover { background: #f1e6da; }
+
+/* Typing and mute notices above the composer */
+.typing-status, .muted-notice { margin: 0 0 6px; color: var(--muted); font-size: 12px; }
+.muted-notice { color: #8f4735; }
+
+/* Group governance inside the member modal */
+.join-request-section { margin-top: 14px; }
+.member-actions { flex-wrap: wrap; }
+.group-settings { display: flex; flex: 1; gap: 14px; align-items: center; }
+.settings-toggle { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; font-weight: 700; }
+.settings-toggle input { accent-color: var(--accent); }
+.dismiss-button { color: #8f4735; }
+.pending-joins { background: #c77b3a; }
+.mute-mark { margin-left: 6px; padding: 1px 5px; border-radius: 6px; background: #f1e6da; color: var(--muted); font-size: 10px; font-weight: 700; }

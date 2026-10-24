@@ -79,6 +79,27 @@ createApp({
     const requestMessage = ref('')
     const requestTarget = ref(null)
     const showRequestComposer = ref(false)
+    // Contact management (remark, deletion, blocking) lives in one dialog.
+    const showContacts = ref(false)
+    const contactBusy = ref(false)
+    const remarkEditingID = ref('')
+    const remarkDraft = ref('')
+    const blockedUsers = ref([])
+    // Group governance: settings toggles, join approval queue, per-member tools.
+    const groupSettingsBusy = ref(false)
+    const joinRequests = ref([])
+    const joinRequestBusy = ref(false)
+    const groupToolBusy = ref(false)
+    // Emoji responses are toggled from the message context menu.
+    const REACTION_CHOICES = ['👍', '❤️', '😂', '🎉', '😮', '😢']
+    const reactionBusy = ref(false)
+    // Typing state is ephemeral: each entry carries an expiry the tick prunes.
+    const typingUsers = ref({})
+    const typingTick = ref(0)
+    const typingSentAt = {}
+    // Right-click menu on sidebar conversations (pin, mute, delete).
+    const conversationMenu = ref(null)
+    const conversationMenuElement = ref(null)
     const profileEditing = ref(false)
     const profileBusy = ref(false)
     const profileName = ref('')
@@ -135,6 +156,7 @@ createApp({
     let errorTimer
     let refreshTask
     let refreshTicks = 0
+    let typingTimer
     let epoch = 0
     let disposed = false
 
@@ -409,6 +431,39 @@ createApp({
     }
     const currentPinned = computed(() => Boolean(current.value?.pinned))
     const currentMuted = computed(() => Boolean(current.value?.muted))
+    // A member's display name prefers the group card, then the caller's private
+    // friend remark in a direct chat, then the account name.
+    const displayName = id => {
+      const member = current.value?.members.find(person => person.id === id)
+      if (!member) return '成员'
+      const remark = current.value?.kind === 'direct' ? friends.value.find(friend => friend.id === id)?.remark || '' : ''
+      return member.alias || remark || member.name
+    }
+    const myMembership = computed(() => current.value?.members.find(member => member.id === me.value?.id))
+    // Muted members and plain members of an all-muted group see a quiet composer.
+    const mutedHere = computed(() => {
+      if (!current.value || current.value.dismissed) return false
+      if (current.value.all_muted && currentRole.value === 'member') return true
+      const until = myMembership.value?.muted_until
+      return Boolean(until && Date.parse(until) > Date.now())
+    })
+    const dismissedHere = computed(() => Boolean(current.value?.dismissed))
+    // Read receipts: a direct conversation shows whether the other side has read
+    // the message, derived from the read cursors the conversation list carries.
+    const readTicks = item => {
+      if (!item || item.kind === 'system' || item.recalled_at || current.value?.kind !== 'direct' || item.sender_id !== me.value?.id) return ''
+      const other = current.value.members.find(member => member.id !== me.value?.id)
+      if (!other) return ''
+      return (other.last_read_seq || 0) >= item.seq ? '已读' : '已送达'
+    }
+    const typingLabel = computed(() => {
+      typingTick.value
+      const now = Date.now()
+      const activeTypists = Object.entries(typingUsers.value[active.value] || {}).filter(([, expiry]) => expiry > now)
+      const names = activeTypists.map(([id]) => (id === me.value?.id ? '' : displayName(id))).filter(Boolean)
+      if (!names.length) return ''
+      return names.length === 1 ? names[0] : names.slice(0, 2).join('、') + (names.length > 2 ? ' 等' : '')
+    })
     // The thread window is a surface separate from the chat list: it shows one
     // root message and every reply to it, and replies sent here join that window.
     const threadOpen = ref(false)
@@ -520,6 +575,7 @@ createApp({
     function openMembers() {
       memberQuery.value = ''
       showMembers.value = true
+      if (canManageGroupMembers.value) loadJoinRequests().catch(() => {})
     }
     function closeMembers() {
       showMembers.value = false
@@ -530,9 +586,9 @@ createApp({
       openInvite()
     }
     const title = item => item.kind === 'direct'
-      ? item.members.find(member => member.id !== me.value?.id)?.name || '私聊'
+      ? displayName(item.members.find(member => member.id !== me.value?.id)?.id)
       : item.name
-    const sender = id => current.value?.members.find(member => member.id === id)?.name || '成员'
+    const sender = id => displayName(id)
     // Global search hits may belong to any of the caller's conversations, so the
     // name is resolved across every known member list rather than the active one.
     const anySender = id => {
@@ -804,6 +860,7 @@ createApp({
       syncComposerImagesWithDom()
       syncDraftFromDom()
       updateMentionState()
+      notifyTyping()
     }
     function onComposerKeydown(event) {
       if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return
@@ -1322,6 +1379,8 @@ createApp({
             await syncConversation(envelope.data.conversation_id, envelope.data.seq)
           }
           if (envelope.event === 'message.recalled') await syncConversation(envelope.data.conversation_id, envelope.data.seq)
+          if (envelope.event === 'message.updated') applyMessageUpdate(envelope.data)
+          if (envelope.event === 'typing') noteTyping(envelope.data)
           if (envelope.event === 'message.sync_required') await catchUp(envelope.data.cursors)
           if (envelope.event === 'conversation.created') await refresh()
           if (envelope.event === 'conversation.updated') await refresh()
@@ -1358,7 +1417,7 @@ createApp({
       clearTimeout(reconnectTimer); requests?.close(); socket?.close(); socket = null
       cache.clear(); syncing.clear(); refreshTask = null; pendingStore = null; pendingSend.value = null; unreadCounts.value = {}
       active.value = null; messages.value = []; conversations.value = []; users.value = []; friends.value = []; draft.value = ''
-      showCreate.value = false; showAddUser.value = false; showInvite.value = false; showSettings.value = false; showProfile.value = false; showFriendRequests.value = false; showRequestComposer.value = false; requestTarget.value = null; friendRequests.value = { incoming: [], outgoing: [] }; directoryQuery.value = ''; conversationFilter.value = 'current'
+      showCreate.value = false; showAddUser.value = false; showInvite.value = false; showSettings.value = false; showProfile.value = false; showFriendRequests.value = false; showRequestComposer.value = false; showContacts.value = false; requestTarget.value = null; friendRequests.value = { incoming: [], outgoing: [] }; blockedUsers.value = []; joinRequests.value = []; typingUsers.value = {}; conversationMenu.value = null; directoryQuery.value = ''; conversationFilter.value = 'current'
       try { await api('/auth/logout', { method: 'POST' }) } catch (cause) { showError(cause) }
     }
     function openCreate() {
@@ -1572,6 +1631,201 @@ createApp({
         draft.value = pending.content || ''
       }
     }
+    // ---- message reactions ----
+    function applyMessageUpdate(updated) {
+      if (!updated?.id || !updated.conversation_id) return
+      const items = cache.get(updated.conversation_id) || []
+      const index = items.findIndex(message => message.id === updated.id)
+      if (index >= 0) items.splice(index, 1, updated)
+      cacheVersion.value++
+      if (threadRoot.value?.id === updated.id) threadRoot.value = updated
+      const replyIndex = threadReplies.value.findIndex(message => message.id === updated.id)
+      if (replyIndex >= 0) threadReplies.value.splice(replyIndex, 1, updated)
+      showMessages(updated.conversation_id)
+    }
+    const reactionMine = (item, emoji) => Boolean(item?.reactions?.find(entry => entry.emoji === emoji)?.users.includes(me.value?.id))
+    async function toggleReaction(item, emoji) {
+      if (!item?.id || reactionBusy.value || !active.value) return
+      reactionBusy.value = true
+      try {
+        const method = reactionMine(item, emoji) ? 'DELETE' : 'POST'
+        const updated = await api(`/conversations/${active.value}/messages/${item.id}/reactions`, { method, body: JSON.stringify({ emoji }) })
+        applyMessageUpdate(updated)
+        if (threadOpen.value) await refreshThread()
+      } catch (cause) { showError(cause) }
+      finally { reactionBusy.value = false }
+    }
+    // ---- typing relay ----
+    function noteTyping(data) {
+      if (!data?.conversation_id || !data.user_id || data.user_id === me.value?.id) return
+      const map = { ...(typingUsers.value[data.conversation_id] || {}), [data.user_id]: Date.now() + 4000 }
+      typingUsers.value = { ...typingUsers.value, [data.conversation_id]: map }
+    }
+    function notifyTyping() {
+      if (!connected.value || !requests || !active.value || mutedHere.value || dismissedHere.value) return
+      const now = Date.now()
+      if (now - (typingSentAt[active.value] || 0) < 2000) return
+      typingSentAt[active.value] = now
+      try { requests.send('typing.send', { conversation_id: active.value }).catch(() => {}) } catch { /* the relay is best-effort */ }
+    }
+    // ---- conversation menu and private deletion ----
+    function openConversationMenu(event, item) {
+      conversationMenu.value = { id: item.id, x: event.clientX || 8, y: event.clientY || 8, pinned: Boolean(item.pinned), muted: Boolean(item.muted) }
+    }
+    function closeConversationMenu() {
+      conversationMenu.value = null
+    }
+    function onConversationMenuOutside(event) {
+      if (conversationMenu.value && !conversationMenuElement.value?.contains(event.target)) closeConversationMenu()
+    }
+    function runConversationMenu(action) {
+      const menu = conversationMenu.value
+      closeConversationMenu()
+      if (!menu) return
+      if (action === 'pin') togglePreference(menu.id, 'pinned')
+      if (action === 'mute') togglePreference(menu.id, 'muted')
+      if (action === 'delete') deleteConversation(menu.id)
+    }
+    async function deleteConversation(id) {
+      if (!id || conversationBusy.value) return
+      if (!confirm('删除会话后将从列表中移除，收到新消息时会重新出现。确认删除？')) return
+      const version = epoch
+      conversationBusy.value = true
+      try {
+        await api(`/conversations/${id}`, { method: 'DELETE' })
+        if (version !== epoch) return
+        conversations.value = conversations.value.filter(item => item.id !== id)
+        cache.delete(id)
+        unreadCounts.value = { ...unreadCounts.value, [id]: 0 }
+        if (active.value === id) { active.value = null; chatVisible.value = false }
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { if (version === epoch) conversationBusy.value = false }
+    }
+    // ---- contact management ----
+    async function openContacts() {
+      showSettings.value = false
+      showContacts.value = true
+      const version = epoch
+      try {
+        const list = await api('/blocks')
+        if (version === epoch) blockedUsers.value = list
+      } catch (cause) { if (version === epoch) showError(cause) }
+    }
+    function startRemark(person) {
+      remarkEditingID.value = person.id
+      remarkDraft.value = person.remark || ''
+    }
+    async function saveRemark(person) {
+      if (contactBusy.value) return
+      contactBusy.value = true
+      try {
+        const updated = await api(`/friends/${person.id}`, { method: 'PATCH', body: JSON.stringify({ remark: remarkDraft.value }) })
+        const friend = friends.value.find(item => item.id === person.id)
+        if (friend) friend.remark = updated.remark
+        remarkEditingID.value = ''
+      } catch (cause) { showError(cause) }
+      finally { contactBusy.value = false }
+    }
+    async function removeFriend(person) {
+      if (contactBusy.value) return
+      if (!confirm(`确认删除好友 ${person.remark || person.name}？聊天记录不受影响。`)) return
+      contactBusy.value = true
+      try {
+        await api(`/friends/${person.id}`, { method: 'DELETE' })
+        friends.value = friends.value.filter(item => item.id !== person.id)
+      } catch (cause) { showError(cause) }
+      finally { contactBusy.value = false }
+    }
+    const isBlocked = id => blockedUsers.value.some(entry => entry.id === id)
+    async function blockUser(person) {
+      if (contactBusy.value || isBlocked(person.id)) return
+      if (!confirm(`确认将 ${person.remark || person.name} 加入黑名单？拉黑后不再收到对方的私聊与好友申请。`)) return
+      contactBusy.value = true
+      try {
+        await api('/blocks', { method: 'POST', body: JSON.stringify({ user_id: person.id }) })
+        blockedUsers.value = await api('/blocks')
+      } catch (cause) { showError(cause) }
+      finally { contactBusy.value = false }
+    }
+    async function unblockUser(person) {
+      if (contactBusy.value) return
+      contactBusy.value = true
+      try {
+        await api(`/blocks/${person.id}`, { method: 'DELETE' })
+        blockedUsers.value = await api('/blocks')
+      } catch (cause) { showError(cause) }
+      finally { contactBusy.value = false }
+    }
+    // ---- group governance ----
+    async function loadJoinRequests() {
+      if (!active.value) return
+      const version = epoch
+      const queue = await api(`/conversations/${active.value}/join-requests`)
+      if (version === epoch) joinRequests.value = queue
+    }
+    async function decideJoinRequest(requestID, action) {
+      if (joinRequestBusy.value) return
+      joinRequestBusy.value = true
+      try {
+        await api(`/conversations/${active.value}/join-requests/${requestID}/${action}`, { method: 'POST' })
+        await loadJoinRequests()
+        await refresh()
+      } catch (cause) { showError(cause) }
+      finally { joinRequestBusy.value = false }
+    }
+    async function updateGroupSettings(change) {
+      if (groupSettingsBusy.value || current.value?.kind !== 'group') return
+      const version = epoch
+      groupSettingsBusy.value = true
+      try {
+        const settings = await api(`/conversations/${active.value}/settings`, { method: 'PATCH', body: JSON.stringify(change) })
+        if (version !== epoch || !current.value) return
+        current.value.all_muted = settings.all_muted
+        current.value.join_approval = settings.join_approval
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { if (version === epoch) groupSettingsBusy.value = false }
+    }
+    const canDismissGroup = computed(() => current.value?.kind === 'group' && currentRole.value === 'owner' && !current.value.dismissed)
+    async function dismissGroup() {
+      if (!current.value || !canDismissGroup.value || groupBusy.value) return
+      if (!confirm(`确认解散群聊“${title(current.value)}”？解散后不能再发言，历史记录保留。`)) return
+      const version = epoch
+      groupBusy.value = true
+      try {
+        await api(`/conversations/${active.value}/dismiss`, { method: 'POST' })
+        if (version !== epoch) return
+        closeMembers()
+        await refresh()
+      } catch (cause) { if (version === epoch) showError(cause) }
+      finally { if (version === epoch) groupBusy.value = false }
+    }
+    async function setMemberAlias(member) {
+      if (groupToolBusy.value) return
+      const alias = prompt('设置群昵称（留空恢复默认）', member.alias || '')
+      if (alias === null) return
+      groupToolBusy.value = true
+      try {
+        await api(`/conversations/${active.value}/members/${member.id}/alias`, { method: 'PATCH', body: JSON.stringify({ alias: alias.trim() }) })
+        await refresh()
+      } catch (cause) { showError(cause) }
+      finally { groupToolBusy.value = false }
+    }
+    const memberMuted = member => Boolean(member.muted_until && Date.parse(member.muted_until) > Date.now())
+    const memberCanBeMuted = member => {
+      if (!canManageGroupMembers.value || member.id === me.value?.id || member.role === 'owner') return false
+      return currentRole.value === 'owner' || member.role === 'member'
+    }
+    const memberAliasEditable = member => member.id === me.value?.id || canManageGroupMembers.value
+    async function setMemberMute(member, minutes) {
+      if (groupToolBusy.value) return
+      if (minutes > 0 && !confirm(`确认禁言 ${member.alias || member.name} ${minutes} 分钟？`)) return
+      groupToolBusy.value = true
+      try {
+        await api(`/conversations/${active.value}/members/${member.id}/mute`, { method: 'POST', body: JSON.stringify({ minutes }) })
+        await refresh()
+      } catch (cause) { showError(cause) }
+      finally { groupToolBusy.value = false }
+    }
     onMounted(async () => {
       try { me.value = await api('/me'); pendingStore = new PendingSends(sessionStorage, me.value.id); await refresh(); if (active.value) await select(active.value) }
       catch (cause) { if (cause.status === 401) me.value = null; else showError(cause) }
@@ -1586,13 +1840,16 @@ createApp({
       }, 5000)
       document.addEventListener('visibilitychange', onVisible)
       window.addEventListener('focus', onVisible)
+      document.addEventListener('pointerdown', onConversationMenuOutside)
       document.getElementById('app')?.addEventListener('click', onImageLinkClick)
+      typingTimer = setInterval(() => { typingTick.value++ }, 1000)
     })
     onUpdated(() => {
       if (draftArea.value) { installEmojiPicker(draftArea.value); installComposerUndo(draftArea.value) }
     })
-    onUnmounted(() => { document.getElementById('app')?.removeEventListener('click', onImageLinkClick); resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible) })
-    return { messageActions, showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, inviteQuery, inviteInitial, inviteVisible, inviteGroups, inviteInitials, inviteSummary, inviteSelectedCount, inviteSelectedPeople, chooseInviteInitial, toggleInvite, selectAllInvites, clearInvites, resetInviteFilters, OTHER_INITIAL, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, discardPending, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, composerImages, removeComposerImage, clearComposerImages, syncDraftFromDom, onComposerInput, onComposerClick, onComposerBlur, restorePending, dragging, onComposerPaste, onDragOver, onDragLeave, onDrop, draftArea, startReply, replyPreview, replyAuthor, bodyOf, segmentsOf, usesBlocks, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
+    onUnmounted(() => { document.getElementById('app')?.removeEventListener('click', onImageLinkClick); resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearInterval(typingTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); document.removeEventListener('pointerdown', onConversationMenuOutside) })
+    return { REACTION_CHOICES, reactionMine, toggleReaction, reactionBusy, typingLabel, mutedHere, dismissedHere, readTicks, showContacts, contactBusy, remarkEditingID, remarkDraft, blockedUsers, isBlocked, openContacts, startRemark, saveRemark, removeFriend, blockUser, unblockUser, conversationMenu, conversationMenuElement, openConversationMenu, closeConversationMenu, runConversationMenu, deleteConversation, joinRequests, joinRequestBusy, decideJoinRequest, updateGroupSettings, groupSettingsBusy, canDismissGroup, dismissGroup, setMemberAlias, setMemberMute, memberMuted, memberCanBeMuted, memberAliasEditable, groupToolBusy, preferenceBusy, messageActions, showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, inviteQuery, inviteInitial, inviteVisible, inviteGroups, inviteInitials, inviteSummary, inviteSelectedCount, inviteSelectedPeople, chooseInviteInitial, toggleInvite, selectAllInvites, clearInvites, resetInviteFilters, OTHER_INITIAL, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, discardPending, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, composerImages, removeComposerImage, clearComposerImages, syncDraftFromDom, onComposerInput, onComposerClick, onComposerBlur, restorePending, dragging, onComposerPaste, onDragOver, onDragLeave, onDrop, draftArea, startReply, replyPreview, replyAuthor, bodyOf, segmentsOf, usesBlocks, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
+
   },
   template,
 }).mount('#app')
