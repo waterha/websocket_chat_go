@@ -93,7 +93,8 @@ test('messages have no inline replies and right click opens an in-viewport menu'
   assert.equal(document.querySelector('.thread-summary'), null)
   assert.equal(menu(), null)
   await rightClick()
-  assert.deepEqual([...menu().querySelectorAll('button')].map(button => button.textContent), ['复制', '回复', '转发', '多选', '撤回'])
+  assert.deepEqual([...menu().querySelectorAll(':scope > button')].map(button => button.textContent), ['复制', '回复', '转发', '多选', '撤回'])
+  assert.ok(menu().querySelectorAll('.reaction-picker button').length >= 6)
   assert.ok(parseFloat(menu().style.left) <= dom.window.innerWidth - 8)
   assert.ok(parseFloat(menu().style.top) <= dom.window.innerHeight - 8)
   assert.equal(document.activeElement.textContent, '复制')
@@ -286,4 +287,25 @@ test.after(() => {
   globalThis.setInterval = realSetInterval
   globalThis.setTimeout = realSetTimeout
   dom.window.close()
+})
+
+test('the reaction picker toggles an emoji response on the message', async () => {
+  await reset([fresh('one')])
+  await rightClick()
+  const thumb = [...menu().querySelectorAll('.reaction-picker button')][0]
+  assert.ok(thumb, 'reaction picker missing')
+  thumb.click()
+  await settle()
+  assert.deepEqual(calls.filter(call => call.path.includes('/reactions')).map(call => ({ method: call.method, body: call.body ? JSON.parse(call.body).emoji : '' })), [{ method: 'POST', body: '👍' }])
+  assert.equal(menu(), null)
+  // The picker shows the aggregate and clicking again removes the response.
+  const message = vm.messages.find(item => item.id === 'one')
+  message.reactions = [{ emoji: '👍', count: 1, users: [me.id] }]
+  await settle()
+  const chip = document.querySelector('.reaction-row .reaction-chip')
+  assert.ok(chip, 'reaction chip missing')
+  assert.equal(chip.className.includes('mine'), true)
+  chip.click()
+  await settle()
+  assert.deepEqual(calls.filter(call => call.path.includes('/reactions')).map(call => call.method), ['POST', 'DELETE'])
 })
