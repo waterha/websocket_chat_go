@@ -9,7 +9,12 @@ const maximised = ref(false)
 const refreshMaximised = () => { win()?.WindowIsMaximised?.().then(value => { maximised.value = Boolean(value) }).catch(() => {}) }
 const minimise = () => win()?.WindowMinimise?.()
 const toggleMaximise = () => { win()?.WindowToggleMaximise?.(); setTimeout(refreshMaximised, 150) }
-const closeWindow = () => win()?.WindowClose?.()
+const closeWindow = () => {
+  const w = win()
+  // wails v2.11 的 window.runtime 没有 WindowClose，退出走 Quit；老版本回退 WindowClose。
+  if (w?.Quit) w.Quit()
+  else w?.WindowClose?.()
+}
 const toggleAlwaysOnTop = () => { const next = !alwaysOnTop.value; win()?.WindowSetAlwaysOnTop?.(next); alwaysOnTop.value = next }
 // 登录界面用 QQ 式小窗，登录后恢复主窗口尺寸；最小尺寸同步调整，避免小窗被主界面的下限撑住。
 const applyLoginWindowSize = loggedIn => {
