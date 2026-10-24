@@ -1,5 +1,6 @@
 import { ref, nextTick, onUnmounted } from 'vue/dist/vue.esm-bundler.js'
 import { api } from './api.js'
+import { mediaURL } from './media.js'
 
 export const OrganizationDirectory = {
   emits: ['chat'],
@@ -82,7 +83,7 @@ export const OrganizationDirectory = {
       if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
     }
     onUnmounted(cancel)
-    return { opened, panel, trigger, query, department, entries, departments, busy, error, hasMore, nextOffset,
+    return { mediaURL, opened, panel, trigger, query, department, entries, departments, busy, error, hasMore, nextOffset,
       profileReady, profileBusy, profileError, saved, workDepartment, jobTitle, appliedQuery, appliedDepartment,
       open, close, load, loadProfile, saveProfile, chat, keyboard }
   },
@@ -111,7 +112,7 @@ export const OrganizationDirectory = {
           <p v-if="busy" role="status">正在加载同事…</p>
           <p v-else-if="!entries.length && !error" role="status">没有找到同事。可更换关键词或选择全部部门。</p>
           <ul class="org-list"><li v-for="person in entries" :key="person.id" class="org-person">
-            <span class="avatar" aria-hidden="true">{{ person.name.slice(0,1) }}</span>
+            <img v-if="person.avatar" :src="mediaURL(person.avatar)" class="avatar" alt="" loading="lazy" /><span v-else class="avatar" aria-hidden="true">{{ person.name.slice(0,1) }}</span>
             <div class="org-info"><strong>{{ person.name }}</strong><span>{{ person.department || '未填写部门' }} · {{ person.job_title || '未填写职位' }}</span><small>{{ person.email }}</small></div>
             <button type="button" class="outline-button" :disabled="profileBusy && profileReady" :aria-label="'与' + person.name + '聊天'" @click="chat(person.id)">发消息</button>
           </li></ul>
