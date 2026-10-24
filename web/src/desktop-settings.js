@@ -58,6 +58,7 @@ export const DesktopSettings = {
       if (!enabled) return
       refreshMaximised()
       globalThis.window?.addEventListener?.('resize', refreshMaximised)
+      globalThis.window?.addEventListener?.('desktop:open-server-settings', open)
       try { bootstrap.value = await bootstrapStatus() } catch { bootstrap.value = null }
       unsubscribe = onBootstrap(event => {
         if (!event?.stage) return
@@ -71,6 +72,7 @@ export const DesktopSettings = {
     onUnmounted(() => {
       unsubscribe?.()
       globalThis.window?.removeEventListener?.('resize', refreshMaximised)
+      globalThis.window?.removeEventListener?.('desktop:open-server-settings', open)
       document.documentElement.classList.remove('desktop-booting')
     })
     const retry = () => {
@@ -91,7 +93,6 @@ export const DesktopSettings = {
           <button type="button" class="close" title="关闭" aria-label="关闭" @click="closeWindow"><X :size="16" /></button>
         </div>
       </header>
-      <header class="desktop-bar"><button type="button" @click="open" aria-haspopup="dialog">{{ current.serverURL }} · 服务器设置</button></header>
       <div v-if="bootstrap && bootstrap.stage === 'running'" class="desktop-bootstrap" role="status">{{ bootstrap.message || '正在启动本机聊天服务…' }}</div>
       <div v-else-if="bootstrap && bootstrap.stage === 'failed'" class="desktop-bootstrap failed" role="alert"><span>{{ bootstrap.message || '本机服务启动失败' }}</span><button type="button" @click="retry">重试</button></div>
       <div v-if="opened" class="modal-backdrop desktop-settings-backdrop" @click.self="!busy && (opened = false)" @keydown.esc="!busy && (opened = false)">
