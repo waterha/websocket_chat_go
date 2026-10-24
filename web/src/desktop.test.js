@@ -93,3 +93,45 @@ test('desktop sockets carry messages on the native connection', async () => {
     else delete globalThis.crypto
   }
 })
+
+test('desktop bootstrap state comes from the bridge and live events', async () => {
+  const savedWindow = globalThis.window
+  const events = []
+  let bootstrapListener
+  const bridge = {
+    async BootstrapStatus() { return { stage: 'running', message: '正在启动 Redis' } },
+  }
+  const runtime = {
+    EventsOn(name, callback) {
+      assert.equal(name, 'desktop:bootstrap')
+      bootstrapListener = callback
+      return () => { bootstrapListener = null }
+    },
+  }
+  globalThis.window = { go: { main: { App: bridge } }, runtime }
+  try {
+    const desktop = await import(`./desktop.js?bootstrap=${Date.now()}`)
+    assert.deepEqual(await desktop.bootstrapStatus(), { stage: 'running', message: '正在启动 Redis' })
+    const unsubscribe = desktop.onBootstrap(event => events.push(event))
+    bootstrapListener({ stage: 'ready', message: '本机服务已就绪' })
+    assert.deepEqual(events, [{ stage: 'ready', message: '本机服务已就绪' }])
+    unsubscribe()
+    assert.equal(bootstrapListener, null)
+  } finally {
+    globalThis.window = savedWindow
+  }
+})
+
+test('bootstrap helpers tolerate browser and older launchers', async () => {
+  const savedWindow = globalThis.window
+  try {
+    globalThis.window = {}
+    const desktop = await import(`./desktop.js?plain=${Date.now()}`)
+    assert.equal(await desktop.bootstrapStatus(), null)
+    const unsubscribe = desktop.onBootstrap(() => {})
+    unsubscribe()
+    desktop.retryBootstrap()
+  } finally {
+    globalThis.window = savedWindow
+  }
+})

@@ -1,5 +1,5 @@
-import { ref } from 'vue/dist/vue.esm-bundler.js'
-import { checkServer, desktopConfig, isDesktop, saveServer } from './desktop.js'
+import { onMounted, onUnmounted, ref, watch } from 'vue/dist/vue.esm-bundler.js'
+import { bootstrapStatus, checkServer, desktopConfig, isDesktop, onBootstrap, retryBootstrap, saveServer } from './desktop.js'
 
 export const DesktopSettings = {
   props: { loggedIn: Boolean },
@@ -32,11 +32,44 @@ export const DesktopSettings = {
       } catch (error) { status.value = String(error?.message || error) }
       finally { busy.value = false }
     }
-    return { enabled, current, opened, serverURL, origin, busy, status, succeeded, open, serverChanged, act }
+    // While the launcher starts the local service stack, a status strip under
+    // the desktop bar keeps the wait visible. Once the services are ready the
+    // app reloads so the initial session check runs against the live server.
+    const bootstrap = ref(null)
+    let unsubscribe = null
+    let reloaded = false
+    watch(bootstrap, value => {
+      const visible = Boolean(value && (value.stage === 'running' || value.stage === 'failed'))
+      document.documentElement.classList.toggle('desktop-booting', visible)
+    })
+    onMounted(async () => {
+      if (!enabled) return
+      try { bootstrap.value = await bootstrapStatus() } catch { bootstrap.value = null }
+      unsubscribe = onBootstrap(event => {
+        if (!event?.stage) return
+        bootstrap.value = event
+        if (event.stage === 'ready' && !reloaded) {
+          reloaded = true
+          setTimeout(() => location.reload(), 800)
+        }
+      })
+    })
+    onUnmounted(() => {
+      unsubscribe?.()
+      document.documentElement.classList.remove('desktop-booting')
+    })
+    const retry = () => {
+      if (bootstrap.value?.stage === 'running') return
+      bootstrap.value = { stage: 'running', message: '正在准备本机聊天服务…' }
+      retryBootstrap()
+    }
+    return { enabled, current, opened, serverURL, origin, busy, status, succeeded, bootstrap, open, serverChanged, act, retry }
   },
   template: `
     <template v-if="enabled">
       <header class="desktop-bar"><span><span class="desktop-indicator"></span>协作聊天 · 桌面端</span><button type="button" @click="open" aria-haspopup="dialog">{{ current.serverURL }} · 服务器设置</button></header>
+      <div v-if="bootstrap && bootstrap.stage === 'running'" class="desktop-bootstrap" role="status">{{ bootstrap.message || '正在启动本机聊天服务…' }}</div>
+      <div v-else-if="bootstrap && bootstrap.stage === 'failed'" class="desktop-bootstrap failed" role="alert"><span>{{ bootstrap.message || '本机服务启动失败' }}</span><button type="button" @click="retry">重试</button></div>
       <div v-if="opened" class="modal-backdrop desktop-settings-backdrop" @click.self="!busy && (opened = false)" @keydown.esc="!busy && (opened = false)">
         <section class="modal desktop-settings" role="dialog" aria-modal="true" aria-labelledby="desktop-settings-title">
           <div class="modal-head"><h2 id="desktop-settings-title">连接服务器</h2><button type="button" :disabled="busy" @click="opened = false" aria-label="关闭">×</button></div>

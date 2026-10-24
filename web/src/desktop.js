@@ -13,6 +13,19 @@ export const desktopConfig = () => config
 export const checkServer = value => native().CheckServer(value)
 export const saveServer = value => native().SaveConfig(value)
 
+// The launcher starts PostgreSQL, Redis and the chat server in the background
+// when the saved address is local. The UI asks for the current state once and
+// then follows live events until the services are ready.
+export const bootstrapStatus = () => {
+  const bridge = native()
+  return bridge?.BootstrapStatus ? bridge.BootstrapStatus() : null
+}
+export const retryBootstrap = () => native()?.RetryBootstrap?.()
+export const onBootstrap = handler => {
+  if (!globalThis.window?.runtime?.EventsOn) return () => {}
+  return globalThis.window.runtime.EventsOn('desktop:bootstrap', handler)
+}
+
 // A stable device and uncertain sends survive app restarts. Server namespaces
 // prevent switching servers from mixing pending IDs, users or read positions.
 export function chatStorage(persistent = false) {

@@ -4,6 +4,11 @@
 .desktop-indicator { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .desktop-client .layout { height: calc(100dvh - 38px); }
 .desktop-client .auth-layout { min-height: calc(100dvh - 38px); }
+.desktop-bootstrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 20px; border-bottom: 1px solid var(--line); background: #fdf3e2; color: #8a6d3b; font-size: 12px; overflow-wrap: anywhere; }
+.desktop-bootstrap.failed { background: #fbeae7; color: #a33c2c; }
+.desktop-bootstrap button { flex: none; padding: 0; border: 0; background: none; color: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
+.desktop-client.desktop-booting .layout { height: calc(100dvh - 70px); }
+.desktop-client.desktop-booting .auth-layout { min-height: calc(100dvh - 70px); }
 .desktop-settings-backdrop { z-index: 1000; }
 .desktop-settings > .subtle { margin-top: 16px; }
 .desktop-settings details { color: var(--muted); font-size: 13px; }
