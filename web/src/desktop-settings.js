@@ -11,6 +11,17 @@ const minimise = () => win()?.WindowMinimise?.()
 const toggleMaximise = () => { win()?.WindowToggleMaximise?.(); setTimeout(refreshMaximised, 150) }
 const closeWindow = () => win()?.WindowClose?.()
 const toggleAlwaysOnTop = () => { const next = !alwaysOnTop.value; win()?.WindowSetAlwaysOnTop?.(next); alwaysOnTop.value = next }
+// 登录界面用 QQ 式小窗，登录后恢复主窗口尺寸；最小尺寸同步调整，避免小窗被主界面的下限撑住。
+const applyLoginWindowSize = loggedIn => {
+  if (loggedIn) {
+    win()?.WindowSetMinSize?.(900, 600)
+    win()?.WindowSetSize?.(1280, 820)
+  } else {
+    win()?.WindowSetMinSize?.(430, 460)
+    win()?.WindowSetSize?.(430, 460)
+  }
+  win()?.WindowCenter?.()
+}
 let lastTitleBarClick = 0
 // Wails 的拖拽 CSS 不带双击最大化，这里补上：350ms 内两次按下即切换，窗口按钮除外。
 const onTitleBarMouseDown = event => {
@@ -27,7 +38,7 @@ const onTitleBarMouseDown = event => {
 export const DesktopSettings = {
   props: { loggedIn: Boolean },
   components: { Copy, Minus, Pin, Square, X },
-  setup() {
+  setup(props) {
     const enabled = isDesktop()
     const current = desktopConfig() || { serverURL: '', origin: '' }
     const opened = ref(false)
@@ -68,6 +79,8 @@ export const DesktopSettings = {
     })
     onMounted(async () => {
       if (!enabled) return
+      applyLoginWindowSize(props.loggedIn)
+      watch(() => props.loggedIn, value => applyLoginWindowSize(value))
       refreshMaximised()
       globalThis.window?.addEventListener?.('resize', refreshMaximised)
       globalThis.window?.addEventListener?.('desktop:open-server-settings', open)
