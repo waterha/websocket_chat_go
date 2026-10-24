@@ -120,7 +120,7 @@ func main() {
 		})
 	}
 	err = wails.Run(&options.App{
-		Title: "协作聊天", Width: 430, Height: 460, MinWidth: 430, MinHeight: 460, Frameless: true,
+		Title: "协作聊天", Width: 450, Height: 520, MinWidth: 450, MinHeight: 520, Frameless: true,
 		BackgroundColour: options.NewRGB(247, 242, 234),
 		AssetServer:      &assetserver.Options{Assets: assets, Handler: http.HandlerFunc(app.serveHTTP), Middleware: apiMiddleware},
 		OnStartup:        app.startup, OnShutdown: app.shutdown, Bind: []interface{}{app},

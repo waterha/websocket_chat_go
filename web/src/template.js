@@ -3,9 +3,10 @@
 // asserts it parses with the real Vue compiler.
 export const template = `\n    <DesktopSettings :logged-in="!!me" />
     <div v-if="!me" class="auth-layout">
-      <div class="auth-card">
-        <div class="brand-mark">✦</div><p class="eyebrow">OPEN SOURCE · REAL-TIME</p>
-        <h1>让团队协作，自然发生。</h1><p class="subtle">企业内部沟通 · 同事通讯录 · 团队群聊</p>
+        <div class="login-orb-wrap">
+        <div class="auth-card login-orb">
+        <div class="login-orb-mark" aria-hidden="true">✦</div>
+        <h1>让团队协作，自然发生。</h1>
         <form @submit.prevent="authenticate">
           <label v-if="mode === 'register'">昵称<input v-model="name" required maxlength="64" placeholder="你的称呼" /></label>
           <label>邮箱<input v-model="email" type="email" required maxlength="254" placeholder="you@example.com" /></label>
@@ -14,6 +15,7 @@ export const template = `\n    <DesktopSettings :logged-in="!!me" />
         </form>
         <button class="text-button" @click="mode = mode === 'login' ? 'register' : 'login'">{{ mode === 'login' ? '还没有账号？立即注册' : '已有账号？返回登录' }}</button>
       </div>
+        </div>
     </div>
     <div v-else class="layout">
       <aside class="sidebar">

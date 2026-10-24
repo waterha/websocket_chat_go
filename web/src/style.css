@@ -510,3 +510,26 @@ body { -webkit-font-smoothing: antialiased; }
 ::-webkit-scrollbar-thumb { border-radius: 4px; background: #d8ccbc; }
 ::-webkit-scrollbar-thumb:hover { background: #c9b9a4; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* 登录界面本身就是一颗球：整球上下左右漂浮，投影随高度呼吸 */
+.login-orb-wrap { display: grid; place-items: center; animation: orb-drift 7.5s ease-in-out infinite; will-change: transform; }
+.auth-card.login-orb { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; width: 440px; height: 440px; max-width: 92vw; max-height: 92vw; padding: 40px 32px; text-align: center; border-radius: 50%; background: radial-gradient(circle at 32% 26%, #fffdf9 0, #fdf6ec 52%, #f5e5cf 100%); animation: orb-shadow 7.5s ease-in-out infinite; }
+.login-orb h1 { margin: 0; font-size: 15px; line-height: 1.45; }
+.login-orb form { gap: 9px; margin-top: 2px; width: min(260px, 100%); }
+.login-orb input { padding: 9px 11px; font-size: 13px; }
+.login-orb .primary { padding: 10px 12px; }
+.login-orb .text-button { font-size: 12px; }
+.login-orb-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: #fff; font-size: 17px; background: radial-gradient(circle at 32% 28%, #eba97e 0, var(--accent) 58%, #8f4735 135%); box-shadow: 0 6px 14px rgba(143,71,53,.32); }
+@keyframes orb-drift {
+  0%, 100% { transform: translate(0, 0); }
+  22% { transform: translate(10px, -13px); }
+  48% { transform: translate(-9px, -8px); }
+  74% { transform: translate(-12px, 11px); }
+}
+@keyframes orb-shadow {
+  0%, 100% { box-shadow: inset -10px -14px 34px rgba(143,71,53,.08), 0 24px 48px rgba(92,65,45,.22); }
+  22% { box-shadow: inset -10px -14px 34px rgba(143,71,53,.08), 0 32px 56px rgba(92,65,45,.15); }
+  48% { box-shadow: inset -10px -14px 34px rgba(143,71,53,.08), 0 28px 52px rgba(92,65,45,.18); }
+  74% { box-shadow: inset -10px -14px 34px rgba(143,71,53,.08), 0 17px 38px rgba(92,65,45,.3); }
+}
+@media (prefers-reduced-motion: reduce) { .login-orb-wrap, .auth-card.login-orb { animation: none; } }

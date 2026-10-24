@@ -17,8 +17,8 @@ const applyLoginWindowSize = loggedIn => {
     win()?.WindowSetMinSize?.(900, 600)
     win()?.WindowSetSize?.(1280, 820)
   } else {
-    win()?.WindowSetMinSize?.(430, 460)
-    win()?.WindowSetSize?.(430, 460)
+    win()?.WindowSetMinSize?.(450, 520)
+    win()?.WindowSetSize?.(450, 520)
   }
   win()?.WindowCenter?.()
 }

@@ -30,14 +30,7 @@
 .desktop-client.desktop-booting .layout { height: calc(100dvh - 70px); }
 .desktop-client.desktop-booting .auth-layout { min-height: calc(100dvh - 70px); }
 
-/* 登录小窗：紧凑排版（桌面端专用） */
-.desktop-client .auth-layout { padding: 16px 14px; overflow: auto; align-content: center; }
-.desktop-client .auth-card { width: min(100%, 340px); padding: 22px 20px 16px; gap: 8px; border-radius: 18px; box-shadow: 0 14px 44px rgba(92,65,45,.14); }
-.desktop-client .auth-card .brand-mark { width: 34px; height: 34px; margin-bottom: 2px; font-size: 16px; }
-.desktop-client .auth-card .eyebrow, .desktop-client .auth-card > .subtle { display: none; }
-.desktop-client .auth-card h1 { margin: 0; font-size: 16px; }
-.desktop-client .auth-card form { gap: 9px; margin-top: 6px; }
-.desktop-client .auth-card label { font-size: 12px; gap: 4px; }
-.desktop-client .auth-card input { padding: 9px 11px; font-size: 13px; }
-.desktop-client .auth-card .primary { padding: 10px 12px; }
-.desktop-client .auth-card .text-button { font-size: 12px; }
+/* 登录小球窗口（桌面端专用）：450x520 窗口内一颗 420 的球 */
+.desktop-client .auth-layout { padding: 0; overflow: hidden; align-content: center; }
+.desktop-client .auth-card.login-orb { width: 420px; height: 420px; max-width: none; max-height: none; }
+.desktop-client .login-orb form { width: min(230px, 100%); }
