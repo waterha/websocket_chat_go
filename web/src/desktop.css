@@ -1,11 +1,11 @@
 .desktop-indicator { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .desktop-client .layout { height: calc(100dvh - 38px); }
-.desktop-client .auth-layout { min-height: calc(100dvh - 38px); }
+.desktop-client .auth-layout { min-height: 100dvh; }
 .desktop-bootstrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 20px; border-bottom: 1px solid var(--line); background: #fdf3e2; color: #8a6d3b; font-size: 12px; overflow-wrap: anywhere; }
 .desktop-bootstrap.failed { background: #fbeae7; color: #a33c2c; }
 .desktop-bootstrap button { flex: none; padding: 0; border: 0; background: none; color: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
 .desktop-client.desktop-booting .layout { height: calc(100dvh - 70px); }
-.desktop-client.desktop-booting .auth-layout { min-height: calc(100dvh - 70px); }
+.desktop-client.desktop-booting .auth-layout { min-height: calc(100dvh - 32px); }
 .desktop-settings-backdrop { z-index: 1000; }
 .desktop-settings > .subtle { margin-top: 16px; }
 .desktop-settings details { color: var(--muted); font-size: 13px; }
@@ -26,11 +26,19 @@
 
 /* 顶栏文案移除后，服务器设置按钮靠右 */
 .desktop-client .layout { height: calc(100dvh - 38px); }
-.desktop-client .auth-layout { min-height: calc(100dvh - 38px); }
+.desktop-client .auth-layout { min-height: 100dvh; }
 .desktop-client.desktop-booting .layout { height: calc(100dvh - 70px); }
-.desktop-client.desktop-booting .auth-layout { min-height: calc(100dvh - 70px); }
+.desktop-client.desktop-booting .auth-layout { min-height: calc(100dvh - 32px); }
 
-/* 登录小球窗口（桌面端专用）：450x520 窗口内一颗 420 的球 */
+/* 登录浮块窗口（桌面端专用）：450x520 小窗内一块可拖拽的伪长方体，
+   没有标题栏，最小化/最大化/关闭收进块体右上角 */
 .desktop-client .auth-layout { padding: 0; overflow: hidden; align-content: center; }
-.desktop-client .auth-card.login-orb { width: 420px; height: 420px; max-width: none; max-height: none; }
-.desktop-client .login-orb form { width: min(230px, 100%); }
+.desktop-client .auth-card.login-blob { width: 400px; height: 430px; max-width: none; max-height: none; --wails-draggable: drag; user-select: none; }
+.desktop-client .login-blob form,
+.desktop-client .login-blob .text-button,
+.desktop-client .login-blob .login-blob-mark { --wails-draggable: no-drag; }
+.desktop-client .login-blob form { width: min(230px, 100%); }
+.auth-window-controls { position: absolute; top: 26px; right: 46px; display: flex; gap: 5px; --wails-draggable: no-drag; }
+.auth-window-controls button { display: grid; place-items: center; width: 27px; height: 27px; padding: 0; border: 0; border-radius: 50%; color: var(--muted); background: rgba(255,255,255,.66); box-shadow: 0 2px 7px rgba(143,71,53,.16); }
+.auth-window-controls button:hover { background: #f3e4d2; color: var(--accent-dark); }
+.auth-window-controls button.close:hover { background: #c0392b; color: #fff; }

@@ -3,9 +3,14 @@
 // asserts it parses with the real Vue compiler.
 export const template = `\n    <DesktopSettings :logged-in="!!me" />
     <div v-if="!me" class="auth-layout">
-        <div class="login-orb-wrap">
-        <div class="auth-card login-orb">
-        <div class="login-orb-mark" aria-hidden="true">✦</div>
+        <div class="login-blob-wrap">
+        <div class="auth-card login-blob">
+        <div v-if="isDesktop()" class="auth-window-controls">
+          <button type="button" title="最小化" aria-label="最小化" @click.stop="windowControl('min')"><Minus :size="14" /></button>
+          <button type="button" title="最大化" aria-label="最大化" @click.stop="windowControl('max')"><Square :size="12" /></button>
+          <button type="button" class="close" title="关闭" aria-label="关闭" @click.stop="windowControl('close')"><X :size="15" /></button>
+        </div>
+        <div class="login-blob-mark" aria-hidden="true">✦</div>
         <h1>让团队协作，自然发生。</h1>
         <form @submit.prevent="authenticate">
           <label v-if="mode === 'register'">昵称<input v-model="name" required maxlength="64" placeholder="你的称呼" /></label>

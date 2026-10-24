@@ -39,6 +39,13 @@ const onTitleBarMouseDown = event => {
     lastTitleBarClick = now
   }
 }
+// 登录浮块把最小化/最大化/关闭收进形状内部，通过这个事件转发到同一套窗口控制。
+const onWindowControl = event => {
+  const action = event?.detail?.action
+  if (action === 'min') minimise()
+  else if (action === 'max') toggleMaximise()
+  else if (action === 'close') closeWindow()
+}
 
 export const DesktopSettings = {
   props: { loggedIn: Boolean },
@@ -89,6 +96,7 @@ export const DesktopSettings = {
       refreshMaximised()
       globalThis.window?.addEventListener?.('resize', refreshMaximised)
       globalThis.window?.addEventListener?.('desktop:open-server-settings', open)
+      globalThis.window?.addEventListener?.('desktop:window-control', onWindowControl)
       try { bootstrap.value = await bootstrapStatus() } catch { bootstrap.value = null }
       unsubscribe = onBootstrap(event => {
         if (!event?.stage) return
@@ -103,6 +111,7 @@ export const DesktopSettings = {
       unsubscribe?.()
       globalThis.window?.removeEventListener?.('resize', refreshMaximised)
       globalThis.window?.removeEventListener?.('desktop:open-server-settings', open)
+      globalThis.window?.removeEventListener?.('desktop:window-control', onWindowControl)
       document.documentElement.classList.remove('desktop-booting')
     })
     const retry = () => {
@@ -114,7 +123,8 @@ export const DesktopSettings = {
   },
   template: `
     <template v-if="enabled">
-      <header class="title-bar" @mousedown="onTitleBarMouseDown">
+      <!-- 登录态不渲染标题栏：窗口控制收进登录浮块内部，浮块本身可拖拽。 -->
+      <header v-if="loggedIn" class="title-bar" @mousedown="onTitleBarMouseDown">
         <span aria-hidden="true"></span>
         <div class="title-bar-actions">
           <button type="button" :class="{ active: alwaysOnTop }" :title="alwaysOnTop ? '取消置顶' : '窗口置顶'" :aria-label="alwaysOnTop ? '取消置顶' : '窗口置顶'" @click="toggleAlwaysOnTop"><Pin :size="15" /></button>

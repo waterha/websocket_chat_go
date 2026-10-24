@@ -511,25 +511,26 @@ body { -webkit-font-smoothing: antialiased; }
 ::-webkit-scrollbar-thumb:hover { background: #c9b9a4; }
 ::-webkit-scrollbar-track { background: transparent; }
 
-/* 登录界面本身就是一颗球：整球上下左右漂浮，投影随高度呼吸 */
-.login-orb-wrap { display: grid; place-items: center; animation: orb-drift 7.5s ease-in-out infinite; will-change: transform; }
-.auth-card.login-orb { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; width: 440px; height: 440px; max-width: 92vw; max-height: 92vw; padding: 40px 32px; text-align: center; border-radius: 50%; background: radial-gradient(circle at 32% 26%, #fffdf9 0, #fdf6ec 52%, #f5e5cf 100%); animation: orb-shadow 7.5s ease-in-out infinite; }
-.login-orb h1 { margin: 0; font-size: 15px; line-height: 1.45; }
-.login-orb form { gap: 9px; margin-top: 2px; width: min(260px, 100%); }
-.login-orb input { padding: 9px 11px; font-size: 13px; }
-.login-orb .primary { padding: 10px 12px; }
-.login-orb .text-button { font-size: 12px; }
-.login-orb-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; color: #fff; font-size: 17px; background: radial-gradient(circle at 32% 28%, #eba97e 0, var(--accent) 58%, #8f4735 135%); box-shadow: 0 6px 14px rgba(143,71,53,.32); }
-@keyframes orb-drift {
+/* 登录界面是一块不规则的伪长方体：整块上下左右漂浮，轮廓与投影持续变化 */
+.login-blob-wrap { display: grid; place-items: center; animation: blob-drift 9s ease-in-out infinite; will-change: transform; }
+.auth-card.login-blob { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; width: 430px; height: 430px; max-width: 92vw; max-height: 92vw; padding: 44px 36px; text-align: center; border: 1px solid rgba(255,255,255,.6); border-radius: 42% 22% 56% 38% / 46% 20% 52% 44%; background: linear-gradient(158deg, #fffdf9 0%, #fdf3e6 46%, #f1dfc6 100%); box-shadow: inset 12px 14px 28px rgba(255,255,255,.78), inset -16px -20px 36px rgba(143,71,53,.11), 0 26px 52px rgba(92,65,45,.22); animation: blob-morph 9s ease-in-out infinite; }
+.login-blob h1 { margin: 0; font-size: 15px; line-height: 1.45; }
+.login-blob form { gap: 9px; margin-top: 2px; width: min(260px, 100%); }
+.login-blob input { padding: 9px 11px; font-size: 13px; }
+.login-blob .primary { padding: 10px 12px; }
+.login-blob .text-button { font-size: 12px; }
+.login-blob-mark { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 46% 54% 50% 50% / 52% 46% 54% 48%; color: #fff; font-size: 17px; background: radial-gradient(circle at 32% 28%, #eba97e 0, var(--accent) 58%, #8f4735 135%); box-shadow: 0 6px 14px rgba(143,71,53,.32); }
+@keyframes blob-drift {
   0%, 100% { transform: translate(0, 0); }
-  22% { transform: translate(10px, -13px); }
-  48% { transform: translate(-9px, -8px); }
-  74% { transform: translate(-12px, 11px); }
+  22% { transform: translate(11px, -13px); }
+  48% { transform: translate(-10px, -9px); }
+  74% { transform: translate(-13px, 12px); }
 }
-@keyframes orb-shadow {
-  0%, 100% { box-shadow: inset -10px -14px 34px rgba(143,71,53,.08), 0 24px 48px rgba(92,65,45,.22); }
-  22% { box-shadow: inset -10px -14px 34px rgba(143,71,53,.08), 0 32px 56px rgba(92,65,45,.15); }
-  48% { box-shadow: inset -10px -14px 34px rgba(143,71,53,.08), 0 28px 52px rgba(92,65,45,.18); }
-  74% { box-shadow: inset -10px -14px 34px rgba(143,71,53,.08), 0 17px 38px rgba(92,65,45,.3); }
+/* 右上角始终收着：那是窗口控制按钮的位置，其余三角大幅游走，轮廓才显得不规则 */
+@keyframes blob-morph {
+  0%, 100% { border-radius: 42% 22% 56% 38% / 46% 20% 52% 44%; box-shadow: inset 12px 14px 28px rgba(255,255,255,.78), inset -16px -20px 36px rgba(143,71,53,.11), 0 26px 52px rgba(92,65,45,.22); }
+  25% { border-radius: 34% 18% 44% 58% / 38% 24% 58% 40%; box-shadow: inset 12px 14px 28px rgba(255,255,255,.78), inset -16px -20px 36px rgba(143,71,53,.11), 0 34px 58px rgba(92,65,45,.15); }
+  50% { border-radius: 50% 26% 38% 46% / 52% 18% 46% 56%; box-shadow: inset 12px 14px 28px rgba(255,255,255,.78), inset -16px -20px 36px rgba(143,71,53,.11), 0 29px 54px rgba(92,65,45,.19); }
+  75% { border-radius: 40% 20% 52% 40% / 44% 22% 56% 48%; box-shadow: inset 12px 14px 28px rgba(255,255,255,.78), inset -16px -20px 36px rgba(143,71,53,.11), 0 18px 40px rgba(92,65,45,.3); }
 }
-@media (prefers-reduced-motion: reduce) { .login-orb-wrap, .auth-card.login-orb { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .login-blob-wrap, .auth-card.login-blob { animation: none; } }
