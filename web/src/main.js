@@ -18,10 +18,10 @@ import { installEmojiPicker } from './emoji-picker.js'
 import { useMessageActions } from './message-actions.js'
 import { api, uploadMedia } from './api.js'
 import { onImageLinkClick } from './image-viewer.js'
+
 import { template } from './template.js'
-import { OrganizationDirectory } from './organization-directory.js'
 import './style.css'
-import './organization-directory.css'
+
 
 // 头像组件：有头像用图片，否则回退到首字母占位。
 const UserAvatar = {
@@ -34,7 +34,8 @@ const UserAvatar = {
 }
 
 createApp({
-  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Download, Check, Pin, BellOff, Info, ChevronRight, ChevronDown, Clock3, ImagePlus, OrganizationDirectory, UserAvatar },
+  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Download, Check, Pin, BellOff, Info, ChevronRight, ChevronDown, Clock3, ImagePlus, UserAvatar },
+
   setup() {
     const me = ref(null)
     const mode = ref('login')
