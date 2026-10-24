@@ -17,8 +17,6 @@ export const template = `\n    <DesktopSettings :logged-in="!!me" />
     </div>
     <div v-else class="layout">
       <aside class="sidebar">
-        <header class="sidebar-head"><span class="brand-mark small">✦</span><div><strong>websocket_chat_go</strong><small>让团队更靠近</small></div></header>
-        <OrganizationDirectory @chat="openDirect" />
           <div class="side-title"><span>{{ conversationFilter === 'current' ? '当前会话' : conversationFilter === 'friends' ? '好友' : '群聊' }}</span><div class="side-actions"><button @click="openGlobalSearch" title="全局搜索">搜索</button><button @click="openAddUser" title="添加用户">添加</button><button @click="openContacts" title="联系人管理">管理</button><button @click="openFriendRequests" title="好友申请">申请<span v-if="pendingIncomingRequests.length" class="request-count">{{ pendingIncomingRequests.length > 99 ? '99+' : pendingIncomingRequests.length }}</span></button><button @click="openCreate" title="创建群聊">建群</button></div></div>
           <div class="conversation-tabs"><button :class="{ active: conversationFilter === 'current' }" @click="conversationFilter = 'current'">当前</button><button :class="{ active: conversationFilter === 'friends' }" @click="conversationFilter = 'friends'">好友</button><button :class="{ active: conversationFilter === 'group' }" @click="conversationFilter = 'group'">群聊</button></div>
           <div class="directory-search" role="search" aria-label="查找好友和群聊"><Search :size="17" aria-hidden="true" /><input ref="directoryInput" v-model="directoryQuery" type="search" maxlength="100" :placeholder="directoryPlaceholder" :aria-label="directoryPlaceholder" @keydown.esc.prevent="clearDirectorySearch" /><button v-if="directoryQuery" type="button" class="icon-button" title="清除搜索" aria-label="清除列表搜索" @click="clearDirectorySearch"><X :size="16" aria-hidden="true" /></button></div>
@@ -56,13 +54,11 @@ export const template = `\n    <DesktopSettings :logged-in="!!me" />
              <UserAvatar v-if="current.kind === 'direct'" :user="headMember" :name="title(current)" />
              <span v-else class="avatar">{{ title(current).slice(0, 1) }}</span>
              <div class="chat-head-text"><strong>{{ title(current) }}<span v-if="current.dismissed" class="mute-mark" aria-label="已解散">已解散</span><span v-if="current.pinned" class="pin-mark" aria-label="已置顶">置顶</span><span v-if="current.muted" class="mute-mark" aria-label="免打扰">免打扰</span></strong><p>{{ chatHeadMeta }}</p></div>
-             <div class="chat-head-actions">
-               <span v-if="current.pending_joins" class="pending-pill" role="status" @click="openMembers">待审批 {{ current.pending_joins > 99 ? '99+' : current.pending_joins }}</span>
+             <div v-if="current.kind === 'direct'" class="chat-head-actions">
                <button type="button" class="head-icon" :class="{ active: current.pinned }" :title="current.pinned ? '取消置顶' : '置顶会话'" :aria-label="current.pinned ? '取消置顶' : '置顶会话'" :disabled="preferenceBusy" @click="togglePreference(current.id, 'pinned')"><Pin :size="18" /></button>
                <button type="button" class="head-icon" :class="{ active: current.muted }" :title="current.muted ? '关闭免打扰' : '消息免打扰'" :aria-label="current.muted ? '关闭免打扰' : '消息免打扰'" :disabled="preferenceBusy" @click="togglePreference(current.id, 'muted')"><BellOff :size="18" /></button>
                <button type="button" class="head-icon" title="搜索聊天记录" aria-label="搜索聊天记录" @click="openSearch"><Search :size="18" /></button>
-               <button v-if="current.kind === 'group'" type="button" class="head-icon" title="成员管理" aria-label="成员管理" @click="openMembers"><Users :size="18" /></button>
-               <button v-if="current.kind === 'direct'" type="button" class="head-icon" :aria-expanded="chatInfoOpen" title="会话信息" aria-label="会话信息" @click="chatInfoOpen = !chatInfoOpen"><Info :size="18" /></button>
+               <button type="button" class="head-icon" :aria-expanded="chatInfoOpen" title="会话信息" aria-label="会话信息" @click="chatInfoOpen = !chatInfoOpen"><Info :size="18" /></button>
              </div>
            </header>
            <section v-if="showSearch" id="message-search-panel" class="message-search" aria-label="搜索聊天记录" @keydown.esc.stop="closeSearch">
@@ -106,6 +102,14 @@ export const template = `\n    <DesktopSettings :logged-in="!!me" />
          <div v-else class="welcome"><span class="brand-mark">✦</span><h2>开启一段新对话</h2><p>从左侧联系人选择用户即可开始私聊，也可以创建群聊。</p><div class="welcome-actions"><button class="outline-button" @click="openCreate()">创建群聊</button></div></div>
       </main>
       <aside v-if="current && current.kind === 'group'" class="detail-panel" aria-label="群信息">
+        <div class="panel-actions">
+          <span v-if="current.pending_joins" class="pending-pill" role="status" @click="openMembers">待审批 {{ current.pending_joins > 99 ? '99+' : current.pending_joins }}</span>
+          <span class="panel-actions-spacer"></span>
+          <button type="button" class="head-icon" :class="{ active: current.pinned }" :title="current.pinned ? '取消置顶' : '置顶会话'" :aria-label="current.pinned ? '取消置顶' : '置顶会话'" :disabled="preferenceBusy" @click="togglePreference(current.id, 'pinned')"><Pin :size="18" /></button>
+          <button type="button" class="head-icon" :class="{ active: current.muted }" :title="current.muted ? '关闭免打扰' : '消息免打扰'" :aria-label="current.muted ? '关闭免打扰' : '消息免打扰'" :disabled="preferenceBusy" @click="togglePreference(current.id, 'muted')"><BellOff :size="18" /></button>
+          <button type="button" class="head-icon" title="搜索聊天记录" aria-label="搜索聊天记录" @click="openSearch"><Search :size="18" /></button>
+          <button type="button" class="head-icon" title="成员管理" aria-label="成员管理" @click="openMembers"><Users :size="18" /></button>
+        </div>
         <section class="announcement-block" aria-label="群公告">
           <button type="button" class="announcement-block-head" @click="openAnnouncementPanel">
             <span class="announcement-block-title">群公告<span v-if="announcementCount" class="announcement-block-count">{{ announcementCount }}</span></span>
