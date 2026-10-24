@@ -25,18 +25,18 @@ test('emoji picker stays hidden until opened and inserts an emoji at the saved c
     installEmojiPicker(editor)
     const picker = dom.window.document.querySelector('.emoji-picker')
     const toggle = picker.querySelector('.emoji-picker-toggle')
-    const grid = picker.querySelector('.emoji-picker-grid')
+    const panel = picker.querySelector('.emoji-picker-panel')
     assert.equal(toggle.getAttribute('aria-expanded'), 'false')
-    assert.equal(dom.window.getComputedStyle(grid).display, 'none')
+    assert.equal(dom.window.getComputedStyle(panel).display, 'none')
     const down = new dom.window.MouseEvent('pointerdown', { bubbles: true, cancelable: true })
     toggle.dispatchEvent(down)
     assert.equal(down.defaultPrevented, true)
     toggle.click()
     assert.equal(toggle.getAttribute('aria-expanded'), 'true')
-    assert.equal(dom.window.getComputedStyle(grid).display, 'grid')
+    assert.equal(dom.window.getComputedStyle(panel).display, 'block')
     toggle.click()
     assert.equal(toggle.getAttribute('aria-expanded'), 'false')
-    assert.equal(dom.window.getComputedStyle(grid).display, 'none')
+    assert.equal(dom.window.getComputedStyle(panel).display, 'none')
     toggle.click()
     picker.querySelector('.emoji-option').click()
 
@@ -44,7 +44,7 @@ test('emoji picker stays hidden until opened and inserts an emoji at the saved c
     assert.equal(inputEvents, 1)
     assert.equal(picker.classList.contains('open'), false)
     assert.equal(toggle.getAttribute('aria-expanded'), 'false')
-    assert.equal(dom.window.getComputedStyle(grid).display, 'none')
+    assert.equal(dom.window.getComputedStyle(panel).display, 'none')
   } finally {
     globalThis.document = originalDocument
     globalThis.window = originalWindow
