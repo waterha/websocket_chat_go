@@ -97,7 +97,7 @@ export const DesktopSettings = {
   template: `
     <template v-if="enabled">
       <header class="title-bar" @mousedown="onTitleBarMouseDown">
-        <span class="title-bar-title"><span class="brand-mark small">✦</span>协作聊天</span>
+        <span class="title-bar-title">协作聊天</span>
         <div class="title-bar-actions">
           <button type="button" :class="{ active: alwaysOnTop }" :title="alwaysOnTop ? '取消置顶' : '窗口置顶'" :aria-label="alwaysOnTop ? '取消置顶' : '窗口置顶'" @click="toggleAlwaysOnTop"><Pin :size="15" /></button>
           <button type="button" title="最小化" aria-label="最小化" @click="minimise"><Minus :size="15" /></button>
