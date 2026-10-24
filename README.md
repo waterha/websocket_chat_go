@@ -34,7 +34,7 @@ Go + PostgreSQL + Redis + Vue 的企业内部协作项目，提供网页版和�
 
 ## Windows 桌面端
 
-桌面端使用 Go + Wails 和系统 WebView。构建完成后直接运行 `desktop/build/bin/WebsocketChat.exe`；客户端不内置数据库，连接已运行的聊天服务。构建要求、服务器设置与分发流程见 [desktop/README.md](desktop/README.md)。
+桌面端使用 Go + Wails 和系统 WebView。构建完成后双击 `desktop/build/bin/WebsocketChat.exe` 即可：默认本机地址下，启动器会自动拉起私有 PostgreSQL、Redis 和聊天服务，也支持连接远程团队服务器。构建要求、服务器设置与分发流程见 [desktop/README.md](desktop/README.md)。
 
 ## 本地运行
 
