@@ -101,14 +101,6 @@ export const template = `\n    <div v-if="!me" class="auth-layout">
          <div v-else class="welcome"><span class="brand-mark">✦</span><h2>开启一段新对话</h2><p>从左侧联系人选择用户即可开始私聊，也可以创建群聊。</p><div class="welcome-actions"><button class="outline-button" @click="openCreate()">创建群聊</button></div></div>
       </main>
       <aside v-if="current && current.kind === 'group'" class="detail-panel" aria-label="群信息">
-        <div class="panel-actions">
-          <span v-if="current.pending_joins" class="pending-pill" role="status" @click="openMembers">待审批 {{ current.pending_joins > 99 ? '99+' : current.pending_joins }}</span>
-          <span class="panel-actions-spacer"></span>
-          <button type="button" class="head-icon" :class="{ active: current.pinned }" :title="current.pinned ? '取消置顶' : '置顶会话'" :aria-label="current.pinned ? '取消置顶' : '置顶会话'" :disabled="preferenceBusy" @click="togglePreference(current.id, 'pinned')"><Pin :size="18" /></button>
-          <button type="button" class="head-icon" :class="{ active: current.muted }" :title="current.muted ? '关闭免打扰' : '消息免打扰'" :aria-label="current.muted ? '关闭免打扰' : '消息免打扰'" :disabled="preferenceBusy" @click="togglePreference(current.id, 'muted')"><BellOff :size="18" /></button>
-          <button type="button" class="head-icon" title="搜索聊天记录" aria-label="搜索聊天记录" @click="openSearch"><Search :size="18" /></button>
-          <button type="button" class="head-icon" title="成员管理" aria-label="成员管理" @click="openMembers"><Users :size="18" /></button>
-        </div>
         <section class="announcement-block" aria-label="群公告">
           <button type="button" class="announcement-block-head" @click="openAnnouncementPanel">
             <span class="announcement-block-title">群公告<span v-if="announcementCount" class="announcement-block-count">{{ announcementCount }}</span></span>
