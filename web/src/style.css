@@ -422,3 +422,29 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 /* Settings row in the member modal footer */
 .member-settings { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; width: 100%; padding: 10px 14px; border: 1px dashed var(--line); border-radius: 12px; }
 .settings-hint { color: var(--muted); font-size: 11px; }
+
+/* User avatars: the img keeps the same box as the letter placeholder */
+img.avatar { object-fit: cover; flex: none; background: #e8ddce; }
+
+/* Message date dividers */
+.day-divider { margin: 6px auto 18px; text-align: center; color: var(--muted); font-size: 11px; }
+.day-divider::before, .day-divider::after { content: '·'; margin: 0 8px; color: var(--line); }
+
+/* Direct conversation info panel */
+.direct-panel { background: #fcf8f1; }
+.direct-profile { display: grid; justify-items: center; gap: 12px; padding: 28px 20px; text-align: center; overflow-y: auto; }
+.direct-profile h3 { margin: 0; font-size: 17px; }
+.direct-profile .profile-avatar { width: 72px; height: 72px; font-size: 30px; }
+.direct-profile .profile-details { margin: 0; }
+.direct-actions { display: grid; width: 100%; gap: 8px; }
+.direct-actions .outline-button { width: 100%; }
+
+/* Friend/contact rows with avatars */
+.request-with-avatar { align-items: center; }
+.avatar-wrap { position: relative; display: inline-flex; }
+
+/* Categorized emoji picker */
+.emoji-picker-tabs { display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 6px; }
+.emoji-picker-tab { padding: 3px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; }
+.emoji-picker-tab.active { color: var(--accent-dark); background: #f1e6da; }
+.emoji-picker-grid { grid-template-columns: repeat(8, 1fr); }
