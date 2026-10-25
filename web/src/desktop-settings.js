@@ -17,7 +17,9 @@ const closeWindow = () => {
 }
 const toggleAlwaysOnTop = () => { const next = !alwaysOnTop.value; win()?.WindowSetAlwaysOnTop?.(next); alwaysOnTop.value = next }
 // 登录界面用 QQ 式小窗，登录后恢复主窗口尺寸；最小尺寸同步调整，避免小窗被主界面的下限撑住。
+// 登录期间整窗透明，只留下不规则的浮块本体，所以同步切换 desktop-login-window 类。
 const applyLoginWindowSize = loggedIn => {
+  document.documentElement.classList.toggle('desktop-login-window', !loggedIn)
   if (loggedIn) {
     win()?.WindowSetMinSize?.(900, 600)
     win()?.WindowSetSize?.(1280, 820)

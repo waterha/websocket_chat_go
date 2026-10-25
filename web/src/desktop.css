@@ -31,7 +31,12 @@
 .desktop-client.desktop-booting .auth-layout { min-height: calc(100dvh - 32px); }
 
 /* 登录浮块窗口（桌面端专用）：450x520 小窗内一块可拖拽的伪长方体，
-   没有标题栏，最小化/最大化/关闭收进块体右上角 */
+   没有标题栏，最小化/最大化/关闭收进块体右上角。
+   登录期间整窗透明：窗口四周不再是色块，桌面上只留下浮块和它的投影，
+   空白区域不可拖拽也不响应选中；主界面（.layout）始终铺实底防止透出桌面。 */
+html.desktop-login-window, html.desktop-login-window body { background: transparent; }
+html.desktop-login-window .auth-layout { background: transparent; min-height: 100dvh; }
+.desktop-client .layout { height: calc(100dvh - 38px); background: #f7f2ea; }
 .desktop-client .auth-layout { padding: 0; overflow: hidden; align-content: center; }
 .desktop-client .auth-card.login-blob { width: 400px; height: 430px; max-width: none; max-height: none; --wails-draggable: drag; user-select: none; }
 .desktop-client .login-blob form,

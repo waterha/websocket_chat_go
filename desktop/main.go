@@ -125,7 +125,7 @@ func main() {
 		AssetServer:      &assetserver.Options{Assets: assets, Handler: http.HandlerFunc(app.serveHTTP), Middleware: apiMiddleware},
 		OnStartup:        app.startup, OnShutdown: app.shutdown, Bind: []interface{}{app},
 		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "5ac5da33-3af2-4e70-a638-f883d41f1026", OnSecondInstanceLaunch: func(options.SecondInstanceData) { runtime.WindowUnminimise(app.ctx); runtime.WindowShow(app.ctx) }},
-		Windows:            &windows.Options{WebviewUserDataPath: webviewPath, WebviewGpuIsDisabled: true, Theme: windows.Light},
+		Windows:            &windows.Options{WebviewUserDataPath: webviewPath, WebviewGpuIsDisabled: true, Theme: windows.Light, WebviewIsTransparent: true, WindowIsTranslucent: true, BackdropType: windows.None},
 	})
 	if err != nil {
 		log.Fatal(err)
