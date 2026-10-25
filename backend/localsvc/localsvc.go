@@ -85,6 +85,7 @@ func Run(ctx context.Context, options Options) error {
 	go func() {
 		defer close(shutdownDone)
 		<-ctx.Done()
+		log.Printf("localsvc: 收到退出信号，关闭聊天服务（%s）", options.HTTPAddr)
 		services.Hub.Close()
 		shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -93,6 +94,7 @@ func Run(ctx context.Context, options Options) error {
 		}
 	}()
 	err = server.ListenAndServe()
+	log.Printf("localsvc: ListenAndServe 返回（%s）：%v", options.HTTPAddr, err)
 	<-shutdownDone
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil

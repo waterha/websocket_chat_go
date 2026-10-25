@@ -228,3 +228,16 @@ func TestStopShutsDownStartedPostgresAndRedis(t *testing.T) {
 		t.Fatal("redis was not marked stopped")
 	}
 }
+
+func TestTrimOutputStripsPsqlNewline(t *testing.T) {
+	if got := trimOutput([]byte("1\n")); got != "1" {
+		t.Fatalf("trimOutput = %q, want %q", got, "1")
+	}
+	if got := trimOutput([]byte("  hello \r\n")); got != "hello" {
+		t.Fatalf("trimOutput = %q, want %q", got, "hello")
+	}
+	long := strings.Repeat("x", 3000)
+	if got := trimOutput([]byte(long)); len(got) != 2000 {
+		t.Fatalf("trimOutput kept %d chars, want 2000", len(got))
+	}
+}

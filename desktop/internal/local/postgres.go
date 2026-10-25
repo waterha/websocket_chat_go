@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -205,7 +206,9 @@ func (service *postgresService) stop() {
 }
 
 func trimOutput(output []byte) string {
-	text := string(output)
+	// psql -tA still ends values with a newline; the database-exists check
+	// compares against "1", so whitespace must go before the comparison.
+	text := strings.TrimSpace(string(output))
 	if len(text) > 2000 {
 		text = text[:2000]
 	}

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"io/fs"
+	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -128,7 +129,6 @@ func (a *App) beginBootstrap() {
 
 func (a *App) runBootstrap(config client.Config) {
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	a.bootMu.Lock()
 	if a.bootCancel != nil {
 		a.bootCancel()
@@ -141,9 +141,14 @@ func (a *App) runBootstrap(config client.Config) {
 	if ctx.Err() != nil {
 		return
 	}
+	// 上下文不能随本函数返回而取消：启动成功的聊天服务要一直挂在它上面，
+	// 直到下次引导重试或应用关停（shutdown 里的 bootCancel）。
 	if err != nil {
+		cancel()
+		log.Printf("本机服务引导失败：%v", err)
 		a.setBootstrap(bootstrapState{Stage: "failed", Message: err.Error()})
 	} else {
+		log.Printf("本机服务已就绪（%s）", config.ServerURL)
 		a.setBootstrap(bootstrapState{Stage: "ready", Message: "本机服务已就绪"})
 	}
 	a.emitBootstrap()
