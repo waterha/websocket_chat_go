@@ -120,12 +120,12 @@ func main() {
 		})
 	}
 	err = wails.Run(&options.App{
-		Title: "协作聊天", Width: 450, Height: 520, MinWidth: 450, MinHeight: 520, Frameless: true,
+		Title: "协作聊天", Width: 360, Height: 530, MinWidth: 360, MinHeight: 530, Frameless: true,
 		BackgroundColour: options.NewRGB(247, 242, 234),
 		AssetServer:      &assetserver.Options{Assets: assets, Handler: http.HandlerFunc(app.serveHTTP), Middleware: apiMiddleware},
 		OnStartup:        app.startup, OnShutdown: app.shutdown, Bind: []interface{}{app},
 		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "5ac5da33-3af2-4e70-a638-f883d41f1026", OnSecondInstanceLaunch: func(options.SecondInstanceData) { runtime.WindowUnminimise(app.ctx); runtime.WindowShow(app.ctx) }},
-		Windows:            &windows.Options{WebviewUserDataPath: webviewPath, WebviewGpuIsDisabled: true, Theme: windows.Light, WebviewIsTransparent: true, WindowIsTranslucent: true, BackdropType: windows.None},
+		Windows:            &windows.Options{WebviewUserDataPath: webviewPath, WebviewGpuIsDisabled: true, Theme: windows.Light},
 	})
 	if err != nil {
 		log.Fatal(err)

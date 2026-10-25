@@ -1,11 +1,9 @@
 .desktop-indicator { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-.desktop-client .layout { height: calc(100dvh - 38px); }
-.desktop-client .auth-layout { min-height: 100dvh; }
+.desktop-client .layout { height: calc(100dvh - 38px); background: #f7f2ea; }
 .desktop-bootstrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 20px; border-bottom: 1px solid var(--line); background: #fdf3e2; color: #8a6d3b; font-size: 12px; overflow-wrap: anywhere; }
 .desktop-bootstrap.failed { background: #fbeae7; color: #a33c2c; }
 .desktop-bootstrap button { flex: none; padding: 0; border: 0; background: none; color: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
 .desktop-client.desktop-booting .layout { height: calc(100dvh - 70px); }
-.desktop-client.desktop-booting .auth-layout { min-height: calc(100dvh - 32px); }
 .desktop-settings-backdrop { z-index: 1000; }
 .desktop-settings > .subtle { margin-top: 16px; }
 .desktop-settings details { color: var(--muted); font-size: 13px; }
@@ -25,25 +23,15 @@
 .title-bar-actions button.close:hover { background: #c0392b; color: #fff; }
 
 /* 顶栏文案移除后，服务器设置按钮靠右 */
-.desktop-client .layout { height: calc(100dvh - 38px); }
-.desktop-client .auth-layout { min-height: 100dvh; }
-.desktop-client.desktop-booting .layout { height: calc(100dvh - 70px); }
-.desktop-client.desktop-booting .auth-layout { min-height: calc(100dvh - 32px); }
-
-/* 登录浮块窗口（桌面端专用）：450x520 小窗内一块可拖拽的伪长方体，
-   没有标题栏，最小化/最大化/关闭收进块体右上角。
-   登录期间整窗透明：窗口四周不再是色块，桌面上只留下浮块和它的投影，
-   空白区域不可拖拽也不响应选中；主界面（.layout）始终铺实底防止透出桌面。 */
-html.desktop-login-window, html.desktop-login-window body { background: transparent; }
-html.desktop-login-window .auth-layout { background: transparent; min-height: 100dvh; }
 .desktop-client .layout { height: calc(100dvh - 38px); background: #f7f2ea; }
-.desktop-client .auth-layout { padding: 0; overflow: hidden; align-content: center; }
-.desktop-client .auth-card.login-blob { width: 400px; height: 430px; max-width: none; max-height: none; --wails-draggable: drag; user-select: none; }
-.desktop-client .login-blob form,
-.desktop-client .login-blob .text-button,
-.desktop-client .login-blob .login-blob-mark { --wails-draggable: no-drag; }
-.desktop-client .login-blob form { width: min(230px, 100%); }
-.auth-window-controls { position: absolute; top: 26px; right: 46px; display: flex; gap: 5px; --wails-draggable: no-drag; }
-.auth-window-controls button { display: grid; place-items: center; width: 27px; height: 27px; padding: 0; border: 0; border-radius: 50%; color: var(--muted); background: rgba(255,255,255,.66); box-shadow: 0 2px 7px rgba(143,71,53,.16); }
-.auth-window-controls button:hover { background: #f3e4d2; color: var(--accent-dark); }
-.auth-window-controls button.close:hover { background: #c0392b; color: #fff; }
+.desktop-client.desktop-booting .layout { height: calc(100dvh - 70px); }
+
+/* 登录窗口（微信式小窗）：标题栏只有应用名、服务器设置和关闭，可拖拽 */
+.login-bar { height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 16px; border-bottom: 1px solid var(--line); background: #fcf8f1; --wails-draggable: drag; user-select: none; }
+.login-bar-title { color: var(--ink); font-size: 13px; font-weight: 800; }
+.login-bar-actions { display: flex; align-items: center; gap: 2px; --wails-draggable: no-drag; }
+.login-bar-actions button { display: grid; place-items: center; width: 32px; height: 28px; padding: 0; border: 0; border-radius: 7px; color: var(--muted); background: transparent; }
+.login-bar-actions button:hover { background: #f1e6da; color: var(--accent-dark); }
+.login-bar-actions button.close:hover { background: #c0392b; color: #fff; }
+.desktop-client .auth-layout { display: flex; flex-direction: column; padding: 0; overflow: hidden; min-height: calc(100dvh - 36px); background: #f7f2ea; }
+.desktop-client.desktop-booting .auth-layout { min-height: calc(100dvh - 68px); }

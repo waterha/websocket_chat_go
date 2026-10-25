@@ -1,5 +1,5 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue/dist/vue.esm-bundler.js'
-import { Copy, Minus, Pin, Square, X } from 'lucide-vue-next'
+import { Copy, Minus, Pin, Settings, Square, X } from 'lucide-vue-next'
 import { bootstrapStatus, checkServer, desktopConfig, isDesktop, onBootstrap, retryBootstrap, saveServer } from './desktop.js'
 
 // 无边框窗口的自定义标题栏：置顶、最小化、最大化（还原）、关闭。
@@ -16,16 +16,14 @@ const closeWindow = () => {
   else w?.WindowClose?.()
 }
 const toggleAlwaysOnTop = () => { const next = !alwaysOnTop.value; win()?.WindowSetAlwaysOnTop?.(next); alwaysOnTop.value = next }
-// 登录界面用 QQ 式小窗，登录后恢复主窗口尺寸；最小尺寸同步调整，避免小窗被主界面的下限撑住。
-// 登录期间整窗透明，只留下不规则的浮块本体，所以同步切换 desktop-login-window 类。
+// 登录界面用微信式小窗，登录后恢复主窗口尺寸；最小尺寸同步调整，避免小窗被主界面的下限撑住。
 const applyLoginWindowSize = loggedIn => {
-  document.documentElement.classList.toggle('desktop-login-window', !loggedIn)
   if (loggedIn) {
     win()?.WindowSetMinSize?.(900, 600)
     win()?.WindowSetSize?.(1280, 820)
   } else {
-    win()?.WindowSetMinSize?.(450, 520)
-    win()?.WindowSetSize?.(450, 520)
+    win()?.WindowSetMinSize?.(360, 530)
+    win()?.WindowSetSize?.(360, 530)
   }
   win()?.WindowCenter?.()
 }
@@ -41,17 +39,10 @@ const onTitleBarMouseDown = event => {
     lastTitleBarClick = now
   }
 }
-// 登录浮块把最小化/最大化/关闭收进形状内部，通过这个事件转发到同一套窗口控制。
-const onWindowControl = event => {
-  const action = event?.detail?.action
-  if (action === 'min') minimise()
-  else if (action === 'max') toggleMaximise()
-  else if (action === 'close') closeWindow()
-}
 
 export const DesktopSettings = {
   props: { loggedIn: Boolean },
-  components: { Copy, Minus, Pin, Square, X },
+  components: { Copy, Minus, Pin, Settings, Square, X },
   setup(props) {
     const enabled = isDesktop()
     const current = desktopConfig() || { serverURL: '', origin: '' }
@@ -98,7 +89,6 @@ export const DesktopSettings = {
       refreshMaximised()
       globalThis.window?.addEventListener?.('resize', refreshMaximised)
       globalThis.window?.addEventListener?.('desktop:open-server-settings', open)
-      globalThis.window?.addEventListener?.('desktop:window-control', onWindowControl)
       try { bootstrap.value = await bootstrapStatus() } catch { bootstrap.value = null }
       unsubscribe = onBootstrap(event => {
         if (!event?.stage) return
@@ -113,7 +103,6 @@ export const DesktopSettings = {
       unsubscribe?.()
       globalThis.window?.removeEventListener?.('resize', refreshMaximised)
       globalThis.window?.removeEventListener?.('desktop:open-server-settings', open)
-      globalThis.window?.removeEventListener?.('desktop:window-control', onWindowControl)
       document.documentElement.classList.remove('desktop-booting')
     })
     const retry = () => {
@@ -125,8 +114,15 @@ export const DesktopSettings = {
   },
   template: `
     <template v-if="enabled">
-      <!-- 登录态不渲染标题栏：窗口控制收进登录浮块内部，浮块本身可拖拽。 -->
-      <header v-if="loggedIn" class="title-bar" @mousedown="onTitleBarMouseDown">
+      <!-- 登录窗口是微信式小窗：标题栏只有应用名、服务器设置和关闭；主窗口保留完整控制。 -->
+      <header v-if="!loggedIn" class="login-bar">
+        <span class="login-bar-title">协作聊天</span>
+        <div class="login-bar-actions">
+          <button type="button" title="服务器设置" aria-label="服务器设置" @click="open"><Settings :size="15" /></button>
+          <button type="button" class="close" title="关闭" aria-label="关闭" @click="closeWindow"><X :size="15" /></button>
+        </div>
+      </header>
+      <header v-else class="title-bar" @mousedown="onTitleBarMouseDown">
         <span aria-hidden="true"></span>
         <div class="title-bar-actions">
           <button type="button" :class="{ active: alwaysOnTop }" :title="alwaysOnTop ? '取消置顶' : '窗口置顶'" :aria-label="alwaysOnTop ? '取消置顶' : '窗口置顶'" @click="toggleAlwaysOnTop"><Pin :size="15" /></button>
