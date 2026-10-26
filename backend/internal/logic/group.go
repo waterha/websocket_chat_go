@@ -553,18 +553,27 @@ func (chat *Chat) RequestToJoin(ctx context.Context, callerID, conversationID, m
 	if member {
 		return model.JoinRequest{}, model.Fail(409, "already_member")
 	}
+	var count int
+	if err = tx.QueryRow(ctx, "SELECT count(*) FROM conversation_members WHERE conversation_id=$1", conversationID).Scan(&count); err != nil {
+		return model.JoinRequest{}, err
+	}
+	if count >= MaxGroupMembers {
+		return model.JoinRequest{}, model.Fail(400, "invalid_members")
+	}
 	if !approval {
-		var count int
-		if err = tx.QueryRow(ctx, "SELECT count(*) FROM conversation_members WHERE conversation_id=$1", conversationID).Scan(&count); err != nil {
-			return model.JoinRequest{}, err
-		}
-		if count >= MaxGroupMembers {
-			return model.JoinRequest{}, model.Fail(400, "invalid_members")
-		}
 		if _, err = tx.Exec(ctx, "INSERT INTO conversation_members(conversation_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING", conversationID, callerID); err != nil {
 			return model.JoinRequest{}, err
 		}
 		if err = chat.appendEvent(ctx, tx, conversationID, model.Event{Event: "conversation.created", Data: map[string]string{"id": conversationID}}); err != nil {
+			return model.JoinRequest{}, err
+		}
+		if _, err = tx.Exec(ctx, "UPDATE conversation_join_requests SET status='accepted',updated_at=now() WHERE conversation_id=$1 AND user_id=$2 AND status='pending'", conversationID, callerID); err != nil {
+			return model.JoinRequest{}, err
+		}
+		if err = chat.systemNotice(ctx, tx, conversationID, callerID, "加入了群聊"); err != nil {
+			return model.JoinRequest{}, err
+		}
+		if err = chat.notifyConversation(ctx, tx, conversationID); err != nil {
 			return model.JoinRequest{}, err
 		}
 		if err = tx.Commit(ctx); err != nil {
@@ -700,8 +709,8 @@ func (chat *Chat) DecideJoinRequest(ctx context.Context, callerID, conversationI
 	if _, err = tx.Exec(ctx, "UPDATE conversation_join_requests SET status=$1,updated_at=now() WHERE id=$2", status, requestID); err != nil {
 		return model.JoinRequest{}, false, err
 	}
-	request, err := scanJoinRequest(tx.QueryRow(ctx, `SELECT jr.id,jr.conversation_id,jr.user_id,jr.message,jr.status,jr.created_at,jr.updated_at,u.id,u.email,u.name,COALESCE(u.avatar_media_id,'')
-		FROM conversation_join_requests jr JOIN users u ON u.id=jr.user_id WHERE jr.id=$1`, requestID))
+	request, err := scanJoinRequest(tx.QueryRow(ctx, `SELECT jr.id,jr.conversation_id,jr.user_id,jr.message,jr.status,jr.created_at,jr.updated_at,u.id,u.email,u.name,COALESCE(u.avatar_media_id,''),jr.is_application,c.name
+		FROM conversation_join_requests jr JOIN users u ON u.id=jr.user_id JOIN conversations c ON c.id=jr.conversation_id WHERE jr.id=$1`, requestID))
 	if err != nil {
 		return model.JoinRequest{}, false, err
 	}
@@ -735,6 +744,6 @@ func (chat *Chat) DecideJoinRequest(ctx context.Context, callerID, conversationI
 
 func scanJoinRequest(row pgx.Row) (model.JoinRequest, error) {
 	var request model.JoinRequest
-	err := row.Scan(&request.ID, &request.ConversationID, &request.UserID, &request.Message, &request.Status, &request.CreatedAt, &request.UpdatedAt, &request.User.ID, &request.User.Email, &request.User.Name, &request.User.Avatar)
+	err := row.Scan(&request.ID, &request.ConversationID, &request.UserID, &request.Message, &request.Status, &request.CreatedAt, &request.UpdatedAt, &request.User.ID, &request.User.Email, &request.User.Name, &request.User.Avatar, &request.IsApplication, &request.GroupName)
 	return request, err
 }
