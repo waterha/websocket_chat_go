@@ -73,6 +73,7 @@ type JoinRequest struct {
 	ConversationID string    `json:"conversation_id"`
 	UserID         string    `json:"user_id"`
 	Message        string    `json:"message"`
+	GroupName      string    `json:"group_name,omitempty"`
 	Status         string    `json:"status"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
