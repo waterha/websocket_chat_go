@@ -10,7 +10,7 @@ import (
 
 // ThreadPreviewLimit is how many replies the main chat view shows under a root
 // message before the user opens the whole window.
-const ThreadPreviewLimit = 3
+const ThreadPreviewLimit = 2
 
 // ThreadReplyLimit bounds one page of a thread window.
 const ThreadReplyLimit = 100
