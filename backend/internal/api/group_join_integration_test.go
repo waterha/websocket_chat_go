@@ -121,6 +121,55 @@ func TestGroupDiscoveryAndJoinApplications(t *testing.T) {
 	httpCall(t, server, aliceToken, "PATCH", "/api/v1/conversations/"+fullGroup+"/settings", map[string]any{"join_approval": true}, 200)
 	httpCall(t, server, bobToken, "POST", "/api/v1/groups/"+fullGroup+"/join-requests", map[string]string{"message": ""}, 400)
 
+	// Concurrent retries share one pending request even across transactions.
+	type joinResult struct {
+		request model.JoinRequest
+		err     error
+	}
+	results := make(chan joinResult, 8)
+	for i := 0; i < 8; i++ {
+		go func() {
+			request, joinErr := services.Chat.RequestToJoin(ctx, bob.ID, gatedGroup, "retry")
+			results <- joinResult{request, joinErr}
+		}()
+	}
+	requestID := ""
+	for i := 0; i < 8; i++ {
+		result := <-results
+		if result.err != nil {
+			t.Fatal(result.err)
+		}
+		if requestID != "" && result.request.ID != requestID {
+			t.Fatalf("concurrent retries created different requests: %s %s", requestID, result.request.ID)
+		}
+		requestID = result.request.ID
+	}
+
+	// Two callers racing for the last slot cannot push membership above 1000.
+	if _, err = services.Store.DB.Exec(ctx, "DELETE FROM conversation_members WHERE conversation_id=$1 AND user_id='capacity-999'", fullGroup); err != nil {
+		t.Fatal(err)
+	}
+	httpCall(t, server, aliceToken, "PATCH", "/api/v1/conversations/"+fullGroup+"/settings", map[string]any{"join_approval": false}, 200)
+	for _, userID := range []string{bob.ID, carol.ID} {
+		go func(id string) {
+			request, joinErr := services.Chat.RequestToJoin(ctx, id, fullGroup, "")
+			results <- joinResult{request, joinErr}
+		}(userID)
+	}
+	succeeded := 0
+	for i := 0; i < 2; i++ {
+		result := <-results
+		if result.err == nil {
+			succeeded++
+		} else {
+			status(t, result.err, 400)
+		}
+	}
+	var memberCount int
+	if err = services.Store.DB.QueryRow(ctx, "SELECT count(*) FROM conversation_members WHERE conversation_id=$1", fullGroup).Scan(&memberCount); err != nil || memberCount != 1000 || succeeded != 1 {
+		t.Fatalf("capacity race: count=%d successes=%d err=%v", memberCount, succeeded, err)
+	}
+
 	// A pending request cannot be accepted after the group is dismissed.
 	httpCall(t, server, bobToken, "POST", "/api/v1/groups/"+gatedGroup+"/join-requests", map[string]string{"message": "retry"}, 200)
 	raw = httpCall(t, server, aliceToken, "GET", "/api/v1/conversations/"+gatedGroup+"/join-requests", nil, 200)
