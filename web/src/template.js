@@ -27,12 +27,13 @@ export const template = `\n    <DesktopSettings :logged-in="!!me" />
                 <button type="button" role="menuitem" @click="openFriendRequests(); sidebarMoreOpen = false"><Bell :size="15" />好友申请<span v-if="pendingIncomingRequests.length" class="request-count">{{ pendingIncomingRequests.length > 99 ? '99+' : pendingIncomingRequests.length }}</span></button>
                 <button type="button" role="menuitem" @click="openContacts(); sidebarMoreOpen = false"><Contact :size="15" />联系人管理</button>
                 <button type="button" role="menuitem" @click="openCreate(); sidebarMoreOpen = false"><UsersRound :size="15" />创建群聊</button>
+                <button type="button" role="menuitem" @click="openGroupDirectory()"><Users :size="15" />加入群聊</button>
               </div>
             </div>
           </header>
           <div class="conversation-tabs"><button :class="{ active: conversationFilter === 'current' }" @click="conversationFilter = 'current'">当前</button><button :class="{ active: conversationFilter === 'friends' }" @click="conversationFilter = 'friends'">好友</button><button :class="{ active: conversationFilter === 'group' }" @click="conversationFilter = 'group'">群聊</button></div>
           <div class="directory-search" role="search" aria-label="查找好友和群聊"><Search :size="17" aria-hidden="true" /><input ref="directoryInput" v-model="directoryQuery" type="search" maxlength="100" :placeholder="directoryPlaceholder" :aria-label="directoryPlaceholder" @keydown.esc.prevent="clearDirectorySearch" /><button v-if="directoryQuery" type="button" class="icon-button" title="清除搜索" aria-label="清除列表搜索" @click="clearDirectorySearch"><X :size="16" aria-hidden="true" /></button></div>
-          <GroupDirectory v-if="conversationFilter === 'group'" @joined="onGroupJoined" />
+          <GroupDirectory ref="groupDirectory" :show-trigger="false" @joined="onGroupJoined" />
           <div class="conversation-list">
              <p v-if="directoryQuery.trim() && !directoryCount" class="empty-side" role="status">{{ conversationFilter === 'friends' ? '没有匹配的好友' : conversationFilter === 'group' ? '没有匹配的群聊' : '没有匹配的当前会话' }}</p>
             <template v-if="conversationFilter === 'friends'">
