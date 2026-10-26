@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { hasThread, hiddenReplyCount, replyTargetForWindow, threadHasMore, threadLabel, threadPreview, threadRootID, THREAD_PREVIEW_LIMIT } from './thread.js'
 
-const withThread = (replyCount, previewLength) => ({
+const withThread = (replyCount, previewLength = THREAD_PREVIEW_LIMIT) => ({
   id: 'root',
   thread: { reply_count: replyCount, preview: Array.from({ length: previewLength }, (_, index) => ({ id: 'r' + index, content: 'reply ' + index })) },
 })
@@ -15,14 +15,14 @@ test('a message offers a window only when it has replies', () => {
 })
 
 test('the inline preview is bounded by the server payload', () => {
-  assert.equal(threadPreview(withThread(9, THREAD_PREVIEW_LIMIT)).length, THREAD_PREVIEW_LIMIT)
+  assert.equal(threadPreview(withThread(9)).length, THREAD_PREVIEW_LIMIT)
   assert.deepEqual(threadPreview({ id: 'plain' }), [])
   assert.deepEqual(threadPreview(null), [])
 })
 
 test('the label names how many replies are hidden', () => {
-  assert.equal(threadLabel(withThread(9, 3)), '查看全部 9 条回复')
-  assert.equal(threadLabel(withThread(3, 3)), '查看 3 条回复')
+  assert.equal(threadLabel(withThread(9)), '查看全部 9 条回复')
+  assert.equal(threadLabel(withThread(3)), '查看全部 3 条回复')
   assert.equal(threadLabel({ id: 'plain' }), '')
   assert.equal(threadLabel(null), '')
 })
