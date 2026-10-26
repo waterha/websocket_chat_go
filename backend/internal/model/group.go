@@ -74,6 +74,7 @@ type JoinRequest struct {
 	UserID         string    `json:"user_id"`
 	Message        string    `json:"message"`
 	GroupName      string    `json:"group_name,omitempty"`
+	IsApplication  bool      `json:"is_application"`
 	Status         string    `json:"status"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
