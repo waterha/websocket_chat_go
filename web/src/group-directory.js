@@ -11,6 +11,7 @@ const errors = {
 }
 
 export const GroupDirectory = {
+  props: { showTrigger: { type: Boolean, default: true } },
   emits: ['joined'],
   setup(_, { emit }) {
     const opened = ref(false), panel = ref(null), trigger = ref(null)
@@ -42,7 +43,7 @@ export const GroupDirectory = {
     function close() {
       if (actionBusy.value) return
       generation++; request?.abort(); opened.value = false
-      nextTick(() => trigger.value?.focus())
+      nextTick(() => (trigger.value || document.querySelector('.sidebar-more > button'))?.focus())
     }
     function choose(group) { target.value = group; message.value = ''; error.value = ''; notice.value = '' }
     async function join() {
@@ -79,7 +80,7 @@ export const GroupDirectory = {
     return { opened, panel, trigger, query, groups, history, busy, actionBusy, error, notice, target, message, open, close, load, choose, join, withdraw, keyboard }
   },
   template: `
-    <button ref="trigger" type="button" class="outline-button group-directory-trigger" aria-haspopup="dialog" @click="open">加入群聊</button>
+    <button v-if="showTrigger" ref="trigger" type="button" class="outline-button group-directory-trigger" aria-haspopup="dialog" @click="open">加入群聊</button>
     <Teleport to="body"><div v-if="opened" class="modal-backdrop" @click.self="close" @keydown="keyboard">
       <section ref="panel" class="modal group-directory-panel" role="dialog" aria-modal="true" aria-labelledby="group-directory-title">
         <div class="modal-head"><h2 id="group-directory-title">加入群聊</h2><button type="button" :disabled="actionBusy" aria-label="关闭加入群聊" @click="close">×</button></div>
