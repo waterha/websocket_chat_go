@@ -33,6 +33,10 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | POST | `/friends/requests/{id}/accept` | 同意收到的好友申请，建立双向好友关系 |
 | POST | `/friends/requests/{id}/reject` | 拒绝收到的好友申请；发起方可在发出申请列表看到 `rejected` |
 | GET | `/conversations` | 当前用户的会话、成员与已读游标 |
+| GET | `/groups/discover?q=名称或群ID` | 搜索活跃且当前用户尚未加入的群组，按名称子串（不区分大小写）或精确群 ID 匹配，最多 100 项；每项含 `id,name,member_count,join_approval`，如本人有待处理申请还含 `request_id,request_status:"pending"`。`q` 可省略或为空；超过 100 个 Unicode 字符返回 400 `invalid_query` |
+| GET | `/groups/join-requests` | 当前用户自己的入群申请历史，最多 100 项，按更新时间倒序；每项含 `id,conversation_id,group_name,message,status`。状态为 `pending`、`accepted` 或 `rejected`；撤回的申请被删除，不再出现在历史中 |
+| POST | `/groups/{id}/join-requests` | 申请或直接加入群组：`{"message":"可选申请说明"}`，消息最多 500 个 Unicode 字符。群未开启审批时立即加入，返回 `{"pending":false,"id":"群ID"}`；开启审批时创建或复用自己的待处理申请，返回 `{"pending":true,"id":"申请ID"}`。重复提交待处理申请幂等，并更新说明 |
+| DELETE | `/groups/{id}/join-requests` | 撤回当前用户在该群的待处理申请；只能撤回自己的申请，成功返回 `{"id":"群ID"}`，无待处理申请返回 404 `not_found` |
 | POST | `/conversations` | 私聊由联系人点击时用 `{"kind":"direct","member_ids":["另一用户ID"]}` 自动获取或创建唯一会话；群聊用 `group`、`name` 和可选的最多 999 个其他成员，创建者可以先单独建群，含创建者最多 1000 人 |
 | POST | `/conversations/{id}/members` | 群成员邀请用户：`{"member_ids":["用户ID"]}`；任意群成员可邀请，重复成员幂等，含现有成员最多 1000 人；新成员加入时按人写入一条可漫游的群聊系统消息 |
 | DELETE | `/conversations/{id}/members` | 移除成员：`{"user_id":"用户ID"}`；群主与管理员可调用，管理员不能移除群主或其他管理员，群主不能被移除（需先转让），每次移除写入系统提示 |
