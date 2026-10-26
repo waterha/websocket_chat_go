@@ -388,6 +388,8 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .thread-inline-reply strong { flex: 0 0 auto; color: var(--accent-dark); }
 .thread-inline-reply span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .thread-inline-more { color: var(--accent); font-size: 11px; }
+.reaction-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.message-row.mine .reaction-row { justify-content: flex-end; }
 .message-row.mine .reaction-row { justify-content: flex-end; }
 .reaction-chip { padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--accent-dark); font-size: 12px; }
 .reaction-chip.mine { border-color: var(--accent); background: #f7efe6; font-weight: 700; }
