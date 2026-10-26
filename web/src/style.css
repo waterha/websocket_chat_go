@@ -388,7 +388,7 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .reaction-chip.mine { border-color: var(--accent); background: #f7efe6; font-weight: 700; }
 .reaction-chip:disabled { opacity: .6; }
 .reaction-picker { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; padding: 2px 4px 6px; border-bottom: 1px solid var(--line); }
-.reaction-picker button { border: 0; background: transparent; border-radius: 8px; font-size: 17px; padding: 4px 6px; }
+.message-context-menu .reaction-picker button { width: auto; flex: 0 0 auto; border: 0; background: transparent; border-radius: 8px; font-size: 17px; padding: 4px 6px; }
 .reaction-picker button:hover { background: #f1e6da; }
 
 /* Typing and mute notices above the composer */
