@@ -559,7 +559,7 @@ func (chat *Chat) CancelJoinRequest(ctx context.Context, callerID, conversationI
 
 // MyJoinRequests returns requests and decisions visible to their applicant.
 func (chat *Chat) MyJoinRequests(ctx context.Context, callerID string) ([]model.JoinRequest, error) {
-	rows, err := chat.Store.DB.Query(ctx, `SELECT jr.id,jr.conversation_id,jr.user_id,jr.message,jr.status,jr.created_at,jr.updated_at,
+	rows, err := chat.Store.DB.Query(ctx, `SELECT jr.id,jr.conversation_id,jr.user_id,jr.message,CASE WHEN jr.message LIKE '加入申请:%' THEN substr(jr.message,7) ELSE '' END,jr.status,jr.created_at,jr.updated_at,
 		u.id,u.email,u.name,COALESCE(u.avatar_media_id,''),c.name
 		FROM conversation_join_requests jr JOIN users u ON u.id=jr.user_id JOIN conversations c ON c.id=jr.conversation_id
 		WHERE jr.user_id=$1 AND jr.message LIKE '加入申请:%' ORDER BY jr.updated_at DESC LIMIT 100`, callerID)
@@ -568,7 +568,7 @@ func (chat *Chat) MyJoinRequests(ctx context.Context, callerID string) ([]model.
 	requests := []model.JoinRequest{}
 	for rows.Next() {
 		var request model.JoinRequest
-		if err = rows.Scan(&request.ID,&request.ConversationID,&request.UserID,&request.Message,&request.Status,&request.CreatedAt,&request.UpdatedAt,&request.User.ID,&request.User.Email,&request.User.Name,&request.User.Avatar,&request.GroupName); err != nil { return nil, err }
+		if err = rows.Scan(&request.ID,&request.ConversationID,&request.UserID,&request.Message,&request.ApplicationMessage,&request.Status,&request.CreatedAt,&request.UpdatedAt,&request.User.ID,&request.User.Email,&request.User.Name,&request.User.Avatar,&request.GroupName); err != nil { return nil, err }
 		requests = append(requests, request)
 	}
 	return requests, rows.Err()
