@@ -1263,6 +1263,14 @@ createApp({
       refreshTask = task
       try { await task } finally { if (refreshTask === task) refreshTask = null }
     }
+    async function refreshThreadSummaries(id, incoming) {
+      const roots = [...new Set(incoming.map(message => message.thread_root_id).filter(Boolean))]
+      if (!roots.length) return
+      const items = cache.get(id) || []
+      const pages = await Promise.all(roots.map(rootID => api(`/conversations/${id}/messages/${rootID}/thread?limit=2`)))
+      const summaries = new Map(pages.map(page => [page.root.id, { reply_count: page.reply_count || 0, preview: page.replies || [] }]))
+      cache.set(id, items.map(message => summaries.has(message.id) ? { ...message, thread: summaries.get(message.id) } : message))
+    }
     function syncConversation(id, lastSeq = 0) {
       const version = epoch
       return syncing.run(id, lastSeq, async () => {
@@ -1280,7 +1288,8 @@ createApp({
           const merged = appendPage(existing, page, id)
           cache.set(id, merged)
           cacheVersion.value++
-          const pending = pendingStore?.get(id)
+                     if (page.messages.some(message => message.thread_root_id)) await refreshThreadSummaries(id, page.messages)
+           const pending = pendingStore?.get(id)
           if (pending && page.messages.some(message => message.sender_id === me.value.id && message.client_msg_id === pending.client_msg_id)) {
             pendingStore.clear(id, pending.client_msg_id)
             if (pendingSend.value?.client_msg_id === pending.client_msg_id) pendingSend.value = null
