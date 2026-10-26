@@ -78,6 +78,49 @@ func TestGroupDiscoveryAndJoinApplications(t *testing.T) {
 		t.Fatalf("withdrawn application should be absent from history: %+v %v", history, err)
 	}
 
+	// An approval admits the applicant, retains its decision and protects history.
+	httpCall(t, server, bobToken, "POST", "/api/v1/groups/"+gatedGroup+"/join-requests", map[string]string{"message": "approve me"}, 200)
+	var approvalRequests []model.JoinRequest
+	if err = json.Unmarshal(httpCall(t, server, aliceToken, "GET", "/api/v1/conversations/"+gatedGroup+"/join-requests", nil, 200), &approvalRequests); err != nil || len(approvalRequests) != 1 {
+		t.Fatalf("approval requests: %+v %v", approvalRequests, err)
+	}
+	httpCall(t, server, carolToken, "GET", "/api/v1/conversations/"+gatedGroup+"/join-requests", nil, 404)
+	httpCall(t, server, carolToken, "POST", "/api/v1/conversations/"+gatedGroup+"/join-requests/"+approvalRequests[0].ID+"/accept", nil, 404)
+	httpCall(t, server, aliceToken, "POST", "/api/v1/conversations/"+gatedGroup+"/join-requests/"+approvalRequests[0].ID+"/accept", nil, 200)
+	if err = json.Unmarshal(httpCall(t, server, bobToken, "GET", "/api/v1/groups/join-requests", nil, 200), &history); err != nil || len(history) != 1 || history[0]["status"] != "accepted" {
+		t.Fatalf("accepted application history: %+v %v", history, err)
+	}
+	httpCall(t, server, bobToken, "GET", "/api/v1/conversations/"+gatedGroup+"/messages", nil, 200)
+	httpCall(t, server, bobToken, "POST", "/api/v1/conversations/"+gatedGroup+"/members/leave", nil, 200)
+
+	// Rejection remains visible and never grants membership.
+	httpCall(t, server, bobToken, "POST", "/api/v1/groups/"+gatedGroup+"/join-requests", map[string]string{"message": "reject me"}, 200)
+	if err = json.Unmarshal(httpCall(t, server, aliceToken, "GET", "/api/v1/conversations/"+gatedGroup+"/join-requests", nil, 200), &approvalRequests); err != nil || len(approvalRequests) != 1 {
+		t.Fatalf("rejection requests: %+v %v", approvalRequests, err)
+	}
+	httpCall(t, server, aliceToken, "POST", "/api/v1/conversations/"+gatedGroup+"/join-requests/"+approvalRequests[0].ID+"/reject", nil, 200)
+	if err = json.Unmarshal(httpCall(t, server, bobToken, "GET", "/api/v1/groups/join-requests", nil, 200), &history); err != nil || len(history) != 2 || history[0]["status"] != "rejected" {
+		t.Fatalf("rejected application history: %+v %v", history, err)
+	}
+	httpCall(t, server, bobToken, "GET", "/api/v1/conversations/"+gatedGroup+"/messages", nil, 404)
+
+	// Capacity is checked while holding the group lock for direct and gated joins.
+	fullGroup, createErr := services.Chat.Create(ctx, alice.ID, model.CreateInput{Kind: "group", Name: "full-room"})
+	if createErr != nil {
+		t.Fatal(createErr)
+	}
+	if _, err = services.Store.DB.Exec(ctx, `INSERT INTO users(id,email,name,password_hash)
+		SELECT 'capacity-'||g::text,'capacity-'||g::text||'@test','capacity','unused' FROM generate_series(1,999) g`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = services.Store.DB.Exec(ctx, `INSERT INTO conversation_members(conversation_id,user_id)
+		SELECT $1,'capacity-'||g::text FROM generate_series(1,999) g`, fullGroup); err != nil {
+		t.Fatal(err)
+	}
+	httpCall(t, server, bobToken, "POST", "/api/v1/groups/"+fullGroup+"/join-requests", map[string]string{"message": ""}, 400)
+	httpCall(t, server, aliceToken, "PATCH", "/api/v1/conversations/"+fullGroup+"/settings", map[string]any{"join_approval": true}, 200)
+	httpCall(t, server, bobToken, "POST", "/api/v1/groups/"+fullGroup+"/join-requests", map[string]string{"message": ""}, 400)
+
 	// A pending request cannot be accepted after the group is dismissed.
 	httpCall(t, server, bobToken, "POST", "/api/v1/groups/"+gatedGroup+"/join-requests", map[string]string{"message": "retry"}, 200)
 	raw = httpCall(t, server, aliceToken, "GET", "/api/v1/conversations/"+gatedGroup+"/join-requests", nil, 200)
