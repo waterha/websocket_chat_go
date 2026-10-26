@@ -520,7 +520,7 @@ func (chat *Chat) DiscoverGroups(ctx context.Context, callerID, query string) ([
 // RequestToJoin asks the group owner or an admin to approve membership.
 func (chat *Chat) RequestToJoin(ctx context.Context, callerID, conversationID, message string) (model.JoinRequest, error) {
 	message = strings.TrimSpace(message)
-	if len([]rune(message)) > 500 {
+	if len([]rune(message)) > 494 {
 		return model.JoinRequest{}, model.Fail(400, "invalid_join_request")
 	}
 	storedMessage := "加入申请: " + message
