@@ -5,6 +5,7 @@ const errors = {
   already_member: '你已加入该群，请刷新列表。',
   group_full: '该群人数已满。',
   invalid_members: '该群人数已满，暂时无法加入。',
+  conversation_dismissed: '该群已解散，无法加入，请刷新列表。',
   not_found: '该群已不存在或已解散，请刷新列表。',
   invalid_join_request: '申请说明过长，请缩短后重试。',
 }
@@ -50,6 +51,7 @@ export const GroupDirectory = {
       actionBusy.value = true; error.value = ''; notice.value = ''
       try {
         const result = await api(`/groups/${encodeURIComponent(group.id)}/join-requests`, { method: 'POST', body: JSON.stringify({ message: message.value.trim() }) })
+        if (typeof result?.pending !== 'boolean') throw new Error('invalid_join_response')
         target.value = null; message.value = ''
         if (result.pending) { notice.value = '入群申请已提交，等待群主或管理员审批。'; await load() }
         else { actionBusy.value = false; close(); emit('joined', group.id) }
@@ -90,7 +92,7 @@ export const GroupDirectory = {
         <p v-if="notice" role="status">{{ notice }}</p>
         <form v-if="target" class="group-join-form" @submit.prevent="join">
           <strong>{{ target.name }}</strong>
-          <label v-if="target.join_approval">申请说明<textarea v-model="message" maxlength="494" rows="3" placeholder="介绍一下自己（可选）" :disabled="actionBusy"></textarea></label>
+          <label v-if="target.join_approval">申请说明<textarea v-model="message" maxlength="500" rows="3" placeholder="介绍一下自己（可选）" :disabled="actionBusy"></textarea></label>
           <p v-else class="subtle">该群无需审批，确认后即可加入。</p>
           <div class="request-actions"><button type="submit" class="primary" :disabled="actionBusy">{{ actionBusy ? '处理中…' : target.join_approval ? '提交入群申请' : '确认加入' }}</button><button type="button" class="outline-button" :disabled="actionBusy" @click="target = null">取消</button></div>
         </form>
