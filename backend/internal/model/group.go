@@ -53,6 +53,20 @@ type ConversationSettings struct {
 	JoinApproval bool `json:"join_approval"`
 }
 
+// JoinGroupInput submits a request to join a group the caller can discover.
+type JoinGroupInput struct {
+	Message string `json:"message"`
+}
+
+// DiscoverableGroup is a public-to-authenticated-users group listing entry.
+type DiscoverableGroup struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	MemberCount   int    `json:"member_count"`
+	RequestID     string `json:"request_id,omitempty"`
+	RequestStatus string `json:"request_status,omitempty"`
+}
+
 // JoinRequest is one pending invite awaiting an admin decision.
 type JoinRequest struct {
 	ID             string    `json:"id"`
