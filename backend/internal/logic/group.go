@@ -551,7 +551,7 @@ func (chat *Chat) RequestToJoin(ctx context.Context, callerID, conversationID, m
 
 // CancelJoinRequest withdraws the caller's pending application.
 func (chat *Chat) CancelJoinRequest(ctx context.Context, callerID, conversationID string) error {
-	command, err := chat.Store.DB.Exec(ctx, `DELETE FROM conversation_join_requests WHERE conversation_id=$1 AND user_id=$2 AND status='pending'`, conversationID, callerID)
+	command, err := chat.Store.DB.Exec(ctx, `DELETE FROM conversation_join_requests WHERE conversation_id=$1 AND user_id=$2 AND status='pending' AND message LIKE '加入申请:%'`, conversationID, callerID)
 	if err != nil { return err }
 	if command.RowsAffected() == 0 { return model.Fail(404, "not_found") }
 	return nil
@@ -588,8 +588,8 @@ func (chat *Chat) JoinRequests(ctx context.Context, callerID, conversationID str
 	if callerRole != model.RoleOwner && callerRole != model.RoleAdmin {
 		return nil, model.Fail(403, "forbidden")
 	}
-	rows, err := tx.Query(ctx, `SELECT jr.id,jr.conversation_id,jr.user_id,jr.message,jr.status,jr.created_at,jr.updated_at,u.id,u.email,u.name,COALESCE(u.avatar_media_id,'')
-		FROM conversation_join_requests jr JOIN users u ON u.id=jr.user_id
+	rows, err := tx.Query(ctx, `SELECT jr.id,jr.conversation_id,jr.user_id,jr.message,jr.status,jr.created_at,jr.updated_at,u.id,u.email,u.name,COALESCE(u.avatar_media_id,''),c.name
+		FROM conversation_join_requests jr JOIN users u ON u.id=jr.user_id JOIN conversations c ON c.id=jr.conversation_id
 		WHERE jr.conversation_id=$1 AND jr.status='pending' ORDER BY jr.created_at,jr.id`, conversationID)
 	if err != nil {
 		return nil, err
@@ -598,7 +598,7 @@ func (chat *Chat) JoinRequests(ctx context.Context, callerID, conversationID str
 	requests := []model.JoinRequest{}
 	for rows.Next() {
 		var request model.JoinRequest
-		if err = rows.Scan(&request.ID, &request.ConversationID, &request.UserID, &request.Message, &request.Status, &request.CreatedAt, &request.UpdatedAt, &request.User.ID, &request.User.Email, &request.User.Name, &request.User.Avatar); err != nil {
+		if err = rows.Scan(&request.ID, &request.ConversationID, &request.UserID, &request.Message, &request.Status, &request.CreatedAt, &request.UpdatedAt, &request.User.ID, &request.User.Email, &request.User.Name, &request.User.Avatar,&request.GroupName); err != nil {
 			return nil, err
 		}
 		requests = append(requests, request)
