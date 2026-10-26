@@ -4,7 +4,7 @@
 
 // How many replies the chat view shows before the user opens the window. The
 // server caps its preview at the same number, so the two agree.
-export const THREAD_PREVIEW_LIMIT = 3
+export const THREAD_PREVIEW_LIMIT = 2
 
 // Whether a message should offer a way into its window. A message with no
 // replies has no window, so the affordance stays hidden.
