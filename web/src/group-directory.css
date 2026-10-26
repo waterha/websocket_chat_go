@@ -1,0 +1,16 @@
+.group-directory-trigger { margin: 4px 18px 12px; }
+.group-directory-panel { width: min(680px, 100%); }
+.group-directory-panel .message-search-form { display: flex; margin-top: 14px; gap: 10px; }
+.group-directory-panel .message-search-form input { min-width: 0; flex: 1; }
+.group-directory-panel .primary, .group-directory-panel .outline-button { flex-shrink: 0; }
+.group-directory-list { padding: 0; margin: 12px 0; list-style: none; }
+.group-directory-list li { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.group-directory-info { display: grid; gap: 5px; min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.group-directory-info small { color: var(--muted); }
+.group-directory-results { max-height: 340px; overflow-y: auto; }
+.group-join-form { padding: 16px; margin-top: 14px; background: #f4ece2; border-radius: 12px; }
+.group-join-form textarea { resize: vertical; }
+@media (max-width: 480px) {
+  .group-directory-list li { flex-wrap: wrap; }
+  .group-directory-list li > button { margin-left: auto; }
+}
