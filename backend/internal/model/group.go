@@ -63,23 +63,23 @@ type DiscoverableGroup struct {
 	ID            string `json:"id"`
 	Name          string `json:"name"`
 	MemberCount   int    `json:"member_count"`
+	JoinApproval  bool   `json:"join_approval"`
 	RequestID     string `json:"request_id,omitempty"`
 	RequestStatus string `json:"request_status,omitempty"`
 }
 
-// JoinRequest is one pending invite awaiting an admin decision.
+// JoinRequest is one invitation or self-service membership application.
 type JoinRequest struct {
 	ID             string    `json:"id"`
 	ConversationID string    `json:"conversation_id"`
 	UserID         string    `json:"user_id"`
 	Message        string    `json:"message"`
-	ApplicationMessage string `json:"application_message,omitempty"`
 	GroupName      string    `json:"group_name,omitempty"`
 	IsApplication  bool      `json:"is_application"`
 	Status         string    `json:"status"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
-	User           User      `json:"user"`
+	User           User      `json:"user,omitempty"`
 }
 
 // JoinRequestDecision is the outcome of one decided request.
