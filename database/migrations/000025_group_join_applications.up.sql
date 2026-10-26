@@ -6,5 +6,5 @@ ALTER TABLE conversation_join_requests
 
 UPDATE conversation_join_requests
 SET is_application = true,
-    message = substr(message, 7)
+    message = regexp_replace(message, '^加入申请:[[:space:]]*', '')
 WHERE message LIKE '加入申请:%';
