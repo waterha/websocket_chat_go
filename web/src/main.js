@@ -692,7 +692,7 @@ createApp({
     const scroll = async () => { await nextTick(); if (stream.value) stream.value.scrollTop = stream.value.scrollHeight }
     const showError = cause => { error.value = cause?.message || '操作失败'; clearTimeout(errorTimer); errorTimer = setTimeout(() => { error.value = '' }, 5000) }
     const atBottom = () => !stream.value || stream.value.scrollHeight - stream.value.scrollTop - stream.value.clientHeight < 64
-    const showMessages = id => { if (id === active.value) messages.value = (cache.get(id) || []).slice(-visibleCount.value) }
+    const showMessages = id => { if (id === active.value) messages.value = (cache.get(id) || []).filter(item => !item.thread_root_id).slice(-visibleCount.value) }
     function discardPending() {
       if (!pendingSend.value || !confirm('放弃确认不等于撤回：消息可能已经保存在服务器。请先检查聊天记录，确定仍要放弃吗？')) return
       pendingStore.clear(pendingSend.value.conversation_id, pendingSend.value.client_msg_id)
