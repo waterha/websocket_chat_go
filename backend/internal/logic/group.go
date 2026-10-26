@@ -398,14 +398,17 @@ func (chat *Chat) AddMembers(ctx context.Context, userID, conversationID string,
 	}
 	defer tx.Rollback(ctx)
 	var kind, callerRole string
-	var joinApproval bool
-	if err = tx.QueryRow(ctx, `SELECT c.kind,c.join_approval,cm.role FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id WHERE c.id=$1 AND cm.user_id=$2 FOR UPDATE OF c`, conversationID, userID).Scan(&kind, &joinApproval, &callerRole); errors.Is(err, pgx.ErrNoRows) {
+	var joinApproval, dismissed bool
+	if err = tx.QueryRow(ctx, `SELECT c.kind,c.join_approval,cm.role,c.dismissed_at IS NOT NULL FROM conversations c JOIN conversation_members cm ON cm.conversation_id=c.id WHERE c.id=$1 AND cm.user_id=$2 FOR UPDATE OF c`, conversationID, userID).Scan(&kind, &joinApproval, &callerRole, &dismissed); errors.Is(err, pgx.ErrNoRows) {
 		return result, model.Fail(404, "not_found")
 	} else if err != nil {
 		return result, err
 	}
 	if kind != "group" {
 		return result, model.Fail(400, "invalid_conversation")
+	}
+	if dismissed {
+		return result, model.Fail(409, "conversation_dismissed")
 	}
 	var count int
 	if err = tx.QueryRow(ctx, "SELECT count(*) FROM users WHERE id=ANY($1)", ids).Scan(&count); err != nil {
