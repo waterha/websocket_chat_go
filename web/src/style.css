@@ -142,7 +142,7 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
    thumbnail size and centred on the text line: a full-height photo would otherwise
    stretch the line box and strand the words at its bottom edge. */
 .block-stack { display: block; }
-.block-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.block-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .block-image { display: inline-block; max-width: 100%; margin: 3px 7px 3px 0; vertical-align: middle; line-height: 0; }
 .block-image img { display: block; max-width: min(200px, 100%); max-height: 140px; border-radius: 10px; object-fit: cover; background: #fff; }
 .block-file { display: inline-flex; align-items: center; gap: 6px; margin: 3px 7px 3px 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 12px; vertical-align: middle; }
@@ -191,7 +191,7 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .reply-quote span { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bubble.recalled { color: var(--muted); background: #f0eee9; font-style: italic; }
 .mine .bubble.recalled { color: #fff; background: #b9a894; }
-.message-context-menu { position: fixed; z-index: 120; display: grid; width: 156px; padding: 5px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); box-shadow: 0 12px 32px #302c2940; }
+.message-context-menu { position: fixed; z-index: 120; display: grid; width: max-content; min-width: 156px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow-y: auto; padding: 5px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); box-shadow: 0 12px 32px #302c2940; }
 .message-context-menu button { width: 100%; padding: 9px 11px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); text-align: left; }
 .message-context-menu button:hover, .message-context-menu button:focus-visible { background: #f1e6da; }
 .message-context-menu button.danger { color: #a33; }
@@ -383,10 +383,11 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 
 /* Emoji reactions under a bubble */
 .reaction-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.message-row.mine .reaction-row { justify-content: flex-end; }
 .reaction-chip { padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--accent-dark); font-size: 12px; }
 .reaction-chip.mine { border-color: var(--accent); background: #f7efe6; font-weight: 700; }
 .reaction-chip:disabled { opacity: .6; }
-.reaction-picker { display: flex; gap: 2px; padding: 2px 4px 6px; border-bottom: 1px solid var(--line); }
+.reaction-picker { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; padding: 2px 4px 6px; border-bottom: 1px solid var(--line); }
 .reaction-picker button { border: 0; background: transparent; border-radius: 8px; font-size: 17px; padding: 4px 6px; }
 .reaction-picker button:hover { background: #f1e6da; }
 
