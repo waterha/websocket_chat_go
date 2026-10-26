@@ -387,7 +387,8 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .thread-inline-reply { display: flex; gap: 6px; min-width: 0; font-size: 12px; line-height: 1.35; }
 .thread-inline-reply strong { flex: 0 0 auto; color: var(--accent-dark); }
 .thread-inline-reply span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.thread-inline-more { color: var(--accent); font-size: 11px; }
+.message-row.mine .thread-inline-preview { margin-left: auto; text-align: right; }
+.message-row.mine .thread-inline-reply { justify-content: flex-end; }
 .reaction-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .message-row.mine .reaction-row { justify-content: flex-end; }
 .message-row.mine .reaction-row { justify-content: flex-end; }
