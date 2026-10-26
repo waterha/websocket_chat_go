@@ -523,6 +523,7 @@ func (chat *Chat) RequestToJoin(ctx context.Context, callerID, conversationID, m
 	if len([]rune(message)) > 500 {
 		return model.JoinRequest{}, model.Fail(400, "invalid_join_request")
 	}
+	storedMessage := "加入申请: " + message
 	tx, err := chat.Store.DB.Begin(ctx)
 	if err != nil { return model.JoinRequest{}, err }
 	defer tx.Rollback(ctx)
@@ -539,7 +540,7 @@ func (chat *Chat) RequestToJoin(ctx context.Context, callerID, conversationID, m
 	var pending model.JoinRequest
 	err = tx.QueryRow(ctx, `INSERT INTO conversation_join_requests(id,conversation_id,user_id,message)
 		VALUES($1,$2,$3,$4) ON CONFLICT (conversation_id,user_id) WHERE status='pending' DO UPDATE SET message=EXCLUDED.message,updated_at=now()
-		RETURNING id,conversation_id,user_id,message,status,created_at,updated_at`, model.NewID(), conversationID, callerID, message).Scan(&pending.ID, &pending.ConversationID, &pending.UserID, &pending.Message, &pending.Status, &pending.CreatedAt, &pending.UpdatedAt)
+		RETURNING id,conversation_id,user_id,message,status,created_at,updated_at`, model.NewID(), conversationID, callerID, storedMessage).Scan(&pending.ID, &pending.ConversationID, &pending.UserID, &pending.Message, &pending.Status, &pending.CreatedAt, &pending.UpdatedAt)
 	if err != nil { return model.JoinRequest{}, err }
 	var email, name, avatar string
 	if err = tx.QueryRow(ctx, "SELECT email,name,COALESCE(avatar_media_id,'') FROM users WHERE id=$1", callerID).Scan(&email,&name,&avatar); err != nil { return model.JoinRequest{}, err }
