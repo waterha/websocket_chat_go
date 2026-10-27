@@ -21,6 +21,7 @@ import { onImageLinkClick } from './image-viewer.js'
 import { chatStorage, createSocket, installDesktopDownloads, isDesktop } from './desktop.js'
 import { DesktopSettings } from './desktop-settings.js'
 import { template } from './template.js'
+import { LayoutDivider } from './layout-divider.js'
 import { GroupDirectory } from './group-directory.js'
 import './group-directory.css'
 import './style.css'
@@ -37,7 +38,7 @@ const UserAvatar = {
 }
 
 createApp({
-  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Download, Check, Pin, BellOff, Info, ChevronRight, ChevronDown, Clock3, ImagePlus, MoreHorizontal, MessageCircle, UserPlus, Bell, Contact, UsersRound, DesktopSettings, UserAvatar, GroupDirectory },
+  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Download, Check, Pin, BellOff, Info, ChevronRight, ChevronDown, Clock3, ImagePlus, MoreHorizontal, MessageCircle, UserPlus, Bell, Contact, UsersRound, DesktopSettings, UserAvatar, GroupDirectory, LayoutDivider },
   setup() {
     const me = ref(null)
     const mode = ref('login')
