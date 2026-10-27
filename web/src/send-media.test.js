@@ -194,6 +194,27 @@ test('pasting an image shows it inside the draft without sending', async () => {
   assert.doesNotMatch(composer().textContent, /〔图/, 'a placeholder token is still shown')
 })
 
+test('IME confirmation and deletion after an image are left to the input method', async () => {
+  reset()
+  paste(new File([new Uint8Array(8)], 'ime.png', { type: 'image/png' }))
+  await new Promise(resolve => realSetTimeout(resolve, 500))
+  const selection = dom.window.getSelection()
+  assert.equal(selection.anchorNode.nodeType, 3)
+  assert.equal(selection.anchorNode, composer().querySelector('.composer-image').nextSibling)
+  composer().dispatchEvent(new dom.window.CompositionEvent('compositionstart', { bubbles: true }))
+  for (const key of ['Backspace', 'Enter']) {
+    const event = new dom.window.KeyboardEvent('keydown', { key, bubbles: true, cancelable: true })
+    composer().dispatchEvent(event)
+    assert.equal(event.defaultPrevented, false)
+  }
+  composer().dispatchEvent(new dom.window.CompositionEvent('compositionend', { bubbles: true }))
+  const legacy = new dom.window.KeyboardEvent('keydown', { key: 'Enter', keyCode: 229, bubbles: true, cancelable: true })
+  composer().dispatchEvent(legacy)
+  assert.equal(legacy.defaultPrevented, false)
+  assert.equal(posted().length, 0)
+  assert.equal(vm.composerImages.length, 1)
+})
+
 test('text, image, text, image leave as one ordered message', async () => {
   reset()
 
