@@ -207,7 +207,7 @@ createApp({
     let disposed = false
 
     const current = computed(() => conversations.value.find(item => item.id === active.value))
-    const latestMessage = item => item && cache.get(item.id)?.at(-1)
+    const latestMessage = item => [...(cache.get(item?.id) || [])].reverse().find(message => !message.thread_root_id)
     const latestTime = item => Date.parse(latestMessage(item)?.created_at || '') || 0
     const sortByLatestTime = items => items.sort((left, right) => {
       const difference = latestTime(right) - latestTime(left)
