@@ -930,7 +930,7 @@ createApp({
       notifyTyping()
     }
     function onComposerKeydown(event) {
-      if (event.isComposing || event.altKey || event.ctrlKey || event.metaKey) return
+      if (event.isComposing || composerComposing || event.keyCode === 229 || event.altKey || event.ctrlKey || event.metaKey) return
       if (event.key !== 'Backspace' && event.key !== 'Delete') return
       const mediaId = deleteImageNearCaret(draftArea.value, window.getSelection(), event.key === 'Delete' ? 'forward' : 'backward')
       if (!mediaId) return
@@ -1703,7 +1703,7 @@ createApp({
       if (element) element.scrollTop += element.scrollHeight - previousHeight
     }
     function onEnter(event) {
-      if (event.isComposing) return
+      if (event.isComposing || composerComposing || event.keyCode === 229) return
       if (event.key === 'Enter' && (showMentions.value && mentionList.value.length)) return
       if (event.shiftKey) return
       if (sendKeyMode.value === 'ctrl') {
