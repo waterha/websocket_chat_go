@@ -415,7 +415,13 @@ export function imageIDsIn(root) {
 export function placeCaretAfter(root, node, selection) {
   if (!node || !selection) return
   const range = document.createRange()
-  range.setStartAfter(node)
+  let text = node.nextSibling
+  if (!text || text.nodeType !== 3) {
+    text = document.createTextNode('\u00A0')
+    node.after(text)
+  }
+  root.focus()
+  range.setStart(text, text.nodeValue.startsWith('\u00A0') ? 1 : 0)
   range.collapse(true)
   selection.removeAllRanges()
   selection.addRange(range)
