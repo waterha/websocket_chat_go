@@ -461,6 +461,19 @@ img.avatar { object-fit: cover; flex: none; background: #e8ddce; }
 .emoji-picker-tab.active { color: var(--accent-dark); background: #f1e6da; }
 .emoji-picker-grid { grid-template-columns: repeat(8, 1fr); }
 
+.layout { grid-template-columns: var(--sidebar-width, 280px) minmax(0, 1fr) auto; }
+.sidebar, .detail-panel { position: relative; min-width: 0; }
+.detail-panel { width: var(--detail-width, 240px); }
+.layout-divider { position: absolute; top: 0; bottom: 0; width: 8px; z-index: 20; cursor: col-resize; touch-action: none; user-select: none; }
+.layout-divider.sidebar { right: -4px; background: transparent; border: 0; display: block; }
+.layout-divider.detail { left: -4px; }
+.layout-divider:hover, .layout-divider:focus-visible { background: color-mix(in srgb, var(--accent) 40%, transparent); outline: none; }
+@media (max-width: 720px) {
+  .layout { grid-template-columns: minmax(0, 1fr) auto; }
+  .layout-divider { display: none !important; }
+  .detail-panel { width: min(var(--detail-width, 200px), 35vw); }
+}
+
 /* QQ NT 式输入区：图标工具栏 + 大输入区 + 底部动作行 */
 .composer-toolbar { display: flex; align-items: center; gap: 2px; padding: 2px 2px 4px; }
 .toolbar-icon { position: relative; z-index: 1; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; color: var(--ink); background: transparent; }
