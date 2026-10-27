@@ -52,8 +52,10 @@ export const LayoutDivider = {
       try { preferred = Number(localStorage.getItem(key)) || undefined } catch {}
       width.value = handle.value.parentElement.getBoundingClientRect().width
       if (preferred) apply(preferred)
-      observer = new ResizeObserver(() => { if (preferred) apply(preferred) })
-      observer.observe(handle.value.closest('.layout'))
+      if (typeof ResizeObserver !== 'undefined') {
+        observer = new ResizeObserver(() => apply(preferred || width.value))
+        observer.observe(handle.value.closest('.layout'))
+      }
     })
     onUnmounted(() => observer?.disconnect())
     return { handle, width, down, move, finish, keyboard }
