@@ -220,4 +220,13 @@ test('placing the caret after a node lets typing continue past the image', () =>
   const selection = dom.window.getSelection()
   placeCaretAfter(element, chip, selection)
   assert.equal(selection.rangeCount, 1)
+  assert.equal(selection.anchorNode, chip.nextSibling)
+  assert.equal(selection.anchorNode.nodeType, 3)
+  assert.equal(selection.anchorOffset, 1)
+  const typing = selection.getRangeAt(0)
+  typing.insertNode(document.createTextNode('你好'))
+  assert.deepEqual(piecesToBlocks(collectPieces(element)), [
+    { type: 'image', media_id: 'media-a' },
+    { type: 'text', text: '你好' },
+  ])
 })
