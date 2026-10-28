@@ -143,6 +143,7 @@ function mockScreenSharing() {
 test('Ctrl+Q inserts a cropped screenshot at the saved caret and sends only after confirmation', async () => {
   reset()
   const screen = mockScreenSharing()
+  vm.chatVisible = true
   try {
     type('前后')
     const range = document.createRange()
@@ -176,6 +177,7 @@ test('Ctrl+Q inserts a cropped screenshot at the saved caret and sends only afte
 test('the screenshot toolbar can cancel without uploading or changing the draft', async () => {
   reset()
   const screen = mockScreenSharing()
+  vm.chatVisible = true
   try {
     type('保留草稿')
     const button = document.querySelector('[aria-label="截图（Ctrl+Q）"]')
