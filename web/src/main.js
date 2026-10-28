@@ -1173,10 +1173,9 @@ createApp({
       const version = epoch
       sending.value = true
       try {
-        await api(`/conversations/${id}/messages/${item.seq}/recall`, { method: 'POST' })
+        const updated = await api(`/conversations/${id}/messages/${item.seq}/recall`, { method: 'POST' })
         if (version !== epoch) return
-        await syncConversation(id)
-        if (threadOpen.value && active.value === id) await refreshThread()
+        applyMessageUpdate(updated)
       } catch (cause) { if (version === epoch) showError(cause) }
       finally { if (version === epoch) sending.value = false }
     }
@@ -1456,7 +1455,7 @@ createApp({
             if (!conversations.value.some(item => item.id === envelope.data.conversation_id)) await refresh()
             await syncConversation(envelope.data.conversation_id, envelope.data.seq)
           }
-          if (envelope.event === 'message.recalled') await syncConversation(envelope.data.conversation_id, envelope.data.seq)
+          if (envelope.event === 'message.recalled') applyMessageUpdate(envelope.data)
           if (envelope.event === 'message.updated') applyMessageUpdate(envelope.data)
           if (envelope.event === 'typing') noteTyping(envelope.data)
           if (envelope.event === 'message.sync_required') await catchUp(envelope.data.cursors)
@@ -1732,18 +1731,34 @@ createApp({
         draft.value = pending.content || ''
       }
     }
-    // ---- message reactions ----
+    // Apply mutations to existing messages: the sync cursor only fetches new sequences.
     function applyMessageUpdate(updated) {
       if (!updated?.id || !updated.conversation_id) return
-      const items = cache.get(updated.conversation_id) || []
-      const index = items.findIndex(message => message.id === updated.id)
-      if (index >= 0) items.splice(index, 1, updated)
+      function updateMessage(message) {
+        if (!message) return message
+        let result = message.id === updated.id ? updated : message
+        if (updated.recalled_at && result.reply?.id === updated.id) {
+          result = { ...result, reply: { ...result.reply, recalled: true, excerpt: '', media_type: '' } }
+        }
+        if (result.thread?.preview?.length) {
+          result = { ...result, thread: { ...result.thread, preview: result.thread.preview.map(updateMessage) } }
+        }
+        return result
+      }
+      const id = updated.conversation_id
+      if (cache.has(id)) cache.set(id, cache.get(id).map(updateMessage))
       cacheVersion.value++
-      if (threadRoot.value?.id === updated.id) threadRoot.value = updated
-      const replyIndex = threadReplies.value.findIndex(message => message.id === updated.id)
-      if (replyIndex >= 0) threadReplies.value.splice(replyIndex, 1, updated)
-      showMessages(updated.conversation_id)
+      if (active.value === id) {
+        threadRoot.value = updateMessage(threadRoot.value)
+        threadReplies.value = threadReplies.value.map(updateMessage)
+        searchResults.value = searchResults.value.filter(message => !updated.recalled_at || message.id !== updated.id).map(updateMessage)
+      }
+      globalResults.value = globalResults.value
+        .filter(hit => !updated.recalled_at || hit.message.id !== updated.id)
+        .map(hit => hit.message.conversation_id === id ? { ...hit, message: updateMessage(hit.message) } : hit)
+      showMessages(id)
     }
+    // ---- message reactions ----
     const reactionMine = (item, emoji) => Boolean(item?.reactions?.find(entry => entry.emoji === emoji)?.users.includes(me.value?.id))
     async function toggleReaction(item, emoji) {
       if (!item?.id || reactionBusy.value || !active.value) return
