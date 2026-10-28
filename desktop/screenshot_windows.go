@@ -104,10 +104,14 @@ func (a *App) CaptureScreenshot() (string, error) {
 	// we then simply capture at whatever virtualization Windows applies.
 	_, _, _ = procSetProcessDPIAware.Call()
 
-	x := int32(procGetSystemMetrics.Call(smXVirtualScreen)[0])
-	y := int32(procGetSystemMetrics.Call(smYVirtualScreen)[0])
-	w := int32(procGetSystemMetrics.Call(smCXVirtualScreen)[0])
-	h := int32(procGetSystemMetrics.Call(smCYVirtualScreen)[0])
+	getMetric := func(index uintptr) int32 {
+		r, _, _ := procGetSystemMetrics.Call(index)
+		return int32(r)
+	}
+	x := getMetric(smXVirtualScreen)
+	y := getMetric(smYVirtualScreen)
+	w := getMetric(smCXVirtualScreen)
+	h := getMetric(smCYVirtualScreen)
 	if w <= 0 || h <= 0 {
 		return "", fmt.Errorf("screenshot: invalid virtual screen metrics %dx%d", w, h)
 	}
