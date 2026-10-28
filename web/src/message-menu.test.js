@@ -186,7 +186,7 @@ test('recalling own messages requires a valid timestamp inside two minutes', asy
 })
 
 test('group owners and admins can recall other members messages from the chat and thread menus', async () => {
-  const conversation = vm.conversations.find(item => item.id === 'source')
+  const conversation = vm.current
   try {
     for (const role of ['owner', 'admin', 'member']) {
       await reset([fresh('one', { sender_id: 'peer', created_at: new Date(Date.now() - 3600000).toISOString() })])
