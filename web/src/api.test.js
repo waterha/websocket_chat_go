@@ -14,6 +14,9 @@ test('non-JSON API responses report a proxy configuration error', async () => {
     await assert.rejects(api('/auth/login'), /非 JSON 响应.*代理配置/)
   } finally {
     globalThis.document = originalDocument
+    globalThis.fetch = originalFetch
+  }
+})
 
 test('avatar upload sends raw image bytes, filename and CSRF protection', async () => {
   const originalDocument = globalThis.document
