@@ -1567,6 +1567,7 @@ createApp({
       if (!file || profileAvatarBusy.value) return
       profileAvatarBusy.value = true
       try {
+        if (file.size > MAX_AVATAR_BYTES) throw new Error('头像图片不能超过 2 MB')
         const prepared = await prepareImage(file, convertImageToPNG)
         if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(prepared.type)) {
           throw new Error('头像仅支持 PNG、JPEG、GIF 或 WebP 图片')
