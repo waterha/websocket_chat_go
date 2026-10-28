@@ -75,8 +75,8 @@ export function useMessageActions({ messages, threadRoot, threadReplies, active,
     return isActionableMessage(item) ? item : null
   })
   const selected = computed(() => [...available.value.values()].filter(item => selectedIDs.value.includes(item.id) && isActionableMessage(item)).sort((left, right) => left.seq - right.seq))
-  const recallAllowed = computed(() => menuMessage.value?.sender_id === me.value?.id
-    && Number.isFinite(Date.parse(menuMessage.value?.created_at))
+  const recallAllowed = computed(() => Boolean(menuMessage.value)
+    && (menuMessage.value.sender_id !== me.value?.id || Number.isFinite(Date.parse(menuMessage.value.created_at)))
     && canRecall(menuMessage.value, me.value?.id, current.value, menuNow.value))
   const forwardTargets = computed(() => conversations.value)
 
