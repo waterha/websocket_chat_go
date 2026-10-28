@@ -113,6 +113,84 @@ function reset() {
 
 const posted = () => calls.filter(call => call.method === 'POST' && call.path.endsWith('/messages'))
 
+function mockScreenSharing() {
+  const originalCreate = document.createElement.bind(document)
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  const originalRect = dom.window.HTMLImageElement.prototype.getBoundingClientRect
+  let stopped = 0
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { mediaDevices: { async getDisplayMedia() { return { getTracks: () => [{ stop() { stopped++ } }] } } } } })
+  document.createElement = tag => {
+    const element = originalCreate(tag)
+    if (tag === 'canvas') {
+      element.getContext = () => ({ drawImage() {} })
+      element.toBlob = callback => callback(new Blob(['png'], { type: 'image/png' }))
+    } else if (tag === 'video') {
+      Object.defineProperties(element, { readyState: { value: 2 }, videoWidth: { value: 800 }, videoHeight: { value: 600 } })
+      element.play = async () => {}
+      element.pause = () => {}
+    }
+    return element
+  }
+  dom.window.HTMLImageElement.prototype.getBoundingClientRect = () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600 })
+  return { stopped: () => stopped, restore() {
+    document.createElement = originalCreate
+    dom.window.HTMLImageElement.prototype.getBoundingClientRect = originalRect
+    if (originalNavigator) Object.defineProperty(globalThis, 'navigator', originalNavigator)
+    else delete globalThis.navigator
+  } }
+}
+
+test('Ctrl+Q inserts a cropped screenshot at the saved caret and sends only after confirmation', async () => {
+  reset()
+  const screen = mockScreenSharing()
+  try {
+    type('前后')
+    const range = document.createRange()
+    range.setStart(composer().firstChild, 1)
+    range.collapse(true)
+    window.getSelection().removeAllRanges()
+    window.getSelection().addRange(range)
+    const event = new dom.window.KeyboardEvent('keydown', { key: 'q', ctrlKey: true, bubbles: true, cancelable: true })
+    composer().dispatchEvent(event)
+    assert.equal(event.defaultPrevented, true)
+    await new Promise(resolve => realSetTimeout(resolve, 50))
+    const image = document.querySelector('.screenshot-preview img')
+    assert.ok(image)
+    assert.equal(screen.stopped(), 1)
+    assert.equal(calls.some(call => call.path.includes('/media?')), false)
+    image.dispatchEvent(new dom.window.MouseEvent('pointerdown', { clientX: 20, clientY: 30, button: 0 }))
+    image.dispatchEvent(new dom.window.MouseEvent('pointerup', { clientX: 220, clientY: 130 }))
+    document.querySelector('[data-screenshot-confirm]').click()
+    await new Promise(resolve => realSetTimeout(resolve, 100))
+    assert.equal(composer().querySelectorAll('.composer-image img').length, 1)
+    assert.equal(posted().length, 0, 'capturing must not send a message')
+    assert.equal(document.querySelector('.screenshot-overlay'), null)
+    await vm.send()
+    const payload = JSON.parse(String(posted()[0].body))
+    assert.deepEqual(payload.blocks.map(block => block.type), ['text', 'image', 'text'])
+    assert.equal(payload.blocks[0].text, '前')
+    assert.equal(payload.blocks[2].text, '后')
+  } finally { screen.restore() }
+})
+
+test('the screenshot toolbar can cancel without uploading or changing the draft', async () => {
+  reset()
+  const screen = mockScreenSharing()
+  try {
+    type('保留草稿')
+    const button = document.querySelector('[aria-label="截图（Ctrl+Q）"]')
+    assert.ok(button)
+    button.click()
+    await new Promise(resolve => realSetTimeout(resolve, 50))
+    document.querySelector('[data-screenshot-cancel]').click()
+    await new Promise(resolve => realSetTimeout(resolve, 50))
+    assert.equal(composer().textContent, '保留草稿')
+    assert.equal(vm.composerImages.length, 0)
+    assert.equal(calls.some(call => call.path.includes('/media?')), false)
+    assert.equal(posted().length, 0)
+  } finally { screen.restore() }
+})
+
 test('Ctrl+Z restores the previous composer text', () => {
   reset()
   type('撤销测试')
