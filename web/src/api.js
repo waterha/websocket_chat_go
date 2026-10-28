@@ -33,6 +33,31 @@ export async function api(path, options = {}) {
   return body.data
 }
 
+export const MAX_AVATAR_BYTES = 2 * 1024 * 1024
+
+export async function uploadAvatar(file) {
+  if (!file || file.size <= 0 || file.size > MAX_AVATAR_BYTES) throw new Error('头像图片不能为空且不能超过 2 MB')
+  const params = new URLSearchParams({ file_name: file.name || 'avatar.png' })
+  const response = await fetch(`/api/v1/me/avatar?${params}`, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: requestHeaders({ 'Content-Type': file.type, ...(isDesktop() ? { 'X-Upload-Size': String(file.size) } : {}) }),
+    body: file,
+  })
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) {
+    const error = new Error(body.error?.message || (response.status === 413 ? '头像图片不能超过 2 MB' : '头像上传失败，请重试'))
+    error.status = response.status
+    error.code = body.error?.code
+    throw error
+  }
+  return body.data
+}
+
+export async function clearAvatar() {
+  return api('/me/avatar', { method: 'DELETE' })
+}
+
 const MEDIA_ERRORS = {
   unsupported_media_type: '不支持该文件类型',
   media_too_large: '文件超出大小限制',
