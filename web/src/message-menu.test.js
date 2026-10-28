@@ -173,8 +173,8 @@ test('outside pointer, Escape and scrolling close a message menu', async () => {
   assert.equal(menu(), null)
 })
 
-test('recall is offered only for own messages inside two minutes', async () => {
-  for (const item of [fresh('one', { created_at: new Date(Date.now() - 120001).toISOString() }), fresh('one', { sender_id: 'peer' }), fresh('one', { created_at: 'invalid' })]) {
+test('recalling own messages requires a valid timestamp inside two minutes', async () => {
+  for (const item of [fresh('one', { created_at: new Date(Date.now() - 120001).toISOString() }), fresh('one', { created_at: 'invalid' })]) {
     await reset([item])
     await rightClick()
     assert.ok(!menu().textContent.includes('撤回'))
@@ -183,6 +183,36 @@ test('recall is offered only for own messages inside two minutes', async () => {
   await rightClick()
   await choose('撤回')
   assert.ok(calls.some(call => call.path.endsWith('/messages/1/recall') && call.method === 'POST'))
+})
+
+test('group owners and admins can recall other members messages from the chat and thread menus', async () => {
+  const conversation = vm.conversations.find(item => item.id === 'source')
+  try {
+    for (const role of ['owner', 'admin', 'member']) {
+      await reset([fresh('one', { sender_id: 'peer', created_at: new Date(Date.now() - 3600000).toISOString() })])
+      conversation.members = [{ ...me, role }]
+      await rightClick()
+      assert.equal(menu().textContent.includes('撤回'), role !== 'member', role)
+      if (role !== 'member') {
+        await choose('撤回')
+        assert.ok(calls.some(call => call.path.endsWith('/messages/1/recall') && call.method === 'POST'))
+      }
+      vm.messageActions.closeMenu()
+      await vm.openThread(vm.messages[0])
+      await settle()
+      document.querySelector('.thread-window-root').dispatchEvent(new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+      await settle()
+      assert.equal(menu().textContent.includes('撤回'), role !== 'member', `thread ${role}`)
+    }
+    conversation.kind = 'direct'
+    conversation.members = [{ ...me, role: 'owner' }]
+    await reset([fresh('one', { sender_id: 'peer' })])
+    await rightClick()
+    assert.equal(menu().textContent.includes('撤回'), false)
+  } finally {
+    conversation.kind = 'group'
+    conversation.members = [{ ...me, role: 'owner' }]
+  }
 })
 
 test('recall expires while the menu is open', async () => {
