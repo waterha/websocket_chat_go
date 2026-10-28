@@ -8,24 +8,31 @@ import (
 	"fmt"
 	"image"
 	"image/png"
+	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
-// Windows GDI constants used for the virtual-desktop capture.
+// Virtual-desktop capture uses these classic Win32 constants.
 const (
-	smXVirtualScreen = 76
-	smYVirtualScreen = 77
+	smXVirtualScreen  = 76
+	smYVirtualScreen  = 77
 	smCXVirtualScreen = 78
 	smCYVirtualScreen = 79
 
-	srccopy        = 0x00CC0020
-	dibRGBMode     = 0
+	srccopy          = 0x00CC0020
+	captureBlt       = 0x40000000
 	biCompressionRGB = 0
-	dibUsageRGB    = 0
+	dibUsageRGB      = 0
 
-	gdiPenDC = 1 // DCX cache flag not needed; kept minimal
+	// DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 (Windows 10 1607+):
+	// a pseudo-handle whose value is (HANDLE)-4.
+	dpiAwarenessContextPerMonitorAwareV2 = ^uintptr(3)
+
+	// Maximum screenshot area accepted before rejecting, ~128 megapixels,
+	// guarding against overflow / absurd allocations.
+	maxCapturePixels = 128_000_000
 )
 
 type bitmapInfoHeader struct {
@@ -48,61 +55,52 @@ type bitmapInfo struct {
 }
 
 var (
-	gdi32   = windows.NewLazySystemDLL("gdi32.dll")
-	user32  = windows.NewLazySystemDLL("user32.dll")
-	kernel32 = windows.NewLazySystemDLL("kernel32.dll")
+	gdi32  = windows.NewLazySystemDLL("gdi32.dll")
+	user32 = windows.NewLazySystemDLL("user32.dll")
 
-	procGetDC          = user32.NewProc("GetDC")
-	procReleaseDC      = user32.NewProc("ReleaseDC")
-	procGetSystemMetrics = user32.NewProc("GetSystemMetrics")
-	procSetProcessDPIAware = user32.NewProc("SetProcessDPIAware")
+	procGetDC              = user32.NewProc("GetDC")
+	procReleaseDC          = user32.NewProc("ReleaseDC")
+	procGetSystemMetrics   = user32.NewProc("GetSystemMetrics")
+	procSetThreadDpiAware  = user32.NewProc("SetThreadDpiAwarenessContext")
 	procCreateCompatibleDC = gdi32.NewProc("CreateCompatibleDC")
-	procDeleteDC       = gdi32.NewProc("DeleteDC")
-	procCreateDIBSection = gdi32.NewProc("CreateDIBSection")
-	procSelectObject   = gdi32.NewProc("SelectObject")
-	procDeleteObject   = gdi32.NewProc("DeleteObject")
-	procBitBlt         = gdi32.NewProc("BitBlt")
-	procGetDIBits      = gdi32.NewProc("GetDIBits")
-	procGetCurrentProcess = kernel32.NewProc("GetCurrentProcess")
+	procDeleteDC           = gdi32.NewProc("DeleteDC")
+	procCreateDIBSection   = gdi32.NewProc("CreateDIBSection")
+	procSelectObject       = gdi32.NewProc("SelectObject")
+	procDeleteObject       = gdi32.NewProc("DeleteObject")
+	procBitBlt             = gdi32.NewProc("BitBlt")
+	procGdiFlush           = gdi32.NewProc("GdiFlush")
 )
 
-func mustProc(p *windows.LazyProc, name string) error {
-	if err := p.Find(); err != nil {
-		return fmt.Errorf("screenshot: locate %s: %w", name, err)
-	}
-	return nil
-}
-
 // CaptureScreenshot captures the whole virtual desktop (all monitors,
-// including negative coordinates) and returns a PNG data URL.
-// It is DPI aware: the process DPI awareness is raised once so that
-// GetSystemMetrics returns true physical pixels instead of scaled values.
+// including negative coordinates and layered windows) and returns a PNG
+// data URL.
+//
+// DCs and the thread DPI awareness context are thread-affine, so all Win32
+// work happens on one locked OS thread and the previous DPI context is
+// restored before returning. Per-monitor-aware-v2 (Windows 10 1607+) is
+// requested per thread; the process-wide DPI awareness is never changed at
+// runtime.
 func (a *App) CaptureScreenshot() (string, error) {
-	procs := []struct {
-		p    *windows.LazyProc
-		name string
-	}{
-		{procGetSystemMetrics, "GetSystemMetrics"},
-		{procGetDC, "GetDC"},
-		{procReleaseDC, "ReleaseDC"},
-		{procCreateCompatibleDC, "CreateCompatibleDC"},
-		{procDeleteDC, "DeleteDC"},
-		{procCreateDIBSection, "CreateDIBSection"},
-		{procSelectObject, "SelectObject"},
-		{procDeleteObject, "DeleteObject"},
-		{procBitBlt, "BitBlt"},
-		{procSetProcessDPIAware, "SetProcessDPIAware"},
-	}
-	for _, pr := range procs {
-		if err := mustProc(pr.p, pr.name); err != nil {
-			return "", err
+	for _, p := range []*windows.LazyProc{
+		procGetSystemMetrics, procGetDC, procReleaseDC,
+		procSetThreadDpiAware, procCreateCompatibleDC, procDeleteDC,
+		procCreateDIBSection, procSelectObject, procDeleteObject,
+		procBitBlt, procGdiFlush,
+	} {
+		if err := p.Find(); err != nil {
+			return "", fmt.Errorf("screenshot: locate %s: %w", p.Name, err)
 		}
 	}
 
-	// Request per-monitor DPI awareness so metrics and BitBlt cover the
-	// full physical resolution of every monitor. Failure is non-fatal:
-	// we then simply capture at whatever virtualization Windows applies.
-	_, _, _ = procSetProcessDPIAware.Call()
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	// On older Windows the call fails and we capture with whatever
+	// virtualization applies; anything newer gets exact physical pixels.
+	prevCtx, _, _ := procSetThreadDpiAware.Call(dpiAwarenessContextPerMonitorAwareV2)
+	if prevCtx != 0 {
+		defer procSetThreadDpiAware.Call(prevCtx)
+	}
 
 	getMetric := func(index uintptr) int32 {
 		r, _, _ := procGetSystemMetrics.Call(index)
@@ -115,19 +113,30 @@ func (a *App) CaptureScreenshot() (string, error) {
 	if w <= 0 || h <= 0 {
 		return "", fmt.Errorf("screenshot: invalid virtual screen metrics %dx%d", w, h)
 	}
+	if int64(w)*int64(h) > maxCapturePixels {
+		return "", fmt.Errorf("screenshot: virtual desktop %dx%d exceeds %d-pixel limit", w, h, maxCapturePixels)
+	}
 
 	screenDC, _, err := procGetDC.Call(0)
 	if screenDC == 0 {
 		return "", fmt.Errorf("screenshot: GetDC: %w", err)
 	}
-	releaseScreen := func() { procReleaseDC.Call(0, screenDC) }
+	releaseScreenDC := func() { procReleaseDC.Call(0, screenDC) }
 
 	memDC, _, err := procCreateCompatibleDC.Call(screenDC)
 	if memDC == 0 {
-		releaseScreen()
+		releaseScreenDC()
 		return "", fmt.Errorf("screenshot: CreateCompatibleDC: %w", err)
 	}
-	defer procDeleteDC.Call(memDC)
+	// Ordered cleanup on every exit path: bitmap, then memDC, then screenDC.
+	var dib uintptr
+	defer func() {
+		if dib != 0 {
+			procDeleteObject.Call(dib)
+		}
+		procDeleteDC.Call(memDC)
+		releaseScreenDC()
+	}()
 
 	bmi := bitmapInfo{}
 	bmi.Header.Size = uint32(unsafe.Sizeof(bmi.Header))
@@ -138,56 +147,49 @@ func (a *App) CaptureScreenshot() (string, error) {
 	bmi.Header.Compression = biCompressionRGB
 
 	var bits unsafe.Pointer
-	dib, _, err := procCreateDIBSection.Call(
+	dib, _, err = procCreateDIBSection.Call(
 		memDC,
 		uintptr(unsafe.Pointer(&bmi)),
 		dibUsageRGB,
 		uintptr(unsafe.Pointer(&bits)),
 		0, 0,
 	)
+	// A non-zero DIB with nil bits is unusable; the deferred cleanup above
+	// releases it in either case.
 	if dib == 0 || bits == nil {
-		releaseScreen()
-		return "", fmt.Errorf("screenshot: CreateDIBSection: %w", err)
+		return "", fmt.Errorf("screenshot: CreateDIBSection (dib=%#x, bits!=nil=%v): %w", dib, bits != nil, err)
 	}
-	// From here on, release all GDI resources on every exit path.
-	success := false
-	defer func() {
-		procDeleteObject.Call(dib)
-		releaseScreen()
-		_ = success
-	}()
 
 	prevObj, _, _ := procSelectObject.Call(memDC, dib)
-	if prevObj == 0 {
+	if prevObj == 0 || prevObj == ^uintptr(0) { // 0 or HGDI_ERROR
 		return "", fmt.Errorf("screenshot: SelectObject failed")
 	}
 	defer procSelectObject.Call(memDC, prevObj)
 
-	// BitBlt the whole virtual desktop, including monitors with negative
-	// coordinates, into our top-down DIB.
+	// CAPTUREBLT keeps layered (alpha-blended) windows in the result.
 	ret, _, err := procBitBlt.Call(
 		memDC,
 		0, 0,
 		uintptr(w), uintptr(h),
 		screenDC,
 		uintptr(x), uintptr(y),
-		srccopy,
+		srccopy|captureBlt,
 	)
 	if ret == 0 {
 		return "", fmt.Errorf("screenshot: BitBlt: %w", err)
+	}
+	// Per the CreateDIBSection remarks, GdiFlush must be called before
+	// reading the bitmap bits written by earlier GDI calls such as BitBlt.
+	if r, _, _ := procGdiFlush.Call(); r == 0 {
+		return "", fmt.Errorf("screenshot: GdiFlush failed")
 	}
 
 	// Convert the BGRA buffer to RGBA in place. The alpha channel is set
 	// to fully opaque because screen DCs do not populate it.
 	pixels := unsafe.Slice((*uint8)(bits), uintptr(w)*uintptr(h)*4)
 	for i := 0; i < len(pixels); i += 4 {
-		b := pixels[i+0]
-		g := pixels[i+1]
-		r := pixels[i+2]
-		pixels[i+0] = r
-		pixels[i+1] = g
-		pixels[i+2] = b
-		pixels[i+3] = 0xFF
+		b, g, r := pixels[i], pixels[i+1], pixels[i+2]
+		pixels[i], pixels[i+1], pixels[i+2], pixels[i+3] = r, g, b, 0xFF
 	}
 
 	img := image.RGBA{
@@ -200,6 +202,5 @@ func (a *App) CaptureScreenshot() (string, error) {
 	if err := png.Encode(&buf, &img); err != nil {
 		return "", fmt.Errorf("screenshot: encode PNG: %w", err)
 	}
-	success = true
 	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(buf.Bytes()), nil
 }
