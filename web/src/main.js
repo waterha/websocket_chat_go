@@ -811,7 +811,7 @@ createApp({
       }
     }
     const screenshot = installScreenshot({
-      canCapture: () => Boolean(me.value && active.value && chatVisible.value && draftArea.value
+      canCapture: () => Boolean(me.value && active.value && draftArea.value
         && !threadOpen.value && !showSearch.value && !sending.value && !uploadBusy.value
         && !mutedHere.value && !dismissedHere.value && pendingSend.value?.conversation_id !== active.value
         && !document.querySelector('.modal-backdrop, .image-viewer-overlay')),
