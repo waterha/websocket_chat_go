@@ -26,6 +26,7 @@ const group = {
 }
 
 let uploadCount = 0
+let avatarID = ''
 const calls = []
 globalThis.fetch = async (url, options = {}) => {
   const path = String(url)
@@ -33,6 +34,9 @@ globalThis.fetch = async (url, options = {}) => {
   let data = null
   if (path.includes('/api/v1/media/')) {
     return { ok: true, blob: async () => new Blob([new Uint8Array(8)], { type: 'image/png' }) }
+  } else if (path.includes('/me/avatar')) {
+    avatarID = options.method === 'DELETE' ? '' : 'avatar-' + calls.length
+    data = { ...me, avatar: avatarID }
   } else if (path.includes('/media')) {
     uploadCount++
     data = { id: 'media-' + uploadCount, file_name: 'pasted-' + uploadCount + '.png', media_type: 'image', content_type: 'image/png', byte_size: 8 }
@@ -452,7 +456,26 @@ test('an image-only draft can be sent and then deleted with Backspace', async ()
   assert.equal(document.querySelector('.composer .primary').disabled, true, 'an emptied draft is still sendable')
 })
 
-test.after(() => {
+test('the profile dialog uploads and displays the selected avatar', async () => {
+  avatarID = ''
+  vm.openProfile()
+  await new Promise(resolve => realSetTimeout(resolve, 100))
+  const input = document.querySelector('.profile-modal input[type="file"]')
+  assert.ok(input, 'the profile dialog has no avatar file picker')
+  const file = new File([new Uint8Array(16)], 'portrait.png', { type: 'image/png' })
+  Object.defineProperty(input, 'files', { configurable: true, value: [file] })
+  input.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+  await new Promise(resolve => realSetTimeout(resolve, 500))
+
+  assert.ok(avatarID, 'the avatar upload endpoint was not called')
+  assert.ok(calls.some(call => call.method === 'POST' && call.path.includes('/me/avatar?file_name=portrait.png')))
+  assert.equal(vm.me.avatar, avatarID)
+  assert.ok(document.querySelector('.profile-modal img.profile-avatar'), 'the uploaded avatar was not displayed')
+  assert.ok(document.querySelector('.profile-modal img.profile-avatar').getAttribute('src').includes(avatarID))
+  vm.showProfile = false
+})
+
+ test.after(() => {
   for (const handle of timers) { clearInterval(handle); clearTimeout(handle) }
   globalThis.setInterval = realSetInterval
   globalThis.setTimeout = realSetTimeout
