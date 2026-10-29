@@ -65,14 +65,15 @@ const MEDIA_ERRORS = {
   not_found: '当前会话不可用，无法上传',
 }
 
-// Sends raw bytes to the media endpoint. The browser sets Content-Type from the
-// file's type, which is exactly the header the server validates against.
-export async function uploadMedia(conversationID, file) {
+// Sends raw bytes with the file's declared type, falling back to a downloadable
+// binary file when the browser cannot identify its MIME type.
+export async function uploadMedia(conversationID, file, { signal } = {}) {
   const params = new URLSearchParams({ file_name: file.name || 'upload' })
   const response = await fetch(`/api/v1/conversations/${conversationID}/media?${params}`, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: requestHeaders({ 'Content-Type': file.type, ...(isDesktop() ? { 'X-Upload-Size': String(file.size) } : {}) }),
+    headers: requestHeaders({ 'Content-Type': file.type || 'application/octet-stream', ...(isDesktop() ? { 'X-Upload-Size': String(file.size) } : {}) }),
+    signal,
     body: file,
   })
   const body = await response.json().catch(() => ({}))
