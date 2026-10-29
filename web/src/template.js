@@ -91,11 +91,11 @@ export const template = `\n    <DesktopSettings :logged-in="!!me" />
              </form>
              <div class="message-search-status" role="status" aria-live="polite"><span v-if="searchBusy">正在搜索…</span><span v-else-if="searchError" class="search-error">{{ searchError }}</span><span v-else-if="!searchStarted">搜索或筛选聊天记录</span><span v-else-if="!searchResults.length">没有找到匹配的消息</span><span v-else>已找到 {{ searchResults.length }} 条{{ searchHasMore ? '以上' : '' }}匹配消息</span><button v-if="searchError" type="button" class="icon-button" title="重试搜索" aria-label="重试搜索" @click="searchMessages(searchResults.length > 0)"><RotateCw :size="17" aria-hidden="true" /></button></div>
              <div class="message-search-results" :aria-busy="searchBusy">
-               <button v-for="item in searchResults" :key="item.id" type="button" class="message-search-result" :disabled="locatingMessage !== null" :aria-label="'定位消息：' + item.content" @click="locateMessage(item)">
+               <article v-for="item in searchResults" :key="item.id" class="message-search-result">
                  <span class="search-result-meta"><strong>{{ item.kind === 'system' ? '系统消息' : sender(item.sender_id) }}</strong><time :datetime="item.created_at">{{ searchDate(item.created_at) }}</time></span>
-                 <span class="search-result-content"><template v-for="(part, index) in highlightMatches(historyMessagePreview(item), searchedQuery)" :key="index"><mark v-if="part.match">{{ part.text }}</mark><template v-else>{{ part.text }}</template></template></span>
-                 <span class="search-result-action">{{ locatingMessage === item.seq ? '定位中…' : '查看原消息' }}<ArrowRight :size="15" aria-hidden="true" /></span>
-               </button>
+                 <span class="search-result-content history-message-content"><span v-if="item.recalled_at">消息已撤回</span><template v-else v-for="(segment, segmentIndex) in segmentsOf(item)" :key="segmentIndex"><span v-if="segment.type === 'text'" class="history-message-text"><template v-for="(part, index) in highlightMatches(segment.text, searchedQuery)" :key="index"><mark v-if="part.match">{{ part.text }}</mark><template v-else>{{ part.text }}</template></template></span><a v-else-if="segment.type === 'image'" class="block-image history-message-image" :href="mediaURL(segment.mediaId)" :aria-label="'查看图片 ' + segment.fileName"><img :src="mediaURL(segment.mediaId)" :alt="segment.fileName || '图片/表情'" loading="lazy" /></a><span v-else class="history-message-attachment">{{ segment.type === 'video' ? '[视频]' : '[文件]' }} {{ segment.fileName }}</span></template></span>
+                 <button type="button" class="search-result-action history-locate" :disabled="locatingMessage !== null" @click="locateMessage(item)">{{ locatingMessage === item.seq ? '定位中…' : '查看原消息' }}<ArrowRight :size="15" aria-hidden="true" /></button>
+               </article>
                <button v-if="searchHasMore && !searchError" type="button" class="older search-more" :disabled="searchBusy" @click="searchMessages(true)">{{ searchBusy ? '加载中…' : '加载更多结果' }}</button>
              </div>
            </section>
