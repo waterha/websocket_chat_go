@@ -456,8 +456,22 @@ test('an image-only draft can be sent and then deleted with Backspace', async ()
   assert.equal(document.querySelector('.composer .primary').disabled, true, 'an emptied draft is still sendable')
 })
 
-test('the profile dialog uploads and displays the selected avatar', async () => {
+test('the profile dialog crops before uploading and cancel keeps the avatar unchanged', async t => {
   avatarID = ''
+  const imageDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'Image')
+  Object.defineProperty(globalThis, 'Image', { configurable: true, writable: true, value: class {
+    naturalWidth = 800
+    naturalHeight = 600
+    set src(value) { if (value) queueMicrotask(() => this.onload?.()) }
+  } })
+  t.after(() => { if (imageDescriptor) Object.defineProperty(globalThis, 'Image', imageDescriptor); else delete globalThis.Image })
+  const dialogProto = dom.window.HTMLDialogElement.prototype
+  const oldShow = dialogProto.showModal, oldClose = dialogProto.close
+  dialogProto.showModal = function () { this.setAttribute('open', '') }
+  dialogProto.close = function () { this.removeAttribute('open') }
+  t.after(() => { dialogProto.showModal = oldShow; dialogProto.close = oldClose })
+  t.mock.method(dom.window.HTMLCanvasElement.prototype, 'getContext', () => ({ fillRect() {}, drawImage() {} }))
+  t.mock.method(dom.window.HTMLCanvasElement.prototype, 'toBlob', callback => callback(new Blob(['cropped-image'], { type: 'image/jpeg' })))
   vm.openProfile()
   await new Promise(resolve => realSetTimeout(resolve, 100))
   const input = document.querySelector('.profile-modal input[type="file"]')
@@ -465,10 +479,19 @@ test('the profile dialog uploads and displays the selected avatar', async () => 
   const file = new File([new Uint8Array(16)], 'portrait.png', { type: 'image/png' })
   Object.defineProperty(input, 'files', { configurable: true, value: [file] })
   input.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
-  await new Promise(resolve => realSetTimeout(resolve, 500))
-
+  await new Promise(resolve => realSetTimeout(resolve, 100))
+  assert.equal(avatarID, '', 'upload must wait until the crop is confirmed')
+  document.querySelector('.avatar-crop-dialog [data-action="cancel"]').click()
+  await new Promise(resolve => realSetTimeout(resolve, 100))
+  assert.equal(avatarID, '')
+  input.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+  await new Promise(resolve => realSetTimeout(resolve, 100))
+  document.querySelector('.avatar-crop-dialog [data-action="confirm"]').click()
+  await new Promise(resolve => realSetTimeout(resolve, 100))
   assert.ok(avatarID, 'the avatar upload endpoint was not called')
-  assert.ok(calls.some(call => call.method === 'POST' && call.path.includes('/me/avatar?file_name=portrait.png')))
+  const uploaded = calls.find(call => call.method === 'POST' && call.path.includes('/me/avatar?file_name=avatar.jpg'))
+  assert.ok(uploaded)
+  assert.equal(uploaded.body.type, 'image/jpeg')
   assert.equal(vm.me.avatar, avatarID)
   assert.ok(document.querySelector('.profile-modal img.profile-avatar'), 'the uploaded avatar was not displayed')
   assert.ok(document.querySelector('.profile-modal img.profile-avatar').getAttribute('src').includes(avatarID))
