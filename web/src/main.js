@@ -26,6 +26,7 @@ import { DesktopSettings } from './desktop-settings.js'
 import { template } from './template.js'
 import { LayoutDivider } from './layout-divider.js'
 import { GroupDirectory } from './group-directory.js'
+import { GroupFiles } from './group-files.js'
 import './group-directory.css'
 import './style.css'
 import './desktop.css'
@@ -41,7 +42,7 @@ const UserAvatar = {
 }
 
 createApp({
-  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Scissors, Download, Check, Pin, BellOff, Info, ChevronRight, ChevronDown, Clock3, ImagePlus, MoreHorizontal, MessageCircle, UserPlus, Bell, Contact, UsersRound, DesktopSettings, UserAvatar, GroupDirectory, LayoutDivider },
+  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Scissors, Download, Check, Pin, BellOff, Info, ChevronRight, ChevronDown, Clock3, ImagePlus, MoreHorizontal, MessageCircle, UserPlus, Bell, Contact, UsersRound, DesktopSettings, UserAvatar, GroupDirectory, GroupFiles, LayoutDivider },
   setup() {
     const me = ref(null)
     const mode = ref('login')
