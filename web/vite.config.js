@@ -16,6 +16,10 @@ export default defineConfig(({ mode }) => {
       __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false,
     },
     server: {
+      watch: {
+        // Atomic file writes create short-lived, locked staging directories on Windows.
+        ignored: [/(?:^|[\\/])[^\\/]*\.tmpdir(?:[\\/]|$)/, /\.tmp$/],
+      },
       proxy: {
         '/api': backend,
         '/ws': { target: websocketTarget, ws: true },
