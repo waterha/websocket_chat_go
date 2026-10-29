@@ -69,6 +69,7 @@ export const template = `\n    <DesktopSettings :logged-in="!!me" />
              <span v-else class="avatar">{{ title(current).slice(0, 1) }}</span>
              <div class="chat-head-text"><strong>{{ title(current) }}<span v-if="current.dismissed" class="mute-mark" aria-label="已解散">已解散</span><span v-if="current.pinned" class="pin-mark" aria-label="已置顶">置顶</span><span v-if="current.muted" class="mute-mark" aria-label="免打扰">免打扰</span></strong><p>{{ chatHeadMeta }}</p></div>
              <div class="chat-head-actions">
+               <GroupFiles v-if="current.kind === 'group'" :key="current.id + ':' + me.id" :conversation="current" />
                <div class="chat-more">
                  <button type="button" class="head-icon" title="更多" aria-label="更多操作" :aria-expanded="chatMoreOpen" @click.stop="toggleChatMore"><MoreHorizontal :size="18" /></button>
                  <div v-if="chatMoreOpen" class="top-menu" role="menu" @click.stop>
