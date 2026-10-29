@@ -103,6 +103,7 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .message-search-field input { min-width: 0; padding: 10px 0; border: 0; border-radius: 0; background: transparent; font-size: 14px; }
 .message-search-field input:focus { box-shadow: none; }
 .search-submit { border-color: var(--line); }
+.history-filters { display: flex; align-items: end; flex-wrap: wrap; gap: 8px; padding: 0 12px 10px; }.history-filters label { display: grid; gap: 4px; color: var(--muted); font-size: 11px; }.history-filters input, .history-filters select { min-width: 120px; max-width: 180px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; color: var(--ink); background: var(--card); font: inherit; font-size: 12px; }.history-filters input[type=date] { min-width: 130px; }
 .message-search-status { display: flex; align-items: center; gap: 8px; min-height: 48px; flex: none; color: var(--muted); font-size: 12px; }
 .message-search-status .icon-button { width: 30px; height: 30px; }
 .search-error { color: #a13930; }
