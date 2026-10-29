@@ -34,6 +34,7 @@ export function historyMessagePreview(message) {
   const content = message.content || ''
   if (message.kind === 'image') return `[表情/图片] ${content}`.trim()
   if (message.kind === 'file') return `[文件] ${message.media?.file_name || ''} ${content}`.trim()
+  if (message.kind === 'audio') return `[语音] ${content}`.trim()
   if (message.kind === 'video') return `[视频] ${content}`.trim()
   return content
 }
