@@ -28,6 +28,7 @@ import { LayoutDivider } from './layout-divider.js'
 import { GroupDirectory } from './group-directory.js'
 import { GroupFiles } from './group-files.js'
 import { useVoice } from './voice.js'
+import { cropAvatar } from './avatar-crop.js'
 import './group-directory.css'
 import './style.css'
 import './desktop.css'
@@ -1663,25 +1664,33 @@ createApp({
       } catch (cause) { showError(cause) }
       finally { profileBusy.value = false }
     }
+    let avatarCropController
+    watch(showProfile, visible => { if (!visible) avatarCropController?.abort() })
     async function uploadProfileAvatar(event) {
       const input = event?.target
       const file = input?.files?.[0]
       if (input) input.value = ''
       if (!file || profileAvatarBusy.value) return
       profileAvatarBusy.value = true
+      const controller = new AbortController()
+      avatarCropController = controller
+      const version = epoch
       try {
-        if (file.size > MAX_AVATAR_BYTES) throw new Error('头像图片不能超过 2 MB')
+        if (file.size > 20 * 1024 * 1024) throw new Error('待裁剪图片不能超过 20 MB')
         const prepared = await prepareImage(file, convertImageToPNG)
         if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(prepared.type)) {
           throw new Error('头像仅支持 PNG、JPEG、GIF 或 WebP 图片')
         }
-        if (prepared.size > MAX_AVATAR_BYTES) throw new Error('头像图片不能超过 2 MB')
         if (!prepared.size) throw new Error('头像图片不能为空')
-        const account = await uploadAvatar(prepared)
+        const cropped = await cropAvatar(prepared, { signal: controller.signal })
+        if (!cropped || controller.signal.aborted || version !== epoch) return
+        if (cropped.size > MAX_AVATAR_BYTES) throw new Error('裁剪后的头像不能超过 2 MB')
+        const account = await uploadAvatar(cropped)
+        if (controller.signal.aborted || version !== epoch) return
         me.value = account
         await refresh()
-      } catch (cause) { showError(cause) }
-      finally { profileAvatarBusy.value = false }
+      } catch (cause) { if (!controller.signal.aborted && version === epoch) showError(cause) }
+      finally { if (avatarCropController === controller) { avatarCropController = null; profileAvatarBusy.value = false } }
     }
     async function removeProfileAvatar() {
       if (profileAvatarBusy.value || !me.value?.avatar) return
@@ -2169,7 +2178,7 @@ createApp({
       if (draftArea.value) { installEmojiPicker(draftArea.value); installComposerUndo(draftArea.value) }
     })
     const removeDesktopDownloads = installDesktopDownloads(showError)
-    onUnmounted(() => { voice.dispose(); cancelFileUpload(); screenshot.dispose(); removeDesktopDownloads(); document.getElementById('app')?.removeEventListener('click', onImageLinkClick); resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearInterval(typingTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); document.removeEventListener('pointerdown', onConversationMenuOutside) })
+    onUnmounted(() => { avatarCropController?.abort(); voice.dispose(); cancelFileUpload(); screenshot.dispose(); removeDesktopDownloads(); document.getElementById('app')?.removeEventListener('click', onImageLinkClick); resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearInterval(typingTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); document.removeEventListener('pointerdown', onConversationMenuOutside) })
     return { voiceEnabled, voiceState, voiceSeconds, toggleVoice, cancelVoice: voice.cancel, fileInput, openFilePicker, cancelFileUpload, uploadName, searchSender, searchType, searchStart, searchEnd, clearSearchFilters, historyMessagePreview, startScreenshot: screenshot.start, profileAvatarBusy, avatarInput, uploadProfileAvatar, removeProfileAvatar, onGroupJoined, openGroupDirectory, groupDirectory, isDesktop, openServerSettings, sidebarMoreOpen, chatMoreOpen, toggleSidebarMore, toggleChatMore, sendKeyMode, sendKeyHint, setSendKey, sendMenuOpen, closeConversation, memberSearchOpen, toggleMemberSearch, preferenceBusy, memberByID, headMember, chatInfoOpen, dayDivider, dayLabel, pokeMember, startDirectRemark, clearLocalHistory, UserAvatar, chatHeadMeta, memberMenuID, toggleMemberMenu, messageActions, REACTION_CHOICES, reactionMine, toggleReaction, reactionBusy, typingLabel, mutedHere, dismissedHere, readTicks, showContacts, contactBusy, remarkEditingID, remarkDraft, blockedUsers, isBlocked, openContacts, startRemark, saveRemark, removeFriend, blockUser, unblockUser, conversationMenu, conversationMenuElement, openConversationMenu, closeConversationMenu, runConversationMenu, deleteConversation, joinRequests, joinRequestBusy, decideJoinRequest, updateGroupSettings, groupSettingsBusy, canDismissGroup, dismissGroup, setMemberAlias, setMemberMute, memberMuted, memberCanBeMuted, memberAliasEditable, groupToolBusy, showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, hasThread, threadPreview, threadLabel, hiddenReplyCount, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, inviteQuery, inviteInitial, inviteVisible, inviteGroups, inviteInitials, inviteSummary, inviteSelectedCount, inviteSelectedPeople, chooseInviteInitial, toggleInvite, selectAllInvites, clearInvites, resetInviteFilters, OTHER_INITIAL, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, discardPending, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, composerImages, composerHasContent, removeComposerImage, clearComposerImages, syncDraftFromDom, onComposerInput, onComposerKeydown, onComposerClick, onComposerBlur, restorePending, dragging, onComposerPaste, onDragOver, onDragLeave, onDrop, draftArea, startReply, replyPreview, replyAuthor, bodyOf, segmentsOf, usesBlocks, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
   },
   template,
