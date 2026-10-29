@@ -79,7 +79,7 @@ export function useVoice({ canRecord, getContext, isCurrent, onSend, showError, 
     if (event.code !== 'Space' && event.key !== ' ') return
     if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing) return
     const target = event.target
-    if (documentRef.querySelector('.modal-backdrop,dialog[open]') || target?.closest?.('input,textarea,select,button,a,[role="dialog"]')) return
+    if (documentRef.querySelector('.modal-backdrop,dialog[open]') || target?.closest?.('input,textarea,select,button,a,audio,video,[role="dialog"]')) return
     event.preventDefault(); event.stopPropagation()
     if (event.repeat || held) return
     held = true
