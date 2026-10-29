@@ -24,11 +24,20 @@ test('files are validated against per-type limits', () => {
   assert.equal(validateMediaFile(file('video/mp4', 100 * 1024 * 1024 + 1)).ok, false)
   assert.equal(validateMediaFile(file('application/zip', 50 * 1024 * 1024)).ok, true)
   assert.equal(validateMediaFile(file('application/zip', 50 * 1024 * 1024 + 1)).ok, false)
-  // A missing or malformed type cannot be uploaded because the server refuses it.
-  assert.equal(validateMediaFile(file('', 10)).ok, false)
+  // Explicitly malformed types still cannot be uploaded.
   assert.equal(validateMediaFile(file('not a type', 10)).ok, false)
   assert.equal(validateMediaFile(file('image/png', 0)).ok, false)
   assert.equal(validateMediaFile(null).ok, false)
+})
+
+test('unknown file types use the ordinary file limit and reject empty files', () => {
+  const limit = 50 * 1024 * 1024
+  for (const type of ['', undefined]) {
+    assert.deepEqual(validateMediaFile(file(type, 1)), { ok: true, kind: 'file' })
+    assert.deepEqual(validateMediaFile(file(type, limit)), { ok: true, kind: 'file' })
+    assert.deepEqual(validateMediaFile(file(type, limit + 1)), { ok: false, error: '文件最大 50 MB' })
+    assert.deepEqual(validateMediaFile(file(type, 0)), { ok: false, error: '文件为空，请重新选择' })
+  }
 })
 
 test('sizes and previews render stable text', () => {
