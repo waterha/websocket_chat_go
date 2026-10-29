@@ -1,0 +1,11 @@
+.group-files-modal { width: min(640px, calc(100vw - 32px)); max-width: 640px; max-height: calc(100dvh - 48px); overflow-y: auto; }
+.group-files-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; }
+.group-files-toolbar > span { min-width: 0; overflow-wrap: anywhere; font-weight: 700; }
+.group-files-list { list-style: none; margin: 0; padding: 0; }
+.group-file-row { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); }
+.group-file-info { display: grid; gap: 6px; min-width: 0; flex: 1; }
+.group-file-info strong { font-size: 14px; overflow-wrap: anywhere; }
+.group-file-info small { color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
+.group-file-download { flex: none; text-decoration: none; font-size: 12px; padding: 7px 12px; }
+.group-files-more { display: block; margin: 16px auto 0; }
+.group-files-trigger { white-space: nowrap; }
