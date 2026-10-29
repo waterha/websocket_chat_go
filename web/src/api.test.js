@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { api, clearAvatar, MAX_AVATAR_BYTES, uploadAvatar } from './api.js'
+import { api, clearAvatar, MAX_AVATAR_BYTES, uploadAvatar, uploadMedia } from './api.js'
 
 test('non-JSON API responses report a proxy configuration error', async () => {
   const originalDocument = globalThis.document
@@ -55,6 +55,59 @@ test('avatar upload rejects empty and over-limit images before sending', async (
     const tooLarge = new File([new Uint8Array(MAX_AVATAR_BYTES + 1)], 'large.png', { type: 'image/png' })
     await assert.rejects(uploadAvatar(tooLarge), /不能超过 2 MB/)
     assert.equal(calls, 0)
+  } finally {
+    globalThis.document = originalDocument
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('media upload uses a binary fallback while preserving declared types and raw bytes', async () => {
+  const originalDocument = globalThis.document
+  const originalFetch = globalThis.fetch
+  globalThis.document = { cookie: 'csrf=token%201' }
+  let request
+  globalThis.fetch = async (url, options) => {
+    request = { url, options }
+    return Response.json({ data: { id: 'uploaded-media' } })
+  }
+  try {
+    for (const type of ['', 'image/png', 'image/jpeg', 'video/mp4', 'application/pdf']) {
+      const file = new File(['file-bytes'], 'file name.bin', { type })
+      const result = await uploadMedia('conversation-id', file)
+      assert.equal(result.id, 'uploaded-media')
+      assert.equal(request.url, '/api/v1/conversations/conversation-id/media?file_name=file+name.bin')
+      assert.equal(request.options.method, 'POST')
+      assert.equal(request.options.credentials, 'same-origin')
+      assert.equal(request.options.headers['Content-Type'], type || 'application/octet-stream')
+      assert.equal(request.options.headers['X-CSRF-Token'], 'token 1')
+      assert.equal(request.options.body, file)
+      assert.equal(request.options.signal, undefined)
+    }
+  } finally {
+    globalThis.document = originalDocument
+    globalThis.fetch = originalFetch
+  }
+})
+
+test('media upload forwards the abort signal and preserves abort errors', async () => {
+  const originalDocument = globalThis.document
+  const originalFetch = globalThis.fetch
+  globalThis.document = { cookie: '' }
+  const controller = new AbortController()
+  const file = new File(['file-bytes'], 'unknown.bin')
+  let requestSignal
+  globalThis.fetch = async (_url, options) => {
+    requestSignal = options.signal
+    return Response.json({ data: { id: 'uploaded-media' } })
+  }
+  try {
+    await uploadMedia('conversation-id', file, { signal: controller.signal })
+    assert.equal(requestSignal, controller.signal)
+    controller.abort()
+    globalThis.fetch = async (_url, options) => {
+      options.signal.throwIfAborted()
+    }
+    await assert.rejects(uploadMedia('conversation-id', file, { signal: controller.signal }), error => error === controller.signal.reason)
   } finally {
     globalThis.document = originalDocument
     globalThis.fetch = originalFetch
