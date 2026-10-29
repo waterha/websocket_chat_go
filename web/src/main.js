@@ -751,6 +751,7 @@ createApp({
     // Upload first, then hold the attachment for an explicit message send.
     async function acceptAttachment(file) {
       if (!file || !active.value || uploadBusy.value || sending.value) return
+      if (voice.enabled.value && !file.type?.startsWith('audio/')) { showError({ message: '请先关闭语音模式，再上传文件' }); return }
       const check = validateMediaFile(file)
       if (!check.ok) { showError({ message: check.error }); return }
       if (composerImages.value.length) { showError({ message: '请先发送或移除输入框中的图片，再上传文件' }); return }
@@ -801,6 +802,7 @@ createApp({
     async function acceptImages(files, placeholders = []) {
       const id = active.value
       if (!id || !files.length || uploadBusy.value || sending.value) return
+      if (voice.enabled.value) { showError({ message: '请先关闭语音模式，再添加图片' }); return }
       if (attachment.value) {
         for (const placeholder of placeholders) placeholder.remove()
         if (placeholders.length) syncDraftFromDom()
@@ -881,7 +883,7 @@ createApp({
     }
     watch(active, () => voice.reset(), { flush: 'sync' })
     const screenshot = installScreenshot({
-      canCapture: () => Boolean(me.value && active.value && draftArea.value
+      canCapture: () => Boolean(!voice.enabled.value && me.value && active.value && draftArea.value
         && !threadOpen.value && !showSearch.value && !sending.value && !uploadBusy.value
         && !mutedHere.value && !dismissedHere.value && pendingSend.value?.conversation_id !== active.value
         && !document.querySelector('.modal-backdrop, .image-viewer-overlay')),
