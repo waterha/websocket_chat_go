@@ -543,4 +543,7 @@ body { -webkit-font-smoothing: antialiased; }
 .login-card form { gap: 10px; width: min(240px, 100%); }
 .login-card input { padding: 10px 12px; font-size: 13px; }
 .login-card .primary { margin-top: 2px; padding: 11px 12px; font-size: 14px; }
+.media-audio { display: block; width: min(280px, 65vw); max-width: 100%; height: 40px; margin: 4px 0; }
+.voice-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px; border-radius: 8px; background: #fff3e6; color: var(--accent-dark); font-size: 13px; }
+.toolbar-icon[aria-pressed="true"] { background: #f7e3d4; color: var(--accent-dark); }
 .login-card .text-button { font-size: 12px; }
