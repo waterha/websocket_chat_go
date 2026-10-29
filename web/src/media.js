@@ -4,6 +4,7 @@
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024
 export const MAX_VIDEO_BYTES = 100 * 1024 * 1024
 export const MAX_FILE_BYTES = 50 * 1024 * 1024
+export const MAX_AUDIO_BYTES = 10 * 1024 * 1024
 
 // The upload endpoint trusts the declared Content-Type as the message kind; it
 // does not sniff the bytes, so the client must send the file's real type. Any
@@ -12,6 +13,7 @@ export function mediaKind(contentType) {
   const type = String(contentType || '').toLowerCase().split(';')[0].trim()
   if (type.startsWith('image/')) return 'image'
   if (type.startsWith('video/')) return 'video'
+  if (type.startsWith('audio/')) return 'audio'
   return 'file'
 }
 
@@ -23,9 +25,9 @@ export function validateMediaFile(file) {
   }
   if (!file.size) return { ok: false, error: '文件为空，请重新选择' }
   const kind = mediaKind(type)
-  const limit = kind === 'video' ? MAX_VIDEO_BYTES : kind === 'image' ? MAX_IMAGE_BYTES : MAX_FILE_BYTES
+  const limit = kind === 'video' ? MAX_VIDEO_BYTES : kind === 'image' ? MAX_IMAGE_BYTES : kind === 'audio' ? MAX_AUDIO_BYTES : MAX_FILE_BYTES
   if (file.size > limit) {
-    return { ok: false, error: kind === 'video' ? '视频最大 100 MB' : kind === 'image' ? '图片最大 10 MB' : '文件最大 50 MB' }
+    return { ok: false, error: kind === 'video' ? '视频最大 100 MB' : kind === 'image' ? '图片最大 10 MB' : kind === 'audio' ? '语音最大 10 MB' : '文件最大 50 MB' }
   }
   return { ok: true, kind }
 }
@@ -43,6 +45,7 @@ export const mediaURL = id => `/api/v1/media/${encodeURIComponent(id)}`
 export function mediaPreview(message) {
   if (message?.kind === 'image') return '[图片]'
   if (message?.kind === 'video') return '[视频]'
+  if (message?.kind === 'audio') return '[语音]'
   if (message?.kind === 'file') return '[文件]'
   return ''
 }
