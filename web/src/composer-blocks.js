@@ -32,7 +32,7 @@ export function messageSegments(message) {
   const segments = []
   if (message?.media_id) {
     segments.push({
-      type: message.kind === 'image' ? 'image' : message.kind === 'video' ? 'video' : 'file',
+      type: message.kind === 'image' ? 'image' : message.kind === 'video' ? 'video' : message.kind === 'audio' ? 'audio' : 'file',
       mediaId: message.media_id,
       fileName: message.media?.file_name || '',
       byteSize: message.media?.byte_size || 0,
