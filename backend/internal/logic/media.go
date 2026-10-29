@@ -16,12 +16,13 @@ import (
 
 const (
 	MaxImageBytes = 10 << 20
+	MaxAudioBytes = 10 << 20
 	MaxVideoBytes = 100 << 20
 	MaxFileBytes  = 50 << 20
 )
 
 // allowedMedia maps a declared content type to the message kind it produces.
-// Images and videos are inline kinds; anything else becomes a downloadable
+// Images, videos and audio are inline kinds; anything else becomes a downloadable
 // file, which is why the set is not a strict allow-list of media types.
 var allowedMedia = map[string]string{
 	"image/jpeg": "image",
@@ -31,6 +32,11 @@ var allowedMedia = map[string]string{
 	"video/mp4":  "video",
 	"video/webm": "video",
 	"video/ogg":  "video",
+	"audio/webm": "audio",
+	"audio/ogg":  "audio",
+	"audio/mp4":  "audio",
+	"audio/mpeg": "audio",
+	"audio/wav":  "audio",
 }
 
 type MediaService struct {
@@ -38,8 +44,8 @@ type MediaService struct {
 	Files *media.Store
 }
 
-// MediaKind resolves the message kind for a declared content type. Known image
-// and video types keep their inline kind; a syntactically valid other type is
+// MediaKind resolves the message kind for a declared content type. Known image,
+// video and audio types keep their inline kind; a syntactically valid other type is
 // stored as a generic file, so documents and archives can be shared. A malformed
 // type (empty, too long, control characters, or not `type/subtype`) is refused.
 func MediaKind(contentType string) (string, bool) {
@@ -79,6 +85,8 @@ func validContentType(value string) bool {
 
 func MediaLimit(kind string) int64 {
 	switch kind {
+	case "audio":
+		return MaxAudioBytes
 	case "video":
 		return MaxVideoBytes
 	case "file":
