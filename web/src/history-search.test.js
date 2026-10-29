@@ -14,7 +14,7 @@ const group = { id: 'history', name: 'History', kind: 'group', members: [{ ...me
 const requests = []
 let pendingResolve
 let hold = false
-const result = { id: 'image-1', conversation_id: 'history', sender_id: 'bob', seq: 8, kind: 'image', content: '', created_at: '2026-10-29T01:00:00Z' }
+const result = { id: 'image-1', conversation_id: 'history', sender_id: 'bob', seq: 8, kind: 'image', media_id: 'photo-1', media: { file_name: 'photo.png' }, content: '', created_at: '2026-10-29T01:00:00Z' }
 globalThis.fetch = async (url, options = {}) => {
   const path = String(url)
   let data = []
@@ -87,6 +87,39 @@ test('changing history filters invalidates in-flight results and rejects reverse
   assert.equal(vm.searchSender, '')
   assert.equal(vm.searchType, 'all')
   assert.equal(vm.searchStart, '')
+})
+
+test('history renders real photos and GIF stickers in order and previews without locating', async () => {
+  await vm.openSearch()
+  await tick()
+  vm.searchResults = [result, { ...result, id: 'mixed', kind: 'user', media_id: '', blocks: [
+    { type: 'text', text: '前面的文字😀' },
+    { type: 'image', media_id: 'sticker-gif', file_name: '开心.gif' },
+    { type: 'text', text: '后面的文字' },
+  ] }, { ...result, id: 'recalled', recalled_at: '2026-10-29T02:00:00Z' }]
+  await tick()
+  const rows = document.querySelectorAll('#message-search-panel article.message-search-result')
+  assert.equal(rows.length, 3)
+  assert.match(rows[0].querySelector('img').src, /\/api\/v1\/media\/photo-1$/)
+  assert.equal(rows[1].querySelector('img').alt, '开心.gif')
+  assert.match(rows[1].querySelector('img').src, /sticker-gif$/)
+  assert.deepEqual([...rows[1].querySelector('.history-message-content').children].map(node => node.tagName), ['SPAN', 'A', 'SPAN'])
+  assert.match(rows[1].textContent, /前面的文字😀/)
+  assert.equal(rows[2].querySelector('img'), null)
+  assert.match(rows[2].textContent, /消息已撤回/)
+  assert.doesNotMatch(rows[0].textContent, /\[表情\/图片\]/)
+  const originalShowModal = dom.window.HTMLDialogElement.prototype.showModal
+  dom.window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
+  try {
+    rows[1].querySelector('img').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }))
+    const dialog = document.querySelector('dialog.image-viewer')
+    assert.ok(dialog)
+    assert.match(dialog.querySelector('img').src, /sticker-gif$/)
+    assert.equal(vm.showSearch, true)
+    assert.equal(vm.locatingMessage, null)
+    dialog.remove()
+  } finally { dom.window.HTMLDialogElement.prototype.showModal = originalShowModal }
+  vm.closeSearch()
 })
 
 test.after(() => {
