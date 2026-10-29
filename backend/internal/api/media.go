@@ -18,7 +18,7 @@ import (
 // per-type limits enforced afterwards are always smaller or equal.
 const maxUploadBody = logic.MaxVideoBytes + (1 << 20)
 
-// uploadMedia accepts a raw image, video or document body for one conversation.
+// uploadMedia accepts a raw image, video, audio or document body for one conversation.
 // The media type is taken from the declared Content-Type, which is the same value
 // later returned on download and stored verbatim. It is not content sniffed, so
 // a client could label arbitrary bytes as an image; the endpoint therefore only
@@ -96,6 +96,11 @@ func extensionFor(contentType string) string {
 		"video/mp4":  ".mp4",
 		"video/webm": ".webm",
 		"video/ogg":  ".ogv",
+		"audio/webm": ".webm",
+		"audio/ogg":  ".ogg",
+		"audio/mp4":  ".m4a",
+		"audio/mpeg": ".mp3",
+		"audio/wav":  ".wav",
 	}[contentType]; ok {
 		return extension
 	}
