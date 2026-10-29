@@ -17,10 +17,8 @@ export function mediaKind(contentType) {
 
 export function validateMediaFile(file) {
   if (!file) return { ok: false, error: '请选择文件' }
-  const type = String(file.type || '').toLowerCase().split(';')[0].trim()
-  // A browser may report an empty type; the server would refuse it, so reject it
-  // here with a clearer message.
-  if (!type || type.split('/').length !== 2 || !type.split('/')[0] || !type.split('/')[1]) {
+  const type = String(file.type || 'application/octet-stream').toLowerCase().split(';')[0].trim()
+  if (type.split('/').length !== 2 || !type.split('/')[0] || !type.split('/')[1]) {
     return { ok: false, error: '无法识别文件类型，请更换文件' }
   }
   if (!file.size) return { ok: false, error: '文件为空，请重新选择' }
