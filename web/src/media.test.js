@@ -51,6 +51,13 @@ test('sizes and previews render stable text', () => {
   assert.equal(mediaPreview({ kind: 'user', content: 'hi' }), '')
 })
 
+test('voice recordings have an audio kind and a ten MiB limit', () => {
+  assert.equal(mediaKind('audio/webm;codecs=opus'), 'audio')
+  assert.deepEqual(validateMediaFile(file('audio/ogg', 10 * 1024 * 1024)), { ok: true, kind: 'audio' })
+  assert.deepEqual(validateMediaFile(file('audio/webm', 10 * 1024 * 1024 + 1)), { ok: false, error: '语音最大 10 MB' })
+  assert.equal(mediaPreview({ kind: 'audio' }), '[语音]')
+})
+
 test('media urls encode the identifier', () => {
   assert.equal(mediaURL('abc'), '/api/v1/media/abc')
   assert.equal(mediaURL('a/b'), '/api/v1/media/a%2Fb')
