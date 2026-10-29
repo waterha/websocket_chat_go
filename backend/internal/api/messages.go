@@ -101,7 +101,31 @@ func (server *Server) searchMessages(writer http.ResponseWriter, request *http.R
 			return
 		}
 	}
-	page, err := server.Services.Chat.SearchMessages(request.Context(), caller.account.ID, request.PathValue("id"), values.Get("q"), before, int(limit))
+	filters := logic.SearchFilters{SenderID: values.Get("sender_id"), Type: values.Get("type")}
+	switch filters.Type {
+	case "", "all", "images", "links", "files":
+	default:
+		fail(writer, model.Fail(400, "invalid_type"))
+		return
+	}
+	for _, boundary := range []struct {
+		key    string
+		target **time.Time
+	}{{"from", &filters.From}, {"to", &filters.To}} {
+		if values.Has(boundary.key) {
+			parsed, err := time.Parse(time.RFC3339Nano, values.Get(boundary.key))
+			if err != nil {
+				fail(writer, model.Fail(400, "invalid_"+boundary.key))
+				return
+			}
+			*boundary.target = &parsed
+		}
+	}
+	if filters.From != nil && filters.To != nil && !filters.From.Before(*filters.To) {
+		fail(writer, model.Fail(400, "invalid_time_range"))
+		return
+	}
+	page, err := server.Services.Chat.SearchMessages(request.Context(), caller.account.ID, request.PathValue("id"), values.Get("q"), before, int(limit), filters)
 	if err != nil {
 		fail(writer, err)
 		return
