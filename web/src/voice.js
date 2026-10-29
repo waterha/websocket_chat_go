@@ -7,6 +7,7 @@ export function useVoice({ canRecord, getContext, isCurrent, onSend, showError, 
   function release(item) {
     clearInterval(item?.timer)
     for (const track of item?.stream?.getTracks?.() || []) track.stop()
+    if (item) item.stream = null
   }
   function cancel() {
     generation++; held = false
@@ -71,7 +72,10 @@ export function useVoice({ canRecord, getContext, isCurrent, onSend, showError, 
   }
   function keydown(event) {
     if (!enabled.value) return
-    if (event.key === 'Escape') { cancel(); event.preventDefault(); event.stopPropagation(); return }
+    if (event.key === 'Escape') {
+      if (state.value === 'recording' || state.value === 'requesting') { cancel(); event.preventDefault(); event.stopPropagation() }
+      return
+    }
     if (event.code !== 'Space' && event.key !== ' ') return
     if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing) return
     const target = event.target
