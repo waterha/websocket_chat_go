@@ -56,7 +56,7 @@ func (chat *Chat) SearchAll(ctx context.Context, userID, query string, before *t
 		var conversationName, conversationKind string
 		var memberCount int
 		message := model.Message{}
-		if err = rows.Scan(&message.ID, &message.ConversationID, &message.SenderID, &message.ClientMsgID, &message.Seq, &message.Content, &message.Kind, &message.CreatedAt, &message.MediaID, &message.Mentions, &message.RecalledAt, &message.ReplyToID, &message.ThreadRootID, &blocks, &attachment, &reply, &conversationName, &conversationKind, &memberCount); err != nil {
+		if err = rows.Scan(&message.ID, &message.ConversationID, &message.SenderID, &message.ClientMsgID, &message.Seq, &message.Content, &message.Kind, &message.CreatedAt, &message.MediaID, &message.Mentions, &message.RecalledAt, &message.RecalledBy, &message.RecalledByName, &message.ReplyToID, &message.ThreadRootID, &blocks, &attachment, &reply, &conversationName, &conversationKind, &memberCount); err != nil {
 			return page, err
 		}
 		if len(blocks) > 0 {
