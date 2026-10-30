@@ -173,7 +173,11 @@ test('outside pointer, Escape and scrolling close a message menu', async () => {
   assert.equal(menu(), null)
 })
 
-test('recalling own messages requires a valid timestamp inside two minutes', async () => {
+test('recalling own messages requires a valid timestamp inside two minutes for ordinary members', async () => {
+  const conversation = vm.current
+  const members = conversation.members
+  conversation.members = [{ ...me, role: 'member' }]
+  try {
   for (const item of [fresh('one', { created_at: new Date(Date.now() - 120001).toISOString() }), fresh('one', { created_at: 'invalid' })]) {
     await reset([item])
     await rightClick()
@@ -183,6 +187,7 @@ test('recalling own messages requires a valid timestamp inside two minutes', asy
   await rightClick()
   await choose('撤回')
   assert.ok(calls.some(call => call.path.endsWith('/messages/1/recall') && call.method === 'POST'))
+  } finally { conversation.members = members }
 })
 
 test('group owners and admins can recall other members messages from the chat and thread menus', async () => {
@@ -215,13 +220,18 @@ test('group owners and admins can recall other members messages from the chat an
   }
 })
 
-test('recall expires while the menu is open', async () => {
+test('recall expires while the menu is open for ordinary members', async () => {
+  const conversation = vm.current
+  const members = conversation.members
+  conversation.members = [{ ...me, role: 'member' }]
+  try {
   await reset([fresh('one', { created_at: new Date(Date.now() - 119500).toISOString() })])
   await rightClick()
   assert.ok(menu().textContent.includes('撤回'))
   await new Promise(resolve => realSetTimeout(resolve, 550))
   await settle()
   assert.ok(!menu().textContent.includes('撤回'))
+  } finally { conversation.members = members }
 })
 
 test('system and recalled messages have no action menu', async () => {
