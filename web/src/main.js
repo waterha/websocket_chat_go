@@ -1200,7 +1200,7 @@ createApp({
     // their single media plus caption.
     const segmentsOf = item => messageSegments(item)
     const usesBlocks = item => hasBlocks(item)
-    const recalledText = item => recalledLabel(item, me.value?.id)
+    const recalledText = item => recalledLabel(item, me.value?.id, sender)
     const canRecallMessage = item => canRecall(item, me.value?.id, current.value)
     // Mention list is derived from the active "@" token in the composer.
     const showMentions = computed(() => mentionQuery.value !== null && current.value?.kind === 'group')
