@@ -37,8 +37,12 @@ export function canRecall(message, userID, conversation, now = Date.now()) {
 }
 
 // Recall removes the body but keeps the position, so history stays contiguous.
-export function recalledLabel(message, userID) {
+export function recalledLabel(message, userID, nameOf) {
   if (!message?.recalled_at) return ''
+  if (message.recalled_by && message.recalled_by !== message.sender_id) {
+    const name = message.recalled_by_name || nameOf?.(message.recalled_by) || '群管理员'
+    return `${name}撤回了一条成员消息`
+  }
   return message.sender_id === userID ? '你撤回了一条消息' : '消息已撤回'
 }
 
