@@ -58,7 +58,7 @@ func (chat *Chat) Recall(ctx context.Context, userID, conversationID string, seq
 	if !isModerator && time.Since(createdAt) > recallWindow {
 		return model.Message{}, model.Fail(403, "recall_window_expired")
 	}
-	if _, err = tx.Exec(ctx, "UPDATE messages SET recalled_at=now() WHERE conversation_id=$1 AND seq=$2", conversationID, seq); err != nil {
+	if _, err = tx.Exec(ctx, "UPDATE messages SET recalled_at=now(),recalled_by=$3 WHERE conversation_id=$1 AND seq=$2", conversationID, seq, userID); err != nil {
 		return model.Message{}, err
 	}
 	message, err := scanMessage(tx.QueryRow(ctx, "SELECT "+messageColumns+" FROM messages WHERE conversation_id=$1 AND seq=$2", conversationID, seq))
