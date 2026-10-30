@@ -48,6 +48,15 @@ test('recalled messages hide their body and are labelled per viewer', () => {
   assert.equal(recalledLabel({}, 'me'), '')
 })
 
+test('moderator recalls name the actual operator for every viewer', () => {
+  const recalled = { recalled_at: 'x', sender_id: 'member', recalled_by: 'admin', recalled_by_name: '小明' }
+  assert.equal(recalledLabel(recalled, 'member'), '小明撤回了一条成员消息')
+  assert.equal(recalledLabel(recalled, 'admin'), '小明撤回了一条成员消息')
+  assert.equal(recalledLabel({ ...recalled, recalled_by_name: '' }, 'peer', () => '群主'), '群主撤回了一条成员消息')
+  assert.equal(recalledLabel({ ...recalled, recalled_by_name: '' }, 'peer'), '群管理员撤回了一条成员消息')
+  assert.equal(recalledLabel({ ...recalled, recalled_by: 'member' }, 'member'), '你撤回了一条消息')
+})
+
 test('mention candidates exclude self and filter by name or account', () => {
   const members = [
     { id: 'me', name: '我', email: 'me@test' },
