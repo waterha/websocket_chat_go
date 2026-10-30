@@ -21,6 +21,12 @@ test('recall is limited to the sender window or a group moderator', () => {
   const stale = { sender_id: 'me', created_at: '2026-10-20T09:50:00Z', kind: 'user' }
   assert.equal(canRecall(fresh, 'me', group({ me: 'member' }), now), true)
   assert.equal(canRecall(stale, 'me', group({ me: 'member' }), now), false)
+  assert.equal(canRecall(stale, 'me', group({ me: 'owner' }), now), true)
+  assert.equal(canRecall(stale, 'me', group({ me: 'admin' }), now), true)
+  const ancient = { ...stale, created_at: '2020-01-01T00:00:00Z' }
+  assert.equal(canRecall(ancient, 'boss', group({ boss: 'owner', me: 'member' }), now), true)
+  assert.equal(canRecall(ancient, 'admin', group({ admin: 'admin', me: 'member' }), now), true)
+  assert.equal(canRecall(stale, 'me', { kind: 'direct', members: [{ id: 'me', role: 'owner' }] }, now), false)
   // Moderators may recall others at any age.
   assert.equal(canRecall(stale, 'boss', group({ boss: 'owner', me: 'member' }), now), true)
   assert.equal(canRecall(stale, 'admin', group({ admin: 'admin', me: 'member' }), now), true)
