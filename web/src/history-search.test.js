@@ -89,6 +89,30 @@ test('changing history filters invalidates in-flight results and rejects reverse
   assert.equal(vm.searchStart, '')
 })
 
+test('history members can be searched by name and account without changing the message keyword', async () => {
+  await vm.openSearch()
+  await tick()
+  const panel = document.querySelector('#message-search-panel')
+  const input = panel.querySelector('input[aria-label="搜索历史成员"]')
+  assert.ok(input)
+  input.value = 'BOB'
+  input.dispatchEvent(new dom.window.Event('input', { bubbles: true }))
+  await tick()
+  const select = panel.querySelector('select[aria-label="按成员筛选"]')
+  assert.equal(select.options.length, 2)
+  assert.equal(select.options[1].value, 'bob')
+  assert.equal(vm.searchQuery, '')
+  vm.historyMemberQuery = 'me@test'
+  await tick()
+  assert.equal(select.options[1].value, 'me')
+  vm.historyMemberQuery = '没有这个成员'
+  await tick()
+  assert.equal(select.options.length, 1)
+  assert.match(panel.textContent, /没有匹配的成员/)
+  vm.closeSearch()
+  assert.equal(vm.historyMemberQuery, '')
+})
+
 test('history renders real photos and GIF stickers in order and previews without locating', async () => {
   await vm.openSearch()
   await tick()
