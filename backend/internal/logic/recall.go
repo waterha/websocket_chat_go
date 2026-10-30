@@ -9,9 +9,7 @@ import (
 	"websocket_chat_go/backend/internal/model"
 )
 
-// recallWindow bounds how long after sending a message may be recalled. Beyond
-// it the message is treated as permanent history, which keeps a shared record
-// trustworthy instead of letting anyone rewrite the past indefinitely.
+// recallWindow bounds sender recalls outside group moderation.
 const recallWindow = 2 * time.Minute
 
 // Recall lets the sender withdraw one of their own messages. Group owners and
@@ -52,15 +50,12 @@ func (chat *Chat) Recall(ctx context.Context, userID, conversationID string, seq
 		// Already recalled: return the current state without emitting again.
 		return scanMessage(tx.QueryRow(ctx, "SELECT "+messageColumns+" FROM messages WHERE conversation_id=$1 AND seq=$2", conversationID, seq))
 	}
-	allowed := senderID == userID
-	if !allowed && kind == "group" && (callerRole == model.RoleOwner || callerRole == model.RoleAdmin) {
-		allowed = true
-	}
-	if !allowed {
+	isModerator := kind == "group" && (callerRole == model.RoleOwner || callerRole == model.RoleAdmin)
+	if !isModerator && senderID != userID {
 		return model.Message{}, model.Fail(403, "forbidden")
 	}
-	// Only the original sender is bound by the time window; moderators are not.
-	if senderID == userID && time.Since(createdAt) > recallWindow {
+	// Group moderators may recall any message at any time, including their own.
+	if !isModerator && time.Since(createdAt) > recallWindow {
 		return model.Message{}, model.Fail(403, "recall_window_expired")
 	}
 	if _, err = tx.Exec(ctx, "UPDATE messages SET recalled_at=now() WHERE conversation_id=$1 AND seq=$2", conversationID, seq); err != nil {
