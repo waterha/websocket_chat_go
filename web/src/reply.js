@@ -24,14 +24,16 @@ export const RECALL_WINDOW_MS = 2 * 60 * 1000
 export function canRecall(message, userID, conversation, now = Date.now()) {
   if (!message || message.recalled_at) return false
   if (message.kind === 'system') return false
+  if (conversation?.kind === 'group') {
+    const role = (conversation.members || []).find(member => member.id === userID)?.role
+    if (role === 'owner' || role === 'admin') return true
+  }
   if (message.sender_id === userID) {
     const sent = Date.parse(message.created_at || '')
     if (Number.isNaN(sent)) return true
     return now - sent <= RECALL_WINDOW_MS
   }
-  if (conversation?.kind !== 'group') return false
-  const role = (conversation.members || []).find(member => member.id === userID)?.role
-  return role === 'owner' || role === 'admin'
+  return false
 }
 
 // Recall removes the body but keeps the position, so history stays contiguous.
