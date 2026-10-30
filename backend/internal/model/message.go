@@ -96,9 +96,13 @@ type Message struct {
 	Thread *ThreadSummary `json:"thread,omitempty"`
 	// Mentions lists the user IDs explicitly mentioned by the sender.
 	Mentions []string `json:"mentions,omitempty"`
-	// RecalledAt is set once the sender recalls the message. Callers must treat
-	// a recalled message's content as unavailable and render a placeholder.
+	// RecalledAt is set once a sender or moderator recalls the message. Callers
+	// must treat its content as unavailable and render a placeholder.
 	RecalledAt *time.Time `json:"recalled_at,omitempty"`
+	// RecalledBy identifies the first recall's actor; legacy recalls may omit it.
+	RecalledBy string `json:"recalled_by,omitempty"`
+	// RecalledByName is the actor's current name, even after leaving the group.
+	RecalledByName string `json:"recalled_by_name,omitempty"`
 	// Reactions aggregates the emoji responses the message received. Each entry
 	// lists every reacting user so a client can highlight its own reaction.
 	Reactions []Reaction `json:"reactions,omitempty"`
