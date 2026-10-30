@@ -158,7 +158,7 @@ type rootedMessage struct {
 func scanMessageWithRoot(row pgx.Row) (rootedMessage, error) {
 	var rooted rootedMessage
 	var attachment, reply, blocks []byte
-	err := row.Scan(&rooted.message.ID, &rooted.message.ConversationID, &rooted.message.SenderID, &rooted.message.ClientMsgID, &rooted.message.Seq, &rooted.message.Content, &rooted.message.Kind, &rooted.message.CreatedAt, &rooted.message.MediaID, &rooted.message.Mentions, &rooted.message.RecalledAt, &rooted.message.ReplyToID, &rooted.message.ThreadRootID, &blocks, &attachment, &reply, &rooted.threadRoot)
+	err := row.Scan(&rooted.message.ID, &rooted.message.ConversationID, &rooted.message.SenderID, &rooted.message.ClientMsgID, &rooted.message.Seq, &rooted.message.Content, &rooted.message.Kind, &rooted.message.CreatedAt, &rooted.message.MediaID, &rooted.message.Mentions, &rooted.message.RecalledAt, &rooted.message.RecalledBy, &rooted.message.RecalledByName, &rooted.message.ReplyToID, &rooted.message.ThreadRootID, &blocks, &attachment, &reply, &rooted.threadRoot)
 	if err != nil {
 		return rooted, err
 	}
