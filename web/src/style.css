@@ -628,4 +628,13 @@ body { -webkit-font-smoothing: antialiased; }
 .media-audio { display: block; width: min(280px, 65vw); max-width: 100%; height: 40px; margin: 4px 0; }
 .voice-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px; border-radius: 8px; background: #fff3e6; color: var(--accent-dark); font-size: 13px; }
 .toolbar-icon[aria-pressed="true"] { background: #f7e3d4; color: var(--accent-dark); }
+/* 独立的矢量语音入口，避免系统 emoji 的尺寸和外观差异。 */
+.toolbar-icon.voice-toggle { display: inline-flex; justify-content: center; align-items: center; flex: none; gap: 6px; width: auto; min-width: 84px; height: 40px; margin-right: 6px; padding: 0 10px; border: 1px solid #dfc0ae; border-radius: 10px; color: var(--accent-dark); background: #fbede3; }
+.voice-toggle-icon { display: block; width: 26px; height: 26px; flex: none; }
+.voice-toggle-label { font-size: 13px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.toolbar-icon.voice-toggle:hover:not(:disabled) { border-color: var(--accent); background: #f4dece; }
+.toolbar-icon.voice-toggle[aria-pressed="true"] { border-color: var(--accent-dark); color: #fff; background: var(--accent-dark); }
+.toolbar-icon.voice-toggle[aria-pressed="true"]:hover:not(:disabled) { background: #763b2c; }
+.toolbar-icon.voice-toggle:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 3px; }
+.toolbar-icon.voice-toggle:disabled { cursor: not-allowed; }
 .login-card .text-button { font-size: 12px; }
