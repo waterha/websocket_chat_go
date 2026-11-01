@@ -376,17 +376,26 @@ createApp({
       announcementEditingID.value = ''
       announcementDraftText.value = ''
     }
+    function focusAnnouncementEditor() {
+      nextTick(() => {
+        const body = document.querySelector('.announcement-body')
+        if (body) body.scrollTop = 0
+        document.querySelector('.announcement-editor textarea')?.focus({ preventScroll: true })
+      })
+    }
     function startCreateAnnouncement() {
       if (!canManageAnnouncements.value) return
       announcementEditingID.value = ''
       announcementDraftText.value = ''
       announcementEditorOpen.value = true
+      focusAnnouncementEditor()
     }
     function startEditAnnouncement(item) {
       if (!canManageAnnouncements.value || !item) return
       announcementEditingID.value = item.id
       announcementDraftText.value = item.content
       announcementEditorOpen.value = true
+      focusAnnouncementEditor()
     }
     function cancelAnnouncementEditor() {
       announcementEditorOpen.value = false
