@@ -29,8 +29,20 @@ export function themeTokens(value) {
   const saturation = delta ? delta / (1 - Math.abs(2 * lightness - 1)) : 0
   const sat = Math.round(saturation * 100)
   const hsl = (s, l) => `hsl(${Math.round(hue)} ${s}% ${l}%)`
+  const accentSaturation = Math.min(sat, 65)
+  let accentLightness = Math.min(Math.round(lightness * 100), 40)
+  const luminance = l => {
+    const s = accentSaturation / 100, level = l / 100
+    const channel = offset => {
+      const k = (offset + Math.round(hue) / 30) % 12
+      const value = level - s * Math.min(level, 1 - level) * Math.max(-1, Math.min(k - 3, 9 - k, 1))
+      return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+    }
+    return 0.2126 * channel(0) + 0.7152 * channel(8) + 0.0722 * channel(4)
+  }
+  while (1.05 / (luminance(accentLightness) + 0.05) < 4.5) accentLightness--
   return {
-    '--accent': hsl(Math.min(sat, 65), Math.min(Math.round(lightness * 100), 40)),
+    '--accent': hsl(accentSaturation, accentLightness),
     '--accent-dark': hsl(Math.min(sat, 65), 30),
     '--ink': hsl(Math.min(sat, 20), 18),
     '--muted': hsl(Math.min(sat, 15), 46),
