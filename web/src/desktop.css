@@ -1,6 +1,6 @@
 .desktop-indicator { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-.desktop-client .layout { height: calc(100dvh - 38px); background: #f7f2ea; }
-.desktop-bootstrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 20px; border-bottom: 1px solid var(--line); background: #fdf3e2; color: #8a6d3b; font-size: 12px; overflow-wrap: anywhere; }
+.desktop-client .layout { height: calc(100dvh - 38px); background: var(--theme-page, #f7f2ea); }
+.desktop-bootstrap { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 20px; border-bottom: 1px solid var(--line); background: var(--theme-soft, #fdf3e2); color: #8a6d3b; font-size: 12px; overflow-wrap: anywhere; }
 .desktop-bootstrap.failed { background: #fbeae7; color: #a33c2c; }
 .desktop-bootstrap button { flex: none; padding: 0; border: 0; background: none; color: inherit; font-size: 12px; text-decoration: underline; cursor: pointer; }
 .desktop-client.desktop-booting .layout { height: calc(100dvh - 70px); }
@@ -14,24 +14,24 @@
 .desktop-settings-status.success { color: #43694e; }
 
 /* 无边框窗口的自定义标题栏：可拖拽，按钮不参与拖拽 */
-.title-bar { height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); background: #fcf8f1; --wails-draggable: drag; user-select: none; }
+.title-bar { height: 38px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); background: var(--theme-sidebar, #fcf8f1); --wails-draggable: drag; user-select: none; }
 .title-bar-title { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 13px; font-weight: 800; }
 .title-bar-actions { display: flex; align-items: center; gap: 2px; margin-left: auto; --wails-draggable: no-drag; }
 .title-bar-actions button { display: grid; place-items: center; width: 34px; height: 30px; padding: 0; border: 0; border-radius: 7px; color: var(--muted); background: transparent; }
-.title-bar-actions button:hover { background: #f1e6da; color: var(--accent-dark); }
-.title-bar-actions button.active { color: var(--accent); background: #f7efe6; }
+.title-bar-actions button:hover { background: var(--theme-hover, #f1e6da); color: var(--accent-dark); }
+.title-bar-actions button.active { color: var(--accent); background: var(--theme-soft, #f7efe6); }
 .title-bar-actions button.close:hover { background: #c0392b; color: #fff; }
 
 /* 顶栏文案移除后，服务器设置按钮靠右 */
-.desktop-client .layout { height: calc(100dvh - 38px); background: #f7f2ea; }
+.desktop-client .layout { height: calc(100dvh - 38px); background: var(--theme-page, #f7f2ea); }
 .desktop-client.desktop-booting .layout { height: calc(100dvh - 70px); }
 
 /* 登录窗口（微信式小窗）：标题栏只有应用名、服务器设置和关闭，可拖拽 */
-.login-bar { height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 16px; border-bottom: 1px solid var(--line); background: #fcf8f1; --wails-draggable: drag; user-select: none; }
+.login-bar { height: 36px; display: flex; align-items: center; justify-content: space-between; padding: 0 6px 0 16px; border-bottom: 1px solid var(--line); background: var(--theme-sidebar, #fcf8f1); --wails-draggable: drag; user-select: none; }
 .login-bar-title { color: var(--ink); font-size: 13px; font-weight: 800; }
 .login-bar-actions { display: flex; align-items: center; gap: 2px; --wails-draggable: no-drag; }
 .login-bar-actions button { display: grid; place-items: center; width: 32px; height: 28px; padding: 0; border: 0; border-radius: 7px; color: var(--muted); background: transparent; }
-.login-bar-actions button:hover { background: #f1e6da; color: var(--accent-dark); }
+.login-bar-actions button:hover { background: var(--theme-hover, #f1e6da); color: var(--accent-dark); }
 .login-bar-actions button.close:hover { background: #c0392b; color: #fff; }
-.desktop-client .auth-layout { display: flex; flex-direction: column; padding: 0; overflow: hidden; min-height: calc(100dvh - 36px); background: #f7f2ea; }
+.desktop-client .auth-layout { display: flex; flex-direction: column; padding: 0; overflow: hidden; min-height: calc(100dvh - 36px); background: var(--theme-page, #f7f2ea); }
 .desktop-client.desktop-booting .auth-layout { min-height: calc(100dvh - 68px); }
