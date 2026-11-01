@@ -1,0 +1,20 @@
+.appearance-backdrop { z-index: 1100; }
+.appearance-modal { width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow-y: auto; background: var(--theme-surface, #fffdf9); color: var(--ink); }
+.appearance-modal h2 { display: flex; align-items: center; gap: 9px; }
+.appearance-modal .subtle { line-height: 1.7; }
+.appearance-presets { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 24px 0; }
+.appearance-preset { display: grid; justify-items: center; gap: 8px; padding: 10px 3px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--ink); font-size: 12px; }
+.appearance-preset:hover { background: var(--theme-soft, #f7efe6); }
+.appearance-preset[aria-pressed="true"] { border-color: var(--accent); background: var(--theme-soft, #f7efe6); }
+.appearance-swatch { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; color: #fff; }
+.appearance-custom { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); }
+.appearance-custom small { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; font-weight: 400; line-height: 1.5; }
+.appearance-custom input { flex: none; width: 50px; height: 40px; padding: 4px; border-radius: 8px; cursor: pointer; background: var(--theme-surface, #fff); }
+.appearance-preview { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 20px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--theme-page, #f7f2ea); }
+.appearance-preview-caption { font-size: 11px; color: var(--muted); }
+.appearance-preview-bubble { max-width: 90%; padding: 10px 12px; border-radius: 3px 12px 12px; background: var(--theme-bubble, #f4ece2); color: var(--ink); font-size: 13px; line-height: 1.6; }
+.appearance-preview-bubble.mine { align-self: flex-end; border-radius: 12px 3px 12px 12px; background: var(--accent); color: #fff; }
+.appearance-status { min-height: 36px; margin: 16px 0 0; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.appearance-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.appearance-modal button:focus-visible, .appearance-modal input:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 3px; }
+@media (max-width: 400px) { .appearance-presets { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
