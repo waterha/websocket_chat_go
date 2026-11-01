@@ -19,8 +19,8 @@ export function installEmojiPicker(root) {
 
   const toggle = document.createElement('button')
   toggle.type = 'button'
-  toggle.className = 'icon-button emoji-picker-toggle'
-  toggle.textContent = '☺'
+  toggle.className = 'toolbar-icon emoji-picker-toggle'
+  toggle.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" /></svg>'
   toggle.title = '选择表情'
   toggle.setAttribute('aria-label', '选择表情')
   toggle.setAttribute('aria-expanded', 'false')
