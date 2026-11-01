@@ -48,7 +48,12 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .member-block-text small { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .member-block-actions { display: flex; gap: 8px; padding: 10px 18px 14px; border-top: 1px solid var(--line); }
 .avatar.online { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--sage); }
-.announcement-modal { width: min(560px, calc(100vw - 40px)); }
+.announcement-modal { display: flex; flex-direction: column; width: min(560px, calc(100vw - 40px)); max-height: calc(100dvh - 48px); overflow: hidden; }
+.announcement-modal > .modal-head { flex: none; gap: 12px; }
+.announcement-modal .announcement-create { flex: none; padding: 9px 14px; border-radius: 8px; background: var(--accent); color: #fff; font-size: 13px; white-space: nowrap; }
+.announcement-create:disabled { opacity: .5; cursor: not-allowed; }
+.announcement-body { min-height: 0; margin-top: 12px; overflow-y: auto; overscroll-behavior: contain; }
+.announcement-body > .subtle { margin-top: 0; }
 .announcement-status { padding: 16px 0; color: var(--muted); font-size: 13px; text-align: center; }
 .announcement-list { display: grid; gap: 10px; margin: 14px 0; }
 .announcement-item { padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; background: var(--theme-surface, #fffaf2); }
