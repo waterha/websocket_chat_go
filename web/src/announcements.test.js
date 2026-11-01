@@ -60,7 +60,7 @@ test('a long announcement list keeps creation in the header, reveals the editor 
   await import('./main.js')
   app = document.querySelector('#app').__vue_app__
   vm = app._instance.setupState
-  await waitFor(() => vm.me && vm.conversations.length)
+  await waitFor(() => vm.me)
   vm.active = group.id
   await waitFor(() => vm.current?.id === group.id)
   vm.openAnnouncementPanel()
