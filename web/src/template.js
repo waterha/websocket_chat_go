@@ -2,6 +2,7 @@
 // plain string because the component is compiled at runtime; template.test.js
 // asserts it parses with the real Vue compiler.
 export const template = `\n    <DesktopSettings :logged-in="!!me" />
+    <AppearanceSettings v-if="me && showAppearance" @close="showAppearance = false" />
     <div v-if="!me" class="auth-layout">
         <div class="auth-card login-card">
         <div class="login-logo" aria-hidden="true">✦</div>
@@ -60,7 +61,7 @@ export const template = `\n    <DesktopSettings :logged-in="!!me" />
             <p v-else-if="conversationFilter === 'group' && !groupConversations.length && !directoryQuery.trim()" class="empty-side">还没有加入群聊。</p>
             <p v-else-if="conversationFilter === 'current' && !recentConversations.length && !directoryQuery.trim()" class="empty-side">还没有最近会话。</p>
          </div>
-        <footer class="sidebar-footer"><UserAvatar :user="me" :name="me.name" size="self" /><span class="identity"><strong>{{ me.name }}</strong><small>{{ connected ? '实时连接已建立' : '正在重连 · 历史可用' }}</small></span><button @click="showSettings = !showSettings" title="设置" aria-haspopup="menu" :aria-expanded="showSettings">设置</button><div v-if="showSettings" class="settings-menu" role="menu"><button type="button" role="menuitem" @click="openProfile">个人</button><button type="button" role="menuitem" @click="logout">退出</button></div></footer>
+        <footer class="sidebar-footer"><UserAvatar :user="me" :name="me.name" size="self" /><span class="identity"><strong>{{ me.name }}</strong><small>{{ connected ? '实时连接已建立' : '正在重连 · 历史可用' }}</small></span><button @click="showSettings = !showSettings" title="设置" aria-haspopup="menu" :aria-expanded="showSettings">设置</button><div v-if="showSettings" class="settings-menu" role="menu"><button type="button" role="menuitem" @click="openProfile">个人</button><button type="button" role="menuitem" @click="showSettings = false; showAppearance = true">美化界面</button><button type="button" role="menuitem" @click="logout">退出</button></div></footer>
       </aside>
       <main class="chat">
         <template v-if="current">
