@@ -391,7 +391,7 @@ form { display: grid; gap: 16px; margin-top: 28px; } label { display: grid; gap:
 .composer .media-button { position: absolute; z-index: 1; top: 4px; left: 8px; width: 30px; height: 30px; margin: 0; border: 0; border-radius: 7px; }
 .composer .media-button:hover { background: var(--theme-hover, #f1e6da); }
 .emoji-picker { position: static; }
-.emoji-picker-toggle { width: 30px; height: 30px; border: 0; border-radius: 7px; color: var(--ink); background: transparent; font-size: 21px; line-height: 1; }
+.emoji-picker-toggle svg { display: block; }
 .emoji-picker-toggle:hover, .emoji-picker.open .emoji-picker-toggle { background: var(--theme-hover, #f1e6da); }
 .emoji-picker-panel { position: absolute; top: 36px; left: 0; display: none; width: max-content; max-width: min(420px, 90vw); padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff; box-shadow: 0 10px 30px #302c2930; z-index: 3; }
 .emoji-picker:not(.open) .emoji-picker-panel { display: none !important; }
