@@ -1,0 +1,10 @@
+.global-search-modal { width: min(680px, calc(100vw - 40px)); max-height: 84vh; overflow: auto; }
+.search-result-conversation { color: var(--muted); font-size: 11px; }
+.pin-mark, .mute-mark { margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 500; }
+.pin-mark { color: #8a5a00; background: #ffe6a8; }
+.mute-mark { color: #555; background: #e8e6e1; }
+.list-section-title { margin: 10px 14px 6px; color: var(--muted); font-size: 11px; letter-spacing: .04em; }
+.delivery-modal { width: min(420px, calc(100vw - 40px)); }
+.delivery-counts { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0; }
+.delivery-counts > div { display: flex; flex-direction: column; align-items: center; padding: 14px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--theme-surface, #fffaf2); }
+.delivery-counts strong { font-size: 24px; color: var(--accent-dark); }
