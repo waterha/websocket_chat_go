@@ -1,0 +1,43 @@
+.message-row > div { min-width: 0; }
+.bubble { overflow-wrap: anywhere; }
+.bubble.media { padding: 6px; max-width: min(360px, 78vw); }
+.mine .bubble.media { background: var(--accent); }
+.media-item { display: block; line-height: 0; }
+.media-image { display: block; width: 100%; max-height: 320px; object-fit: contain; border-radius: 12px; background: #fff; }
+.media-video { display: block; width: 100%; max-height: 320px; border-radius: 12px; background: #000; }
+.media-caption { margin: 8px 6px 4px; color: inherit; line-height: 1.5; white-space: pre-wrap; text-align: left; }
+.media-input { display: none; }
+.composer-foot { display: flex; align-items: center; gap: 8px; }
+.composer-hint { margin-right: auto; color: var(--muted); font-size: 11px; }
+.composer .media-button { margin: 0; }
+.attachment-preview { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.attachment-preview img, .attachment-preview video { width: 74px; height: 56px; flex: none; object-fit: cover; border-radius: 9px; background: #000; }
+.attachment-info { display: flex; flex-direction: column; min-width: 0; }
+.attachment-info strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attachment-info small { color: var(--muted); font-size: 11px; }
+.attachment-hint { display: block; margin-top: 2px; color: var(--accent-dark); font-style: normal; font-size: 11px; font-weight: 600; }
+/* A message whose images sit between its text, in the order it was written. Text and
+   pictures share the bubble's line flow, so a picture stays next to the words that
+   introduce it instead of being pushed onto a line of its own. The picture is kept to
+   thumbnail size and centred on the text line: a full-height photo would otherwise
+   stretch the line box and strand the words at its bottom edge. */
+.block-stack { display: block; }
+.block-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.block-image { display: inline-block; max-width: 100%; margin: 3px 7px 3px 0; vertical-align: middle; line-height: 0; }
+.block-image img { display: block; max-width: min(200px, 100%); max-height: 140px; border-radius: 10px; object-fit: cover; background: #fff; }
+.block-file { display: inline-flex; align-items: center; gap: 6px; margin: 3px 7px 3px 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; font-size: 12px; vertical-align: middle; }
+.mine .block-file { border-color: #ffffff66; }
+/* A picture that ends the message keeps a little air under the text before it. */
+.block-stack > .block-image:last-child, .block-stack > .block-file:last-child { margin-bottom: 2px; }
+/* The images the draft references, shown above the text box. */
+.composer-images { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.composer-images figure { position: relative; display: flex; flex-direction: column; gap: 3px; margin: 0; }
+.composer-images img { width: 74px; height: 74px; border: 1px solid var(--line); border-radius: 10px; object-fit: cover; }
+.composer-images figcaption { color: var(--muted); font-size: 10px; text-align: center; }
+.composer-images .icon-button { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 50%; background: #fff; }
+.attachment-status { padding: 8px 10px; border: 1px dashed var(--line); border-radius: 14px; color: var(--muted); font-size: 12px; }
+.announcement { display: flex; align-items: flex-start; gap: 10px; margin: 0 auto; width: min(760px, calc(100% - 48px)); padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; background: var(--theme-surface, #fffaf2); }
+.announcement strong { flex: none; color: var(--accent-dark); font-size: 12px; }
+.announcement p { flex: 1; margin: 0; color: var(--ink); font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.announcement.editing { flex-direction: column; align-items: stretch; }
+.announcement textarea { min-height: 66px; resize: vertical; }
