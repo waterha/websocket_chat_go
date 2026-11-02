@@ -1,0 +1,7 @@
+/* User avatars: the img keeps the same box as the letter placeholder */
+img.avatar { object-fit: cover; flex: none; background: #e8ddce; }
+
+/* Message date dividers */
+.day-divider { margin: 6px auto 18px; text-align: center; color: var(--muted); font-size: 11px; }
+.day-divider::before, .day-divider::after { content: '·'; margin: 0 8px; color: var(--line); }
+
