@@ -1,0 +1,13 @@
+.layout { grid-template-columns: var(--sidebar-width, 280px) minmax(0, 1fr) auto; }
+.sidebar, .detail-panel { position: relative; min-width: 0; }
+.detail-panel { width: var(--detail-width, 240px); }
+.layout-divider { position: absolute; top: 0; bottom: 0; width: 8px; z-index: 20; cursor: col-resize; touch-action: none; user-select: none; }
+.layout-divider.sidebar { right: -4px; background: transparent; border: 0; display: block; }
+.layout-divider.detail { left: -4px; }
+.layout-divider:hover, .layout-divider:focus-visible { background: color-mix(in srgb, var(--accent) 40%, transparent); outline: none; }
+@media (max-width: 720px) {
+  .layout { grid-template-columns: minmax(0, 1fr) auto; }
+  .layout-divider { display: none !important; }
+  .detail-panel { width: min(var(--detail-width, 200px), 35vw); }
+}
+
