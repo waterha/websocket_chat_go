@@ -1,0 +1,6 @@
+/* Categorized emoji picker */
+.emoji-picker-tabs { display: flex; flex-wrap: wrap; gap: 2px; margin: 0 0 8px; }
+.emoji-picker-tab { padding: 3px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; }
+.emoji-picker-tab.active { color: var(--accent-dark); background: var(--theme-hover, #f1e6da); }
+.emoji-picker-grid { grid-template-columns: repeat(8, 1fr); }
+
