@@ -1,0 +1,7 @@
+.media-audio { display: block; width: min(280px, 65vw); max-width: 100%; height: 40px; margin: 4px 0; }
+.voice-status { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px; border-radius: 8px; background: var(--theme-soft, #fff3e6); color: var(--accent-dark); font-size: 13px; }
+.toolbar-icon[aria-pressed="true"] { background: var(--theme-selected, #f7e3d4); color: var(--accent-dark); }
+/* 独立的矢量语音入口，避免系统 emoji 的尺寸和外观差异。 */
+.voice-toggle-icon { display: block; width: 24px; height: 24px; }
+.toolbar-icon.voice-toggle:focus-visible { outline: 2px solid var(--accent-dark); outline-offset: 3px; }
+.toolbar-icon.voice-toggle:disabled { cursor: not-allowed; }
