@@ -1,0 +1,7 @@
+/* Contact management dialog */
+.contacts-modal { max-width: 560px; }
+.remark-input { width: 140px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; }
+
+/* Conversation right-click menu reuses the message menu styling */
+.conversation-context-menu .danger { color: var(--accent-dark, #8f4735); }
+
