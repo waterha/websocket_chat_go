@@ -1,0 +1,10 @@
+.request-count { display: inline-grid; place-items: center; min-width: 16px; height: 16px; margin-left: 4px; padding: 0 4px; border-radius: 8px; color: white; background: var(--accent); font-size: 10px; }.request-message { min-height: 70px; resize: vertical; margin-top: 14px; }.friend-requests-modal section + section { margin-top: 24px; }.request-section-title { margin: 0 0 10px; color: var(--muted); font-size: 12px; }.request-list { display: grid; gap: 8px; }.request-item { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }.request-main { display: grid; flex: 1; min-width: 0; gap: 4px; }.request-main strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.request-main small { overflow-wrap: anywhere; color: var(--muted); }.request-main time { color: var(--muted); font-size: 11px; }.request-actions { display: flex; gap: 6px; }.reject-button { color: var(--accent-dark, #8f4735); }.request-status { flex: none; color: var(--muted); font-size: 12px; font-weight: 700; }.status-accepted { color: var(--sage); }.status-rejected { color: var(--accent-dark, #8f4735); }.empty-request { margin: 0; padding: 12px; color: var(--muted); font-size: 13px; }
+.directory-search { display: flex; align-items: center; gap: 8px; margin: 2px 16px 10px; padding: 0 10px; min-height: 38px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); background: var(--theme-surface, #fffdf9); }
+.directory-search:focus-within { border-color: var(--accent); }
+.directory-search > svg { flex: none; }
+.directory-search input { min-width: 0; padding: 8px 0; border: 0; border-radius: 0; color: var(--ink); background: transparent; font-size: 12px; }
+.directory-search input:focus { box-shadow: none; }
+.directory-search .icon-button { width: 26px; height: 26px; }
+.directory-search input::-webkit-search-cancel-button { cursor: pointer; }
+@media (max-width: 720px) { .directory-search { margin: 0 16px 8px; min-height: 34px; } }
+
