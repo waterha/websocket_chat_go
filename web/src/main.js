@@ -1,7 +1,14 @@
+import { useComposerUndo } from './composables/use-composer-undo.js'
+import { useGlobalSearch } from './composables/use-global-search.js'
+import { useHistorySearch } from './composables/use-history-search.js'
+import { useContacts } from './composables/use-contacts.js'
+import { useThreadWindow } from './composables/use-thread-window.js'
+import { useAnnouncements } from './composables/use-announcements.js'
+import { useProfile } from './composables/use-profile.js'
 import { createApp, ref, computed, watch, onMounted, onUnmounted, onUpdated, nextTick } from 'vue/dist/vue.esm-bundler.js'
 import { Search, X, ArrowRight, RotateCw, Users, Paperclip, Scissors, Download, Check, Pin, BellOff, Info, ChevronRight, ChevronDown, Clock3, ImagePlus, MoreHorizontal, MessageCircle, UserPlus, Bell, Contact, UsersRound } from 'lucide-vue-next'
 import { highlightMatches } from './message-search.js'
-import { historyMessagePreview, historySearchParams } from './history-filters.js'
+import { historyMessagePreview } from './history-filters.js'
 import { filterMembers } from './member-list.js'
 import { filterDirectory, friendSearchFields, conversationSearchFields } from './directory-search.js'
 import { toggleConversationSelection } from './conversation-selection.js'
@@ -9,7 +16,7 @@ import { appendPage, PendingSends, Requests, SyncTasks } from './realtime.js'
 import { canChangeRole, canEditAnnouncement, canInvite, canLeave, canManageMembers, canRemoveMember, canTransferOwnership, roleLabel, roleOf } from './group.js'
 import { groupByPin, showsUnreadBadge } from './preferences.js'
 import { activeMentionToken, applyMention, canRecall, mentionCandidates, messageBody, recalledLabel, replyExcerpt, replyLabel } from './reply.js'
-import { hasThread, hiddenReplyCount, replyTargetForWindow, threadHasMore, threadLabel, threadPreview, threadRootID } from './thread.js'
+import { hasThread, hiddenReplyCount, replyTargetForWindow, threadLabel, threadPreview } from './thread.js'
 import { availableInitials, filterCandidates, groupByInitial, keepSelectable, OTHER_INITIAL, selectAllCandidates, selectionSummary, toggleSelection } from './invite.js'
 import { formatBytes, mediaPreview, mediaURL, validateMediaFile } from './media.js'
 import { collectImages, hasTransferableFiles, prepareImage } from './image-input.js'
@@ -19,7 +26,7 @@ import { installEmojiPicker } from './emoji-picker.js'
 import { installScreenshot } from './screenshot.js'
 import './screenshot.css'
 import { useMessageActions } from './message-actions.js'
-import { api, clearAvatar as clearProfileAvatar, MAX_AVATAR_BYTES, uploadAvatar, uploadMedia } from './api.js'
+import { api, uploadMedia } from './api.js'
 import { onImageLinkClick } from './image-viewer.js'
 import { chatStorage, createSocket, installDesktopDownloads, isDesktop } from './desktop.js'
 import { DesktopSettings } from './desktop-settings.js'
@@ -31,7 +38,6 @@ import { LayoutDivider } from './layout-divider.js'
 import { GroupDirectory } from './group-directory.js'
 import { GroupFiles } from './group-files.js'
 import { useVoice } from './voice.js'
-import { cropAvatar } from './avatar-crop.js'
 import { UserAvatar } from './user-avatar.js'
 import './group-directory.css'
 import './style.css'
@@ -80,29 +86,18 @@ createApp({
     const mentionQuery = ref(null)
     const mentionIndex = ref(0)
     const mentionList = ref([])
-    const globalQuery = ref('')
-    const globalResults = ref([])
-    const globalBusy = ref(false)
-    const globalError = ref('')
-    const globalHasMore = ref(false)
-    const globalCursor = ref({ time: '', id: '' })
-    const globalStarted = ref(false)
-    const showGlobalSearch = ref(false)
-    const globalInput = ref(null)
+    const { globalQuery, globalResults, globalBusy, globalError, globalStarted, globalHasMore, globalCursor, showGlobalSearch, globalInput, resetGlobalSearch, closeGlobalSearch, openGlobalSearch, searchAll } = useGlobalSearch()
     const showSettings = ref(false)
-    const showProfile = ref(false)
     const showFriendRequests = ref(false)
     const friendRequests = ref({ incoming: [], outgoing: [] })
     const friendRequestBusy = ref(false)
     const requestMessage = ref('')
     const requestTarget = ref(null)
     const showRequestComposer = ref(false)
-    // Contact management (remark, deletion, blocking) lives in one dialog.
-    const showContacts = ref(false)
-    const contactBusy = ref(false)
-    const remarkEditingID = ref('')
-    const remarkDraft = ref('')
-    const blockedUsers = ref([])
+    const {
+      showContacts, contactBusy, remarkEditingID, remarkDraft, blockedUsers, openContacts, startRemark,
+      saveRemark, removeFriend, isBlocked, blockUser, unblockUser,
+    } = useContacts({ showSettings, friends, showError, getEpoch: () => epoch })
     // Group governance: settings toggles, join approval queue, per-member tools.
     const groupSettingsBusy = ref(false)
     const joinRequests = ref([])
@@ -147,17 +142,11 @@ createApp({
     function toggleMemberMenu(id) {
       memberMenuID.value = memberMenuID.value === id ? '' : id
     }
-    const profileEditing = ref(false)
-    const profileBusy = ref(false)
-    const profileName = ref('')
-    const profileEmail = ref('')
-    const profileAvatarBusy = ref(false)
-    const avatarInput = ref(null)
-    const passwordEditing = ref(false)
-    const passwordBusy = ref(false)
-    const currentPassword = ref('')
-    const newPassword = ref('')
-    const confirmPassword = ref('')
+    const {
+      showProfile, profileEditing, profileBusy, profileName, profileEmail, profileAvatarBusy, avatarInput,
+      passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, openProfile,
+      updateProfile, uploadProfileAvatar, removeProfileAvatar, startPasswordChange, changePassword,
+    } = useProfile({ me, showSettings, refresh, showError, convertImageToPNG, getEpoch: () => epoch })
     const conversationBusy = ref(false)
     const friendBusy = ref(false)
     const connected = ref(false)
@@ -179,31 +168,8 @@ createApp({
     const attachment = ref(null)
     const previewFile = ref(null)
     const visibleCount = ref(100)
-    const showSearch = ref(false)
-    const searchInput = ref(null)
-    const searchQuery = ref('')
-    const searchedQuery = ref('')
-    const searchSender = ref('')
-    const historyMemberQuery = ref('')
-    const historyMemberOptions = computed(() => {
-      const query = historyMemberQuery.value.trim().toLocaleLowerCase()
-      return (current.value?.members || []).filter(person => person.id === searchSender.value
-        || [person.alias, person.name, person.email].some(value => String(value || '').toLocaleLowerCase().includes(query)))
-    })
-    const searchType = ref('all')
-    const searchStart = ref('')
-    const searchEnd = ref('')
-    let searchedParams = ''
-    const searchResults = ref([])
-    const searchBusy = ref(false)
-    const searchError = ref('')
-    const searchHasMore = ref(false)
-    const searchBefore = ref(0)
-    const searchStarted = ref(false)
     const locatingMessage = ref(null)
     const highlightedMessage = ref(null)
-    let searchController
-    let searchVersion = 0
     let locateVersion = 0
     let highlightTimer
     const unreadCounts = ref({})
@@ -227,6 +193,12 @@ createApp({
     let disposed = false
 
     const current = computed(() => conversations.value.find(item => item.id === active.value))
+    const {
+      showSearch, searchInput, searchQuery, searchedQuery, searchSender, historyMemberQuery,
+      historyMemberOptions, searchType, searchStart, searchEnd, searchResults, searchBusy, searchError,
+      searchHasMore, searchBefore, searchStarted, resetSearch, closeSearch, clearSearchFilters,
+      openSearch, changeSearch, searchMessages,
+    } = useHistorySearch({ active, current, onReset: () => { locateVersion++; locatingMessage.value = null } })
     const latestMessage = item => [...(cache.get(item?.id) || [])].reverse().find(message => !message.thread_root_id)
     const latestTime = item => Date.parse(latestMessage(item)?.created_at || '') || 0
     const sortByLatestTime = items => items.sort((left, right) => {
@@ -325,109 +297,13 @@ createApp({
     const memberCanBeRemoved = member => canRemoveMember(current.value, me.value?.id, member.id)
     const memberCanChangeRole = member => isGroupOwner.value && member.id !== me.value?.id && member.role !== 'owner'
     const canTransferTo = member => canTransferOwnership(current.value, me.value?.id) && member.id !== me.value?.id
-    // The right-hand panel holds two independent blocks: the announcement block
-    // on top and the member list below. Both are always visible for a group, so
-    // they no longer live in modal dialogs.
-    const groupAnnouncements = ref([])
-    const announcementsBusy = ref(false)
-    const announcementsError = ref('')
-    const announcementPanelOpen = ref(false)
-    const announcementEditorOpen = ref(false)
-    const announcementEditingID = ref('')
-    const announcementDraftText = ref('')
-    const announcementSaving = ref(false)
-    const announcementCount = computed(() => groupAnnouncements.value.length)
-    // The panel block shows the newest notice as a teaser; opening it reveals all.
-    const latestAnnouncement = computed(() => groupAnnouncements.value[0] || null)
-    const canManageAnnouncements = computed(() => canEditGroupAnnouncement.value)
-    async function loadAnnouncements() {
-      const id = active.value
-      const version = epoch
-      if (!id || current.value?.kind !== 'group') {
-        groupAnnouncements.value = []
-        return
-      }
-      announcementsBusy.value = true
-      announcementsError.value = ''
-      try {
-        const items = await api(`/conversations/${id}/announcements`)
-        if (version !== epoch) return
-        groupAnnouncements.value = items || []
-      } catch (cause) {
-        if (version === epoch) announcementsError.value = cause.message || '加载群公告失败'
-      } finally { if (version === epoch) announcementsBusy.value = false }
-    }
-    function openAnnouncementPanel() {
-      announcementPanelOpen.value = true
-      announcementEditorOpen.value = false
-      loadAnnouncements().catch(showError)
-    }
-    function closeAnnouncementPanel() {
-      announcementPanelOpen.value = false
-      announcementEditorOpen.value = false
-      announcementEditingID.value = ''
-      announcementDraftText.value = ''
-    }
-    function focusAnnouncementEditor() {
-      nextTick(() => {
-        const body = document.querySelector('.announcement-body')
-        if (body) body.scrollTop = 0
-        document.querySelector('.announcement-editor textarea')?.focus({ preventScroll: true })
-      })
-    }
-    function startCreateAnnouncement() {
-      if (!canManageAnnouncements.value) return
-      announcementEditingID.value = ''
-      announcementDraftText.value = ''
-      announcementEditorOpen.value = true
-      focusAnnouncementEditor()
-    }
-    function startEditAnnouncement(item) {
-      if (!canManageAnnouncements.value || !item) return
-      announcementEditingID.value = item.id
-      announcementDraftText.value = item.content
-      announcementEditorOpen.value = true
-      focusAnnouncementEditor()
-    }
-    function cancelAnnouncementEditor() {
-      announcementEditorOpen.value = false
-      announcementEditingID.value = ''
-      announcementDraftText.value = ''
-    }
-    async function saveAnnouncementText() {
-      const text = announcementDraftText.value.trim()
-      const id = active.value
-      if (!text || !id || announcementSaving.value) return
-      const version = epoch
-      const editing = announcementEditingID.value
-      announcementSaving.value = true
-      try {
-        if (editing) {
-          await api(`/conversations/${id}/announcements/${editing}`, { method: 'PATCH', body: JSON.stringify({ content: text }) })
-        } else {
-          await api(`/conversations/${id}/announcements`, { method: 'POST', body: JSON.stringify({ content: text }) })
-        }
-        if (version !== epoch) return
-        cancelAnnouncementEditor()
-        await loadAnnouncements()
-        await refresh()
-      } catch (cause) { if (version === epoch) showError(cause) }
-      finally { if (version === epoch) announcementSaving.value = false }
-    }
-    async function deleteAnnouncement(item) {
-      if (!canManageAnnouncements.value || !item || announcementSaving.value) return
-      if (!confirm('删除后群成员将看不到这条公告，确认删除？')) return
-      const id = active.value
-      const version = epoch
-      announcementSaving.value = true
-      try {
-        await api(`/conversations/${id}/announcements/${item.id}`, { method: 'DELETE' })
-        if (version !== epoch) return
-        await loadAnnouncements()
-        await refresh()
-      } catch (cause) { if (version === epoch) showError(cause) }
-      finally { if (version === epoch) announcementSaving.value = false }
-    }
+    const {
+      groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen,
+      announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving,
+      announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements,
+      openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement,
+      cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement,
+    } = useAnnouncements({ active, current, canEditGroupAnnouncement, refresh, showError, getEpoch: () => epoch })
     async function removeMember(member) {
       if (memberBusy.value) return
       if (!confirm(`确认将 ${member.name} 移出群聊？`)) return
@@ -557,114 +433,11 @@ createApp({
       if (!names.length) return ''
       return names.length === 1 ? names[0] : names.slice(0, 2).join('、') + (names.length > 2 ? ' 等' : '')
     })
-    // The thread window is a surface separate from the chat list: it shows one
-    // root message and every reply to it, and replies sent here join that window.
-    const threadOpen = ref(false)
-    const threadRoot = ref(null)
-    const threadReplies = ref([])
-    const threadHasMorePages = ref(false)
-    const threadBusy = ref(false)
-    const threadError = ref('')
-    const threadReplyCount = ref(0)
-    const threadStream = ref(null)
-    function closeThread() {
-      threadOpen.value = false
-      threadRoot.value = null
-      threadReplies.value = []
-      threadError.value = ''
-      threadHasMorePages.value = false
-      threadReplyCount.value = 0
-      // A draft typed in the window is not carried over to the next one.
-      threadDraft.value = ''
-    }
-    async function openThread(item) {
-      if (!item) return
-      const id = active.value
-      const rootID = threadRootID(item)
-      const version = epoch
-      threadOpen.value = true
-      threadRoot.value = item
-      threadReplies.value = []
-      threadError.value = ''
-      threadHasMorePages.value = false
-      threadBusy.value = true
-      try {
-        const page = await api(`/conversations/${id}/messages/${rootID}/thread?limit=100`)
-        if (version !== epoch) return
-        // The server resolves a reply to its window root, so the header shows the
-        // root even when the user opened the window from a reply.
-        threadRoot.value = page.root
-        threadReplies.value = page.replies || []
-        threadReplyCount.value = page.reply_count || 0
-        threadHasMorePages.value = threadHasMore(page)
-        await nextTick()
-        threadStream.value?.scrollTo({ top: threadStream.value.scrollHeight })
-      } catch (cause) {
-        if (version === epoch) threadError.value = cause.message || '打开对话窗口失败'
-      } finally { if (version === epoch) threadBusy.value = false }
-    }
-    async function loadMoreThread() {
-      if (threadBusy.value || !threadHasMorePages.value || !threadRoot.value) return
-      const id = active.value
-      const version = epoch
-      const last = threadReplies.value.at(-1)
-      threadBusy.value = true
-      try {
-        const page = await api(`/conversations/${id}/messages/${threadRoot.value.id}/thread?limit=100&after_seq=${last?.seq || 0}`)
-        if (version !== epoch) return
-        threadReplies.value = [...threadReplies.value, ...(page.replies || [])]
-        threadHasMorePages.value = threadHasMore(page)
-        threadReplyCount.value = page.reply_count || threadReplyCount.value
-      } catch (cause) { if (version === epoch) threadError.value = cause.message || '加载失败' }
-      finally { if (version === epoch) threadBusy.value = false }
-    }
-    // The window has its own composer: a reply written here must be sent into the
-    // window without disturbing whatever the user had typed in the main chat.
-    const threadDraft = ref('')
-    const threadSending = ref(false)
-    const threadDraftArea = ref(null)
-    async function sendInThread() {
-      const content = threadDraft.value.trim()
-      const root = threadRoot.value
-      const id = active.value
-      const version = epoch
-      if (!content || !root || !id || threadSending.value) return
-      threadSending.value = true
-      try {
-        await api(`/conversations/${id}/messages`, {
-          method: 'POST',
-          body: JSON.stringify({ client_msg_id: crypto.randomUUID(), content, media_id: '', reply_to_id: root.id, mentions: [] }),
-        })
-        if (version !== epoch) return
-        threadDraft.value = ''
-        await refreshThread()
-        await syncConversation(id)
-      } catch (cause) { if (version === epoch) showError(cause) }
-      finally { if (version === epoch) threadSending.value = false }
-    }
-    // Reloads the window after a change so the reply appears with its true count.
-    async function refreshThread() {
-      const root = threadRoot.value
-      const id = active.value
-      if (!root || !id) return
-      const page = await api(`/conversations/${id}/messages/${root.id}/thread?limit=100`)
-      threadRoot.value = page.root
-      threadReplies.value = page.replies || []
-      threadReplyCount.value = page.reply_count || 0
-      threadHasMorePages.value = threadHasMore(page)
-      await nextTick()
-      threadStream.value?.scrollTo({ top: threadStream.value.scrollHeight })
-    }
-    function onThreadEnter(event) {
-      if (event.isComposing) return
-      event.preventDefault()
-      sendInThread()
-    }
-    function onThreadEnter(event) {
-      if (event.isComposing) return
-      event.preventDefault()
-      sendInThread()
-    }
+    const {
+      threadOpen, threadRoot, threadReplies, threadHasMorePages, threadBusy, threadError,
+      threadReplyCount, threadStream, threadDraft, threadSending, threadDraftArea, closeThread,
+      openThread, loadMoreThread, sendInThread, refreshThread, onThreadEnter,
+    } = useThreadWindow({ active, syncConversation, showError, getEpoch: () => epoch })
     function openMembers() {
       memberQuery.value = ''
       memberMenuID.value = ''
@@ -723,7 +496,7 @@ createApp({
       unreadCounts.value = { ...unreadCounts.value, [id]: (unreadCounts.value[id] || 0) + count }
     }
     const scroll = async () => { await nextTick(); if (stream.value) stream.value.scrollTop = stream.value.scrollHeight }
-    const showError = cause => { error.value = cause?.message || '操作失败'; clearTimeout(errorTimer); errorTimer = setTimeout(() => { error.value = '' }, 5000) }
+    function showError(cause) { error.value = cause?.message || '操作失败'; clearTimeout(errorTimer); errorTimer = setTimeout(() => { error.value = '' }, 5000) }
     const atBottom = () => !stream.value || stream.value.scrollHeight - stream.value.scrollTop - stream.value.clientHeight < 64
     const showMessages = id => { if (id === active.value) messages.value = (cache.get(id) || []).filter(item => !item.thread_root_id).slice(-visibleCount.value) }
     function discardPending() {
@@ -927,83 +700,9 @@ createApp({
       composerImages.value = composerImages.value.filter(entry => entry.mediaId !== image.mediaId)
       syncDraftFromDom()
     }
-    let undoRoot = null
-    let undoHistory = []
-    let undoPosition = -1
-    let composerComposing = false
-    function composerSnapshot() {
-      const root = draftArea.value
-      const selection = window.getSelection()
-      const offsets = node => {
-        const path = []
-        while (node && node !== root) {
-          path.unshift(Array.prototype.indexOf.call(node.parentNode.childNodes, node))
-          node = node.parentNode
-        }
-        return path
-      }
-      const range = selection?.rangeCount ? selection.getRangeAt(0) : null
-      const caret = range && root.contains(range.startContainer) && root.contains(range.endContainer)
-        ? { start: offsets(range.startContainer), startOffset: range.startOffset, end: offsets(range.endContainer), endOffset: range.endOffset } : null
-      return { html: root.innerHTML, images: composerImages.value.map(image => ({ ...image })), caret }
-    }
-    function resetComposerUndo() {
-      undoHistory = draftArea.value ? [composerSnapshot()] : []
-      undoPosition = undoHistory.length - 1
-      composerComposing = false
-    }
-    function recordComposerUndo() {
-      const root = draftArea.value
-      if (!root || composerComposing || uploadBusy.value || root.querySelector('[data-rich-paste-image]')) return
-      const snapshot = composerSnapshot()
-      if (undoHistory[undoPosition]?.html === snapshot.html) return
-      undoHistory.splice(undoPosition + 1)
-      undoHistory.push(snapshot)
-      if (undoHistory.length > 100) undoHistory.shift()
-      undoPosition = undoHistory.length - 1
-    }
-    function onComposerUndoKey(event) {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.isComposing || event.key.toLowerCase() !== 'z') return
-      event.preventDefault()
-      const root = draftArea.value
-      if (composerComposing || uploadBusy.value || root.querySelector('[data-rich-paste-image]')) return
-      const position = undoPosition + (event.shiftKey ? 1 : -1)
-      const snapshot = undoHistory[position]
-      if (!snapshot) return
-      undoPosition = position
-      for (const image of composerImages.value) if (image.previewURL?.startsWith('blob:')) URL.revokeObjectURL(image.previewURL)
-      composerImages.value = snapshot.images.map(image => ({ ...image, previewURL: mediaURL(image.mediaId) }))
-      root.innerHTML = snapshot.html
-      for (const image of composerImages.value) {
-        const chip = [...root.querySelectorAll('[data-media-id]')].find(node => node.getAttribute('data-media-id') === image.mediaId)
-        if (chip?.querySelector('img')) chip.querySelector('img').src = image.previewURL
-      }
-      snapshot.html = root.innerHTML
-      draft.value = piecesToText(collectPieces(root))
-      root.focus()
-      const range = document.createRange()
-      const caret = snapshot.caret
-      const resolve = path => path.reduce((node, index) => node?.childNodes[index], root)
-      if (caret && resolve(caret.start) && resolve(caret.end)) {
-        range.setStart(resolve(caret.start), caret.startOffset)
-        range.setEnd(resolve(caret.end), caret.endOffset)
-      } else { range.selectNodeContents(root); range.collapse(false) }
-      const selection = window.getSelection()
-      selection.removeAllRanges()
-      selection.addRange(range)
-      updateMentionState()
-    }
-    function installComposerUndo(root) {
-      if (undoRoot === root) return
-      undoRoot = root
-      resetComposerUndo()
-      root.addEventListener('keydown', onComposerUndoKey)
-      root.addEventListener('compositionstart', () => { composerComposing = true })
-      root.addEventListener('compositionend', () => { composerComposing = false; recordComposerUndo() })
-      root.addEventListener('beforeinput', () => {
-        if (undoHistory[undoPosition]?.html === root.innerHTML) undoHistory[undoPosition].caret = composerSnapshot().caret
-      })
-    }
+    const {
+      resetComposerUndo, recordComposerUndo, installComposerUndo, isComposerComposing,
+    } = useComposerUndo({ draftArea, composerImages, uploadBusy, draft, updateMentionState })
     function clearComposerImages() {
       for (const image of composerImages.value) if (image.previewURL) URL.revokeObjectURL(image.previewURL)
       composerImages.value = []
@@ -1041,7 +740,7 @@ createApp({
       notifyTyping()
     }
     function onComposerKeydown(event) {
-      if (event.isComposing || composerComposing || event.keyCode === 229 || event.altKey || event.ctrlKey || event.metaKey) return
+      if (event.isComposing || isComposerComposing() || event.keyCode === 229 || event.altKey || event.ctrlKey || event.metaKey) return
       if (event.key !== 'Backspace' && event.key !== 'Delete') return
       const mediaId = deleteImageNearCaret(draftArea.value, window.getSelection(), event.key === 'Delete' ? 'forward' : 'backward')
       if (!mediaId) return
@@ -1305,45 +1004,6 @@ createApp({
     }
     const messageActions = useMessageActions({ messages, threadRoot, threadReplies, active, me, current, conversations, startReply, recallMessage, syncConversation, showError })
     const isGenericFile = computed(() => attachment.value?.media_type === 'file')
-    function resetGlobalSearch() {
-      globalResults.value = []
-      globalCursor.value = { time: '', id: '' }
-      globalHasMore.value = false
-      globalStarted.value = false
-      globalError.value = ''
-    }
-    function closeGlobalSearch() {
-      resetGlobalSearch()
-      globalQuery.value = ''
-      showGlobalSearch.value = false
-    }
-    async function openGlobalSearch() {
-      showGlobalSearch.value = true
-      await nextTick()
-      globalInput.value?.focus()
-    }
-    // Global search spans every conversation the caller belongs to, so each hit
-    // carries its own conversation context instead of using the active one.
-    async function searchAll(more = false) {
-      const query = globalQuery.value.trim()
-      if (!query || (more && (globalBusy.value || !globalHasMore.value))) return
-      if ([...query].length > 100) { globalError.value = '关键词最多 100 个字符'; return }
-      globalBusy.value = true
-      globalError.value = ''
-      globalStarted.value = true
-      try {
-        const params = new URLSearchParams({ q: query, limit: '20' })
-        if (more && globalCursor.value.time && globalCursor.value.id) {
-          params.set('before_time', globalCursor.value.time)
-          params.set('before_id', globalCursor.value.id)
-        }
-        const page = await api(`/messages/search?${params}`)
-        globalResults.value = more ? [...globalResults.value, ...page.results] : page.results
-        globalHasMore.value = page.has_more
-        globalCursor.value = { time: page.next_before_time, id: page.next_before_id }
-      } catch (cause) { globalError.value = cause.message || '搜索失败，请重试' }
-      finally { globalBusy.value = false }
-    }
     async function openGlobalResult(hit) {
       const id = hit.message.conversation_id
       const version = epoch
@@ -1446,46 +1106,6 @@ createApp({
       if (version === epoch && me.value) await catchUp(cursors)
     }
     const searchDate = value => new Date(value).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-    function resetSearch() {
-      searchVersion++
-      locateVersion++
-      searchController?.abort()
-      searchBusy.value = false
-      locatingMessage.value = null
-      searchResults.value = []
-      searchedQuery.value = ''
-      searchedParams = ''
-      searchHasMore.value = false
-      searchBefore.value = 0
-      searchStarted.value = false
-      searchError.value = ''
-    }
-    function closeSearch() {
-      resetSearch()
-      showSearch.value = false
-      searchQuery.value = ''
-      searchSender.value = ''
-      historyMemberQuery.value = ''
-      searchType.value = 'all'
-      searchStart.value = ''
-      searchEnd.value = ''
-    }
-    function clearSearchFilters() {
-      searchQuery.value = ''
-      searchSender.value = ''
-      historyMemberQuery.value = ''
-      searchType.value = 'all'
-      searchStart.value = ''
-      searchEnd.value = ''
-      resetSearch()
-      searchMessages()
-    }
-    async function openSearch() {
-      showSearch.value = true
-      await nextTick()
-      searchInput.value?.focus()
-      if (!searchStarted.value) searchMessages()
-    }
     watch([active, me], () => {
       messageActions.cancelSelection()
       messageActions.closeMenu()
@@ -1501,42 +1121,6 @@ createApp({
       highlightedMessage.value = null
       clearTimeout(highlightTimer)
     }, { flush: 'sync' })
-    function changeSearch() {
-      resetSearch()
-    }
-    async function searchMessages(more = false) {
-      const query = more ? searchedQuery.value : searchQuery.value.trim()
-      if (!active.value || (more && (searchBusy.value || !searchHasMore.value))) return
-      if (!more) resetSearch()
-      let params
-      try {
-        params = more ? new URLSearchParams(searchedParams) : historySearchParams({
-          query, sender: searchSender.value, type: searchType.value, start: searchStart.value, end: searchEnd.value,
-        })
-      } catch (cause) { searchError.value = cause.message; return }
-      const id = active.value
-      const version = ++searchVersion
-      searchController?.abort()
-      const controller = new AbortController()
-      searchController = controller
-      searchBusy.value = true
-      searchStarted.value = true
-      searchError.value = ''
-      searchedQuery.value = query
-      if (!more) searchedParams = params.toString()
-      if (more) params.set('before_seq', String(searchBefore.value))
-      try {
-        const page = await api(`/conversations/${id}/messages/search?${params}`, { signal: controller.signal })
-        if (version !== searchVersion || id !== active.value) return
-        searchResults.value = more ? [...searchResults.value, ...page.messages] : page.messages
-        searchBefore.value = page.next_before_seq
-        searchHasMore.value = page.has_more
-      } catch (cause) {
-        if (version === searchVersion && !controller.signal.aborted) searchError.value = '搜索失败，请重试'
-      } finally {
-        if (version === searchVersion) searchBusy.value = false
-      }
-    }
     async function locateMessage(item) {
       if (locatingMessage.value !== null) return
       const id = active.value
@@ -1662,85 +1246,6 @@ createApp({
     function openServerSettings() {
       showSettings.value = false
       window.dispatchEvent(new Event('desktop:open-server-settings'))
-    }
-    function openProfile() {
-      showSettings.value = false
-      profileName.value = me.value?.name || ''
-      profileEmail.value = me.value?.email || ''
-      profileEditing.value = false
-      showProfile.value = true
-    }
-    async function updateProfile() {
-      if (profileBusy.value) return
-      profileBusy.value = true
-      try {
-        const account = await api('/me', { method: 'PATCH', body: JSON.stringify({ email: profileEmail.value, name: profileName.value }) })
-        me.value = account
-        profileEditing.value = false
-        await refresh()
-      } catch (cause) { showError(cause) }
-      finally { profileBusy.value = false }
-    }
-    let avatarCropController
-    watch(showProfile, visible => { if (!visible) avatarCropController?.abort() })
-    async function uploadProfileAvatar(event) {
-      const input = event?.target
-      const file = input?.files?.[0]
-      if (input) input.value = ''
-      if (!file || profileAvatarBusy.value) return
-      profileAvatarBusy.value = true
-      const controller = new AbortController()
-      avatarCropController = controller
-      const version = epoch
-      try {
-        if (file.size > 20 * 1024 * 1024) throw new Error('待裁剪图片不能超过 20 MB')
-        const prepared = await prepareImage(file, convertImageToPNG)
-        if (!['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(prepared.type)) {
-          throw new Error('头像仅支持 PNG、JPEG、GIF 或 WebP 图片')
-        }
-        if (!prepared.size) throw new Error('头像图片不能为空')
-        const cropped = await cropAvatar(prepared, { signal: controller.signal })
-        if (!cropped || controller.signal.aborted || version !== epoch) return
-        if (cropped.size > MAX_AVATAR_BYTES) throw new Error('裁剪后的头像不能超过 2 MB')
-        const account = await uploadAvatar(cropped)
-        if (controller.signal.aborted || version !== epoch) return
-        me.value = account
-        await refresh()
-      } catch (cause) { if (!controller.signal.aborted && version === epoch) showError(cause) }
-      finally { if (avatarCropController === controller) { avatarCropController = null; profileAvatarBusy.value = false } }
-    }
-    async function removeProfileAvatar() {
-      if (profileAvatarBusy.value || !me.value?.avatar) return
-      if (!confirm('确认移除当前头像？')) return
-      profileAvatarBusy.value = true
-      try {
-        me.value = await clearProfileAvatar()
-        await refresh()
-      } catch (cause) { showError(cause) }
-      finally { profileAvatarBusy.value = false }
-    }
-    function startPasswordChange() {
-      currentPassword.value = ''
-      newPassword.value = ''
-      confirmPassword.value = ''
-      passwordEditing.value = true
-    }
-    // Changing the password revokes every other session, so the user is told what
-    // will happen before the request is sent.
-    async function changePassword() {
-      if (passwordBusy.value) return
-      if (newPassword.value !== confirmPassword.value) { showError({ message: '两次输入的新密码不一致' }); return }
-      if ([...newPassword.value].length < 8) { showError({ message: '新密码至少 8 位' }); return }
-      passwordBusy.value = true
-      try {
-        await api('/auth/password', { method: 'POST', body: JSON.stringify({ current_password: currentPassword.value, new_password: newPassword.value }) })
-        passwordEditing.value = false
-        currentPassword.value = ''
-        newPassword.value = ''
-        confirmPassword.value = ''
-        alert('密码已修改。其他设备上的登录已被退出，当前会话保持登录。')
-      } catch (cause) { showError(cause) }
-      finally { passwordBusy.value = false }
     }
     function addFriend(userID) {
       const existing = friendRequestFor(userID)
@@ -1886,7 +1391,7 @@ createApp({
       if (element) element.scrollTop += element.scrollHeight - previousHeight
     }
     function onEnter(event) {
-      if (event.isComposing || composerComposing || event.keyCode === 229) return
+      if (event.isComposing || isComposerComposing() || event.keyCode === 229) return
       if (event.key === 'Enter' && (showMentions.value && mentionList.value.length)) return
       if (event.shiftKey) return
       if (sendKeyMode.value === 'ctrl') {
@@ -2048,61 +1553,6 @@ createApp({
       } catch (cause) { if (version === epoch) showError(cause) }
       finally { if (version === epoch) conversationBusy.value = false }
     }
-    // ---- contact management ----
-    async function openContacts() {
-      showSettings.value = false
-      showContacts.value = true
-      const version = epoch
-      try {
-        const list = await api('/blocks')
-        if (version === epoch) blockedUsers.value = list
-      } catch (cause) { if (version === epoch) showError(cause) }
-    }
-    function startRemark(person) {
-      remarkEditingID.value = person.id
-      remarkDraft.value = person.remark || ''
-    }
-    async function saveRemark(person) {
-      if (contactBusy.value) return
-      contactBusy.value = true
-      try {
-        const updated = await api(`/friends/${person.id}`, { method: 'PATCH', body: JSON.stringify({ remark: remarkDraft.value }) })
-        const friend = friends.value.find(item => item.id === person.id)
-        if (friend) friend.remark = updated.remark
-        remarkEditingID.value = ''
-      } catch (cause) { showError(cause) }
-      finally { contactBusy.value = false }
-    }
-    async function removeFriend(person) {
-      if (contactBusy.value) return
-      if (!confirm(`确认删除好友 ${person.remark || person.name}？聊天记录不受影响。`)) return
-      contactBusy.value = true
-      try {
-        await api(`/friends/${person.id}`, { method: 'DELETE' })
-        friends.value = friends.value.filter(item => item.id !== person.id)
-      } catch (cause) { showError(cause) }
-      finally { contactBusy.value = false }
-    }
-    const isBlocked = id => blockedUsers.value.some(entry => entry.id === id)
-    async function blockUser(person) {
-      if (contactBusy.value || isBlocked(person.id)) return
-      if (!confirm(`确认将 ${person.remark || person.name} 加入黑名单？拉黑后不再收到对方的私聊与好友申请。`)) return
-      contactBusy.value = true
-      try {
-        await api('/blocks', { method: 'POST', body: JSON.stringify({ user_id: person.id }) })
-        blockedUsers.value = await api('/blocks')
-      } catch (cause) { showError(cause) }
-      finally { contactBusy.value = false }
-    }
-    async function unblockUser(person) {
-      if (contactBusy.value) return
-      contactBusy.value = true
-      try {
-        await api(`/blocks/${person.id}`, { method: 'DELETE' })
-        blockedUsers.value = await api('/blocks')
-      } catch (cause) { showError(cause) }
-      finally { contactBusy.value = false }
-    }
     // ---- group governance ----
     async function loadJoinRequests() {
       if (!active.value) return
@@ -2195,7 +1645,7 @@ createApp({
       if (draftArea.value) { installEmojiPicker(draftArea.value); installComposerUndo(draftArea.value) }
     })
     const removeDesktopDownloads = installDesktopDownloads(showError)
-    onUnmounted(() => { avatarCropController?.abort(); voice.dispose(); cancelFileUpload(); screenshot.dispose(); removeDesktopDownloads(); document.getElementById('app')?.removeEventListener('click', onImageLinkClick); resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearInterval(typingTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); document.removeEventListener('pointerdown', onConversationMenuOutside) })
+    onUnmounted(() => { voice.dispose(); cancelFileUpload(); screenshot.dispose(); removeDesktopDownloads(); document.getElementById('app')?.removeEventListener('click', onImageLinkClick); resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearInterval(typingTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); document.removeEventListener('pointerdown', onConversationMenuOutside) })
     return { showAppearance, historyMemberQuery, historyMemberOptions, voiceEnabled, voiceState, voiceSeconds, toggleVoice, cancelVoice: voice.cancel, fileInput, openFilePicker, cancelFileUpload, uploadName, searchSender, searchType, searchStart, searchEnd, clearSearchFilters, historyMessagePreview, startScreenshot: screenshot.start, profileAvatarBusy, avatarInput, uploadProfileAvatar, removeProfileAvatar, onGroupJoined, openGroupDirectory, groupDirectory, isDesktop, openServerSettings, sidebarMoreOpen, chatMoreOpen, toggleSidebarMore, toggleChatMore, sendKeyMode, sendKeyHint, setSendKey, sendMenuOpen, closeConversation, memberSearchOpen, toggleMemberSearch, preferenceBusy, memberByID, conversationAvatar, headMember, chatInfoOpen, dayDivider, dayLabel, pokeMember, startDirectRemark, clearLocalHistory, UserAvatar, chatHeadMeta, memberMenuID, toggleMemberMenu, messageActions, REACTION_CHOICES, reactionMine, toggleReaction, reactionBusy, typingLabel, mutedHere, dismissedHere, readTicks, showContacts, contactBusy, remarkEditingID, remarkDraft, blockedUsers, isBlocked, openContacts, startRemark, saveRemark, removeFriend, blockUser, unblockUser, conversationMenu, conversationMenuElement, openConversationMenu, closeConversationMenu, runConversationMenu, deleteConversation, joinRequests, joinRequestBusy, decideJoinRequest, updateGroupSettings, groupSettingsBusy, canDismissGroup, dismissGroup, setMemberAlias, setMemberMute, memberMuted, memberCanBeMuted, memberAliasEditable, groupToolBusy, showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, hasThread, threadPreview, threadLabel, hiddenReplyCount, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, inviteQuery, inviteInitial, inviteVisible, inviteGroups, inviteInitials, inviteSummary, inviteSelectedCount, inviteSelectedPeople, chooseInviteInitial, toggleInvite, selectAllInvites, clearInvites, resetInviteFilters, OTHER_INITIAL, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, discardPending, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, composerImages, composerHasContent, removeComposerImage, clearComposerImages, syncDraftFromDom, onComposerInput, onComposerKeydown, onComposerClick, onComposerBlur, restorePending, dragging, onComposerPaste, onDragOver, onDragLeave, onDrop, draftArea, startReply, replyPreview, replyAuthor, bodyOf, segmentsOf, usesBlocks, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
   },
   template,
