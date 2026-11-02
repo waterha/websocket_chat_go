@@ -1,0 +1,7 @@
+.message-row.recall-row { justify-content: center; text-align: center; }
+.recall-notice, .recall-row .recalled { color: var(--muted); font-size: 12px; font-style: normal; line-height: 1.7; }
+.thread-window-item.recall-row { justify-content: center; }
+.thread-window-item.recall-row .thread-window-body { flex: 1; text-align: center; }
+.thread-window-root.recall-row { text-align: center; }
+.recall-row .message-meta, .recall-row .thread-window-label { display: none; }
+.recall-row .bubble { max-width: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); box-shadow: none; text-align: center; }
