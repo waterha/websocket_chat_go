@@ -1,0 +1,22 @@
+/* Read receipts in a direct conversation */
+.read-ticks { margin-left: 6px; color: var(--sage); font-size: 11px; font-weight: 700; }
+
+/* Emoji reactions under a bubble */
+.thread-inline-preview { display: grid; gap: 3px; max-width: min(520px, 100%); margin-top: 6px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--theme-surface, #fffaf5); cursor: pointer; text-align: left; }
+.thread-inline-preview:hover, .thread-inline-preview:focus-visible { border-color: var(--accent); background: var(--theme-hover, #fdf1e5); outline: none; }
+.thread-inline-reply { display: flex; gap: 6px; min-width: 0; font-size: 12px; line-height: 1.35; }
+.thread-inline-reply strong { flex: 0 0 auto; color: var(--accent-dark); }
+.thread-inline-reply span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thread-inline-more { color: var(--accent); font-size: 11px; }
+.message-row.mine .thread-inline-preview { margin-left: auto; text-align: right; }
+.message-row.mine .thread-inline-reply { justify-content: flex-end; }
+.reaction-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.message-row.mine .reaction-row { justify-content: flex-end; }
+.message-row.mine .reaction-row { justify-content: flex-end; }
+.reaction-chip { padding: 2px 8px; border: 1px solid var(--line); border-radius: 999px; background: #fff; color: var(--accent-dark); font-size: 12px; }
+.reaction-chip.mine { border-color: var(--accent); background: var(--theme-soft, #f7efe6); font-weight: 700; }
+.reaction-chip:disabled { opacity: .6; }
+.reaction-picker { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; padding: 2px 4px 6px; border-bottom: 1px solid var(--line); }
+.message-context-menu .reaction-picker button { width: auto; flex: 0 0 auto; border: 0; background: transparent; border-radius: 8px; font-size: 17px; padding: 4px 6px; }
+.reaction-picker button:hover { background: var(--theme-hover, #f1e6da); }
+
