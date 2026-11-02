@@ -1,0 +1,47 @@
+/* 群聊右栏：公告行箭头、成员标题搜索开关 */
+.announcement-block-head { justify-content: space-between; }
+.announcement-block-head svg { color: var(--muted); }
+.member-block-head b { color: var(--ink); }
+/* Group information uses whitespace and typography rather than nested cards. */
+.group-detail-panel { background: var(--theme-sidebar, #fcf8f1); padding: 20px 18px 12px; gap: 26px; }
+.group-detail-panel .detail-section-icon { display: none; }
+.group-detail-panel .announcement-block { position: relative; padding: 0; gap: 10px; border: 0; background: transparent; }
+.group-detail-panel .announcement-block::after { content: ""; position: absolute; left: 0; right: 0; bottom: -10px; height: 1px; background: var(--ink); opacity: .15; pointer-events: none; }
+.group-detail-panel .announcement-block-head { min-height: 26px; border-radius: 0; }
+.group-detail-panel .announcement-block-title, .member-section-title { display: flex; align-items: center; gap: 7px; color: var(--ink); font-size: 13px; font-weight: 600; letter-spacing: 0; }
+.group-detail-panel .announcement-block-count, .group-detail-panel .member-block-head b { display: inline; min-width: 0; height: auto; padding: 0; border-radius: 0; background: none; color: var(--muted); font-size: 11px; font-weight: 400; }
+.group-detail-panel .announcement-block-more { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 400; }
+.announcement-summary { display: block; width: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--ink); text-align: left; box-shadow: none; }
+.announcement-summary:hover .announcement-block-preview { color: var(--accent-dark); }
+.announcement-summary-label { display: none; }
+.group-detail-panel .announcement-block-preview { font-size: 12px; line-height: 1.9; -webkit-line-clamp: 5; }
+.group-detail-panel .announcement-block-empty { font-size: 12px; color: var(--muted); }
+.announcement-summary-footer { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding: 0; border: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.announcement-summary-footer > span { display: none; }
+.group-detail-panel .member-block { border: 0; border-radius: 0; background: transparent; overflow: hidden; }
+.group-detail-panel .member-block-head { flex: none; padding: 0 0 10px; letter-spacing: 0; }
+.group-detail-panel .member-search-toggle { width: 26px; height: 26px; border-radius: 4px; }
+.group-detail-panel .member-search-toggle[aria-expanded="true"] { background: transparent; color: var(--accent-dark); }
+.group-detail-panel .member-block-search { flex: none; margin: 0 0 8px; padding: 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+.group-detail-panel .member-block-search input { width: 100%; min-width: 0; }
+.group-detail-panel .member-block-list { padding: 0 0 8px; scrollbar-width: thin; scrollbar-color: #d8cfc3 transparent; }
+.group-detail-panel .member-block-item { gap: 10px; padding: 9px 0; border-radius: 0; }
+.group-detail-panel .member-block-item:hover { background: transparent; }
+.group-detail-panel .member-block-item .avatar { width: 32px; height: 32px; border-radius: 9px; font-size: 13px; }
+.group-detail-panel .member-block-item .avatar-wrap { flex: none; }
+.group-detail-panel .member-block-text { flex: 1; gap: 3px; }
+.group-detail-panel .member-block-text strong { font-size: 12px; font-weight: 500; line-height: 1.4; }
+.group-detail-panel .member-self { margin-left: 5px; font-size: 10px; color: #a49481; font-weight: 400; }
+.group-detail-panel .member-block-text small { display: flex; align-items: center; gap: 8px; font-size: 10px; line-height: 1.5; }
+.group-detail-panel .member-block-text small.member-online-label { color: #508268; }
+.group-detail-panel .role-badge { flex: none; margin: 0; padding: 0; border-radius: 0; background: transparent; color: var(--muted); font-size: 9px; }
+.group-detail-panel .member-block-actions { flex: none; flex-wrap: wrap; gap: 16px; padding: 12px 0 0; border: 0; background: transparent; }
+.group-detail-panel .member-block-actions:empty { display: none; }
+.group-detail-panel .member-block-actions .small-button { display: inline-flex; align-items: center; justify-content: flex-start; gap: 5px; flex: none; padding: 4px 0; border: 0; border-radius: 0; background: transparent; color: var(--muted); font-size: 11px; white-space: nowrap; }
+.group-detail-panel .member-block-actions .small-button:hover { color: var(--accent-dark); background: transparent; }
+.group-detail-panel .member-block-actions svg { display: none; }
+.group-detail-panel button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 900px) { .group-detail-panel { padding: 16px 12px 10px; gap: 22px; } }
+@media (max-height: 600px) { .group-detail-panel .announcement-block-preview { -webkit-line-clamp: 2; } .group-detail-panel { gap: 16px; padding-top: 12px; } }
+.member-search-toggle { width: 26px; height: 26px; }
+
