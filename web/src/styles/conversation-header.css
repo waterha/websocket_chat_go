@@ -1,0 +1,9 @@
+/* Conversation header: identity, context and quick actions */
+.chat-head-text { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.chat-head-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+.chat-head-text p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-head-actions { display: flex; flex: none; align-items: center; gap: 4px; }
+.chat-head-actions button { padding: 6px 10px; border: 0; border-radius: 9px; color: var(--accent-dark); background: transparent; font-size: 12px; font-weight: 700; }
+.chat-head-actions button:hover { background: var(--theme-hover, #f1e6da); }
+.pending-pill { padding: 3px 9px; border-radius: 999px; color: #fff; background: #c77b3a; font-size: 11px; font-weight: 700; }
+
