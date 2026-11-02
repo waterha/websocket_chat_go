@@ -1,0 +1,17 @@
+/* QQ NT 式输入区：图标工具栏 + 大输入区 + 底部动作行 */
+.composer-toolbar { display: flex; align-items: center; gap: 2px; padding: 2px 2px 4px; }
+.toolbar-icon { position: relative; z-index: 1; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; color: var(--ink); background: transparent; }
+.emoji-picker-toggle { position: relative; z-index: 1; }
+.toolbar-icon:hover { background: var(--theme-hover, #f1e6da); }
+.toolbar-icon:disabled { opacity: .45; }
+.toolbar-spacer { flex: 1; }
+.composer-foot { display: flex; align-items: center; gap: 12px; padding: 4px 2px 0; }
+.composer-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; position: relative; }
+.send-split { display: flex; position: relative; }
+.send-main { border-radius: 10px 0 0 10px; padding: 9px 18px; }
+.send-arrow { border-radius: 0 10px 10px 0; padding: 9px 7px; border-left: 1px solid #ffffff45; }
+.send-menu { position: absolute; bottom: calc(100% + 6px); right: 0; z-index: 30; display: grid; min-width: 180px; padding: 6px; border: 1px solid var(--line); border-radius: 10px; background: #fff; box-shadow: 0 10px 28px #3a2c1e1f; }
+.send-menu button { padding: 8px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font-size: 13px; text-align: left; }
+.send-menu button:hover { background: var(--theme-soft, #f7efe6); }
+.send-menu button[aria-checked="true"] { color: var(--accent-dark); background: var(--theme-soft, #f7efe6); font-weight: 700; }
+
