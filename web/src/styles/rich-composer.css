@@ -1,0 +1,20 @@
+/* The composer is a rich region so an image shows as a picture inside the draft. It
+   uses the same 12px radius and spacing the sent bubble uses, so the draft and the
+   message it becomes read as the same thing. */
+.rich-composer { width: 100%; min-height: 54px; max-height: 220px; overflow-y: auto; padding: 9px 12px; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 12px; outline: none; font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.rich-composer:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 13%, transparent); }
+.rich-composer:empty::before { content: attr(data-placeholder); color: var(--muted); pointer-events: none; }
+/* An image inside the draft: one non-editable unit with a remove control. It uses the
+   same thumbnail size and inline alignment as a picture in a sent message, so the draft
+   reads as the message it is about to become instead of reflowing once it is sent. */
+.composer-image { position: relative; display: inline-block; margin: 3px 7px 3px 0; vertical-align: middle; line-height: 0; }
+.composer-image img { display: block; max-width: 200px; max-height: 140px; border: 1px solid var(--line); border-radius: 10px; object-fit: cover; }
+/* The remove control is quiet until the picture is hovered or focused, so the draft
+   reads as the message rather than as a form with a button stamped on every picture.
+   It stays faintly visible otherwise, because a touch screen has no hover. */
+.composer-image-remove { position: absolute; top: -7px; right: -7px; display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); background: #fff; font-size: 13px; line-height: 1; cursor: pointer; opacity: .55; transition: opacity .12s, color .12s, background .12s; }
+.composer-image:hover .composer-image-remove, .composer-image:focus-within .composer-image-remove, .composer-image-remove:focus-visible { opacity: 1; }
+.composer-image-remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.composer-image-remove:hover { color: #fff; background: var(--accent); border-color: var(--accent); }
+.announcement-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.announcement.empty { justify-content: flex-start; border-left-color: var(--line); background: transparent; }
