@@ -1,0 +1,8 @@
+.member-item { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 6px; }
+.member-text { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.member-text strong { display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.member-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-weight: 400; }
+.member-self { flex: none; padding: 1px 6px; border-radius: 4px; color: var(--accent-dark); background: var(--theme-hover, #f1e6da); font-size: 10px; font-weight: 800; }
+.empty-member { margin: 0; padding: 14px 10px; color: var(--muted); font-size: 13px; text-align: center; }
+.member-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+
