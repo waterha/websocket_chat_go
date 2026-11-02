@@ -1,0 +1,6 @@
+/* 顶栏图标按钮 */
+.chat-head-actions .head-icon, .sidebar-more > .head-icon { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; color: var(--muted); background: transparent; }
+.chat-head-actions .head-icon:hover, .sidebar-more > .head-icon:hover { background: var(--theme-hover, #f1e6da); color: var(--accent-dark); }
+.chat-head-actions .head-icon.active { color: var(--accent); background: var(--theme-soft, #f7efe6); }
+.chat-head-text strong { font-size: 17px; font-weight: 800; }
+
