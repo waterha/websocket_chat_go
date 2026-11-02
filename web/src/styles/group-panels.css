@@ -1,0 +1,50 @@
+/* The third column exists only when the panel is rendered: in a direct chat the
+   panel is absent, so the chat takes the whole remaining width instead of leaving
+   an empty strip. `auto` collapses to zero for an absent column. */
+.layout { height: 100dvh; min-height: 0; overflow: hidden; grid-template-columns: 320px minmax(0, 1fr) auto; }
+/* The right-hand detail panel holds the announcement block above the member list,
+   so both are visible while reading the chat instead of behind dialogs. */
+.detail-panel { display: flex; flex-direction: column; width: 300px; min-height: 0; border-left: 1px solid var(--line); background: var(--theme-sidebar, #fcf8f1); }
+.announcement-block { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border-bottom: 1px solid var(--line); background: var(--theme-surface, #fffaf2); }
+.announcement-block-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 0; border: 0; background: none; text-align: left; }
+.announcement-block-title { display: flex; align-items: center; gap: 6px; color: var(--accent-dark); font-size: 12px; font-weight: 800; letter-spacing: .04em; }
+.announcement-block-count { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: #fff; font-size: 10px; }
+.announcement-block-more { color: var(--muted); font-size: 11px; font-weight: 700; }
+.announcement-block-preview { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; margin: 0; color: var(--ink); font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.announcement-block-empty { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.member-block { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.member-block-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px 8px; color: var(--muted); font-size: 12px; font-weight: 800; letter-spacing: .06em; }
+.member-block-count { color: var(--muted); font-weight: 400; }
+.member-block-search { display: flex; align-items: center; gap: 6px; margin: 0 18px 8px; padding: 0 9px; border: 1px solid var(--line); border-radius: 9px; background: #fff; color: var(--muted); }
+.member-block-search input { padding: 7px 0; border: 0; background: none; font-size: 12px; }
+.member-block-search input:focus { box-shadow: none; border: 0; }
+.member-block-list { flex: 1; min-height: 0; overflow: auto; padding: 0 12px; }
+.member-block-item { display: flex; align-items: center; gap: 9px; padding: 7px 6px; border-radius: 10px; }
+.member-block-item:hover { background: var(--theme-hover, #f1e6da); }
+.member-block-text { display: flex; flex-direction: column; min-width: 0; }
+.member-block-text strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-block-text small { color: var(--muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-block-actions { display: flex; gap: 8px; padding: 10px 18px 14px; border-top: 1px solid var(--line); }
+.avatar.online { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--sage); }
+.announcement-modal { display: flex; flex-direction: column; width: min(560px, calc(100vw - 40px)); max-height: calc(100dvh - 48px); overflow: hidden; }
+.announcement-modal > .modal-head { flex: none; gap: 12px; }
+.announcement-modal .announcement-create { flex: none; padding: 9px 14px; border-radius: 8px; background: var(--accent); color: #fff; font-size: 13px; white-space: nowrap; }
+.announcement-create:disabled { opacity: .5; cursor: not-allowed; }
+.announcement-body { min-height: 0; margin-top: 12px; overflow-y: auto; overscroll-behavior: contain; }
+.announcement-body > .subtle { margin-top: 0; }
+.announcement-status { padding: 16px 0; color: var(--muted); font-size: 13px; text-align: center; }
+.announcement-list { display: grid; gap: 10px; margin: 14px 0; }
+.announcement-item { padding: 12px 14px; border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; background: var(--theme-surface, #fffaf2); }
+.announcement-item-head { display: flex; align-items: center; gap: 9px; }
+.announcement-item-meta { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.announcement-item-meta strong { font-size: 12px; }
+.announcement-item-meta small { color: var(--muted); font-size: 11px; }
+.announcement-item-actions { display: flex; gap: 6px; }
+.announcement-item-actions .small-button { margin-left: 0; }
+.announcement-item-content { margin: 8px 0 0; color: var(--ink); font-size: 13px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.announcement-editor { display: grid; gap: 10px; margin: 14px 0; padding: 14px; border: 1px dashed var(--line); border-radius: 12px; }
+.announcement-editor label { gap: 6px; }
+.announcement-editor textarea { min-height: 90px; }
+@media (max-width: 1100px) { .layout { grid-template-columns: 280px minmax(0, 1fr) auto; } .detail-panel { width: 260px; } }
+@media (max-width: 900px) { .layout { grid-template-columns: 260px minmax(0, 1fr) auto; } .detail-panel { width: 240px; } }
+@media (max-width: 720px) { .layout { grid-template-columns: minmax(0, 1fr) auto; } .sidebar { display: none; } .detail-panel { width: 200px; } }
