@@ -21,6 +21,8 @@ test('the template still contains the panels the client relies on', () => {
   for (const anchor of ['v-if="!me"', 'class="layout"', 'ref="stream"', 'class="composer"', 'class="sidebar-footer"', 'ref="mediaInput"', 'ref="draftArea"']) {
     assert.ok(template.includes(anchor), `template is missing ${anchor}`)
   }
+  assert.ok(template.includes('<UserAvatar :user="person"'))
+  assert.ok(template.includes(':user="conversationAvatar(item)"'))
 })
 
 test('the template was extracted intact rather than truncated', () => {
