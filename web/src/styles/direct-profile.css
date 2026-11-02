@@ -1,0 +1,14 @@
+/* Direct conversation info panel */
+.direct-panel { background: var(--theme-sidebar, #fcf8f1); }
+.direct-profile { display: grid; justify-items: center; gap: 12px; padding: 28px 20px; text-align: center; overflow-y: auto; }
+.direct-profile h3 { margin: 0; font-size: 17px; }
+.direct-profile .profile-avatar { width: 72px; height: 72px; font-size: 30px; }
+.direct-profile .profile-details { margin: 0; width: 100%; }
+.direct-profile .profile-details dd { font-size: 13px; font-weight: 600; }
+.direct-actions { display: grid; width: 100%; gap: 8px; }
+.direct-actions .outline-button { width: 100%; }
+
+/* Friend/contact rows with avatars */
+.request-with-avatar { align-items: center; }
+.avatar-wrap { position: relative; display: inline-flex; }
+
