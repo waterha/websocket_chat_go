@@ -32,19 +32,11 @@ import { GroupDirectory } from './group-directory.js'
 import { GroupFiles } from './group-files.js'
 import { useVoice } from './voice.js'
 import { cropAvatar } from './avatar-crop.js'
+import { UserAvatar } from './user-avatar.js'
 import './group-directory.css'
 import './style.css'
 import './desktop.css'
 
-// 头像组件：有头像用图片，否则回退到首字母占位。
-const UserAvatar = {
-  props: { user: { type: Object, default: null }, name: { type: String, default: '?' }, size: { type: String, default: '' } },
-  setup(props) {
-    const url = computed(() => (props.user?.avatar ? mediaURL(props.user.avatar) : ''))
-    return { url }
-  },
-  template: '<img v-if="url" :src="url" class="avatar" :class="size" alt="" loading="lazy" /><span v-else class="avatar" :class="size">{{ (name || "?").slice(0, 1) }}</span>',
-}
 
 createApp({
   components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Scissors, Download, Check, Pin, BellOff, Info, ChevronRight, ChevronDown, Clock3, ImagePlus, MoreHorizontal, MessageCircle, UserPlus, Bell, Contact, UsersRound, DesktopSettings, AppearanceSettings, UserAvatar, GroupDirectory, GroupFiles, LayoutDivider },
