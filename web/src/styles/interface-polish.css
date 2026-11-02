@@ -1,0 +1,15 @@
+/* —— 细节打磨 —— */
+.conversation-tabs { gap: 4px; padding: 4px 20px 10px; }
+.conversation-tabs button { padding: 5px 13px; border-radius: 999px; font-size: 12px; }
+.conversation { padding: 10px 12px; border-radius: 12px; transition: background .12s; }
+.conversation:hover { background: #f7f1e8; }
+.conversation.active { background: var(--theme-hover, #f1e6da); }
+.chat-head { min-height: 72px; padding: 16px 22px; }
+.stream { padding: 22px 26px; }
+.composer-foot { justify-content: flex-end; }
+body { -webkit-font-smoothing: antialiased; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { border-radius: 4px; background: #d8ccbc; }
+::-webkit-scrollbar-thumb:hover { background: #c9b9a4; }
+::-webkit-scrollbar-track { background: transparent; }
+
