@@ -1,0 +1,10 @@
+/* Group governance inside the member modal */
+.join-request-section { margin-top: 14px; }
+.member-actions { flex-wrap: wrap; }
+.group-settings { display: flex; flex: 1; gap: 14px; align-items: center; }
+.settings-toggle { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; color: var(--muted); font-size: 12px; font-weight: 700; }
+.settings-toggle input { accent-color: var(--accent); }
+.dismiss-button { color: var(--accent-dark, #8f4735); }
+.pending-joins { background: #c77b3a; }
+.mute-mark { margin-left: 6px; padding: 1px 5px; border-radius: 6px; background: var(--theme-hover, #f1e6da); color: var(--muted); font-size: 10px; font-weight: 700; }
+
