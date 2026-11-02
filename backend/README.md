@@ -18,6 +18,30 @@ internal/svc（依赖组合）  internal/realtime（设备连接 Hub、outbox �
 
 存储、WebSocket 与集成测试的后续整理见 [同日补充记录](../docs/refactoring/2026-10-14-structure-followup.md)。
 
+## 业务逻辑文件边界
+
+`internal/logic` 保持一个 package，`Auth`、`Chat` 仍是原有用例入口；文件按业务变化原因组织，避免引入额外接口或转发层。
+
+| 业务职责 | 文件 |
+| --- | --- |
+| 群权限检查与行锁、事务内系统通知及群变更事件 | [group.go](internal/logic/group.go) |
+| 群成员移除、角色、群主转让和群名片 | [group_members.go](internal/logic/group_members.go) |
+| 成员定时禁言与解除禁言 | [group_moderation.go](internal/logic/group_moderation.go) |
+| 群设置和解散生命周期 | [group_settings.go](internal/logic/group_settings.go) |
+| 批量邀请成员，包括需审批时创建待审邀请 | [group_invitation.go](internal/logic/group_invitation.go) |
+| 群发现、自助申请、撤回及个人申请历史 | [group_application.go](internal/logic/group_application.go) |
+| 管理员待审列表、同意与拒绝 | [group_approval.go](internal/logic/group_approval.go) |
+| 好友列表、私人备注和删除关系 | [friend.go](internal/logic/friend.go) |
+| 好友请求读写、审批及请求行映射 | [friend_request.go](internal/logic/friend_request.go) |
+| 黑名单读写与事务感知的屏蔽检查 | [block.go](internal/logic/block.go) |
+| 消息输入校验、富文本块规范化和重试内容签名 | [chat_message_validation.go](internal/logic/chat_message_validation.go) |
+| 消息发送事务、权限、幂等性、序号与 outbox 提交 | [chat_message.go](internal/logic/chat_message.go) |
+| 拍一拍成员通知 | [chat_poke.go](internal/logic/chat_poke.go) |
+
+上述职责整理只移动原声明：保留 API、SQL 文本与参数顺序、校验及错误返回顺序、锁、事务开始/回滚/提交位置和事件顺序。每个用例继续拥有自己的事务，共用函数继续使用调用方传入的 `pgx.Tx`。入群邀请与自助申请采用不同的原有幂等策略，保持各自完整流程，避免为了合并代码而改变语义。
+
+验证时先用 `scripts/dev-env.ps1` 的 `Get-EnvValue` 在进程内读取本地数据库/Redis 配置，通过环境变量提供给测试，避免打印配置和密码。现有测试夹具为 PostgreSQL 创建随机 schema，并在清理阶段删除；运行 `gofmt`、带配置的 `go test -count=1 ./...` 和 `go build ./...`。函数整体搬迁还应对照原版本检查声明及函数体一致。
+
 ## 消息生命周期
 
 1. 认证发送者与会话成员，依据 `(sender_id, client_msg_id)` 处理重试。
