@@ -1,307 +1,55 @@
-// Extracted from main.js so the component logic stays readable. It remains a
-// plain string because the component is compiled at runtime; template.test.js
-// asserts it parses with the real Vue compiler.
-export const template = `\n    <DesktopSettings :logged-in="!!me" />
-    <AppearanceSettings v-if="me && showAppearance" @close="showAppearance = false" />
-    <div v-if="!me" class="auth-layout">
-        <div class="auth-card login-card">
-        <div class="login-logo" aria-hidden="true">✦</div>
-        <h1>让团队协作，自然发生。</h1>
-        <form @submit.prevent="authenticate">
-          <label v-if="mode === 'register'">昵称<input v-model="name" required maxlength="64" placeholder="你的称呼" /></label>
-          <label>邮箱<input v-model="email" type="email" required maxlength="254" placeholder="you@example.com" /></label>
-          <label>密码<input v-model="password" type="password" required minlength="8" maxlength="72" placeholder="至少 8 位" /></label>
-          <button class="primary" :disabled="loading">{{ mode === 'login' ? '登录' : '创建账号' }}</button>
-        </form>
-        <button class="text-button" @click="mode = mode === 'login' ? 'register' : 'login'">{{ mode === 'login' ? '还没有账号？立即注册' : '已有账号？返回登录' }}</button>
-      </div>
-    </div>
-    <div v-else class="layout">
-      <aside class="sidebar"><LayoutDivider side="sidebar" />
-          <header class="side-top">
-            <span class="side-top-title"><MessageCircle :size="17" aria-hidden="true" />消息</span>
-            <div class="sidebar-more">
-              <button type="button" class="head-icon" :class="{ dot: pendingIncomingRequests.length }" title="更多" aria-label="更多操作" :aria-expanded="sidebarMoreOpen" @click.stop="toggleSidebarMore"><MoreHorizontal :size="18" /></button>
-              <div v-if="sidebarMoreOpen" class="top-menu" role="menu" @click.stop>
-                <button type="button" role="menuitem" @click="openGlobalSearch(); sidebarMoreOpen = false"><Search :size="15" />全局搜索</button>
-                <button type="button" role="menuitem" @click="openAddUser(); sidebarMoreOpen = false"><UserPlus :size="15" />添加好友</button>
-                <button type="button" role="menuitem" @click="openFriendRequests(); sidebarMoreOpen = false"><Bell :size="15" />好友申请<span v-if="pendingIncomingRequests.length" class="request-count">{{ pendingIncomingRequests.length > 99 ? '99+' : pendingIncomingRequests.length }}</span></button>
-                <button type="button" role="menuitem" @click="openContacts(); sidebarMoreOpen = false"><Contact :size="15" />联系人管理</button>
-                <button type="button" role="menuitem" @click="openCreate(); sidebarMoreOpen = false"><UsersRound :size="15" />创建群聊</button>
-                <button type="button" role="menuitem" @click="openGroupDirectory()"><Users :size="15" />加入群聊</button>
-              </div>
-            </div>
-          </header>
-          <div class="conversation-tabs"><button :class="{ active: conversationFilter === 'current' }" @click="conversationFilter = 'current'">当前</button><button :class="{ active: conversationFilter === 'friends' }" @click="conversationFilter = 'friends'">好友</button><button :class="{ active: conversationFilter === 'group' }" @click="conversationFilter = 'group'">群聊</button></div>
-          <div class="directory-search" role="search" aria-label="查找好友和群聊"><Search :size="17" aria-hidden="true" /><input ref="directoryInput" v-model="directoryQuery" type="search" maxlength="100" :placeholder="directoryPlaceholder" :aria-label="directoryPlaceholder" @keydown.esc.prevent="clearDirectorySearch" /><button v-if="directoryQuery" type="button" class="icon-button" title="清除搜索" aria-label="清除列表搜索" @click="clearDirectorySearch"><X :size="16" aria-hidden="true" /></button></div>
-          <GroupDirectory ref="groupDirectory" :show-trigger="false" @joined="onGroupJoined" />
-          <div class="conversation-list">
-             <p v-if="directoryQuery.trim() && !directoryCount" class="empty-side" role="status">{{ conversationFilter === 'friends' ? '没有匹配的好友' : conversationFilter === 'group' ? '没有匹配的群聊' : '没有匹配的当前会话' }}</p>
-            <template v-if="conversationFilter === 'friends'">
-              <button v-for="person in filteredFriends" :key="person.id" class="conversation contact" @click="openDirect(person.id)">
-                <UserAvatar :user="person" :name="person.remark || person.name" /><span class="conversation-text"><strong>{{ person.remark || person.name }}</strong><small>{{ person.remark ? person.name : contactPreview(person) }}</small></span><span v-if="directConversation(person.id) && showsBadge(directConversation(person.id))" class="unread-badge">{{ unreadLabel(directConversation(person.id).id) }}</span>
-              </button>
-            </template>
-            <template v-else-if="conversationFilter === 'group'">
-              <button v-for="item in filteredGroups" :key="item.id" class="conversation" :class="{ active: active === item.id }" @click="select(item.id)" @contextmenu.prevent.stop="openConversationMenu($event, item)">
-                <UserAvatar v-if="item.kind === 'direct'" :user="conversationAvatar(item)" :name="title(item)" /><span v-else class="avatar">{{ title(item).slice(0, 1) }}</span><span class="conversation-text"><strong>{{ title(item) }}<span v-if="item.dismissed" class="mute-mark" title="已解散" aria-label="已解散">已解散</span><span v-if="item.pinned" class="pin-mark" title="已置顶" aria-label="已置顶">置顶</span><span v-if="item.muted" class="mute-mark" title="免打扰" aria-label="免打扰">免打扰</span></strong><small>{{ preview(item) }}</small></span><span v-if="item.pending_joins" class="unread-badge pending-joins" title="待审批的入群邀请">{{ item.pending_joins > 99 ? '99+' : item.pending_joins }}</span><span v-if="showsBadge(item)" class="unread-badge">{{ unreadLabel(item.id) }}</span>
-              </button>
-            </template>
-            <template v-else>
-              <p v-if="pinnedConversations.length && !directoryQuery.trim()" class="list-section-title">置顶会话</p>
-              <button v-for="item in pinnedConversations" :key="'pin-' + item.id" class="conversation" :class="{ active: active === item.id }" @click="select(item.id)" @contextmenu.prevent.stop="openConversationMenu($event, item)">
-                <UserAvatar v-if="item.kind === 'direct'" :user="conversationAvatar(item)" :name="title(item)" /><span v-else class="avatar">{{ title(item).slice(0, 1) }}</span><span class="conversation-text"><strong>{{ title(item) }}<span class="pin-mark" title="已置顶" aria-label="已置顶">置顶</span><span v-if="item.muted" class="mute-mark" title="免打扰" aria-label="免打扰">免打扰</span></strong><small>{{ preview(item) }}</small></span><span v-if="showsBadge(item)" class="unread-badge">{{ unreadLabel(item.id) }}</span>
-              </button>
-              <p v-if="pinnedConversations.length && filteredRecent.length && !directoryQuery.trim()" class="list-section-title">最近</p>
-              <button v-for="item in filteredRecent" :key="item.id" class="conversation" :class="{ active: active === item.id }" @click="select(item.id)" @contextmenu.prevent.stop="openConversationMenu($event, item)">
-                <UserAvatar v-if="item.kind === 'direct'" :user="conversationAvatar(item)" :name="title(item)" /><span v-else class="avatar">{{ title(item).slice(0, 1) }}</span><span class="conversation-text"><strong>{{ title(item) }}<span v-if="item.muted" class="mute-mark" title="免打扰" aria-label="免打扰">免打扰</span></strong><small>{{ preview(item) }}</small></span><span v-if="showsBadge(item)" class="unread-badge">{{ unreadLabel(item.id) }}</span>
-              </button>
-            </template>
-            <p v-if="conversationFilter === 'friends' && !friends.length && !directoryQuery.trim()" class="empty-side">还没有好友，点击“添加”开始。</p>
-            <p v-else-if="conversationFilter === 'group' && !groupConversations.length && !directoryQuery.trim()" class="empty-side">还没有加入群聊。</p>
-            <p v-else-if="conversationFilter === 'current' && !recentConversations.length && !directoryQuery.trim()" class="empty-side">还没有最近会话。</p>
-         </div>
-        <footer class="sidebar-footer"><UserAvatar :user="me" :name="me.name" size="self" /><span class="identity"><strong>{{ me.name }}</strong><small>{{ connected ? '实时连接已建立' : '正在重连 · 历史可用' }}</small></span><button @click="showSettings = !showSettings" title="设置" aria-haspopup="menu" :aria-expanded="showSettings">设置</button><div v-if="showSettings" class="settings-menu" role="menu"><button type="button" role="menuitem" @click="openProfile">个人</button><button type="button" role="menuitem" @click="showSettings = false; showAppearance = true">美化界面</button><button type="button" role="menuitem" @click="logout">退出</button></div></footer>
-      </aside>
-      <main class="chat">
+import settings from './templates/settings.js'
+import authentication from './templates/authentication.js'
+import conversationSidebar from './templates/conversation-sidebar.js'
+import chatHeader from './templates/chat-header.js'
+import historySearch from './templates/history-search.js'
+import messageStream from './templates/message-stream.js'
+import messageSelection from './templates/message-selection.js'
+import messageComposer from './templates/message-composer.js'
+import conversationDetails from './templates/conversation-details.js'
+import threadWindow from './templates/thread-window.js'
+import announcementDialog from './templates/announcement-dialog.js'
+import createGroupDialog from './templates/create-group-dialog.js'
+import friendDialogs from './templates/friend-dialogs.js'
+import memberDialog from './templates/member-dialog.js'
+import globalSearchDialog from './templates/global-search-dialog.js'
+import inviteDialog from './templates/invite-dialog.js'
+import contactsDialog from './templates/contacts-dialog.js'
+import profileDialog from './templates/profile-dialog.js'
+import actionOverlays from './templates/action-overlays.js'
+import errorToast from './templates/error-toast.js'
+
+// Keep one runtime-compiled view: fragments share the root setup bindings.
+// Join without separators so whitespace and v-if/v-else adjacency stay intact.
+export const template = [
+  settings,
+  authentication,
+  `    <div v-else class="layout">
+`,
+  conversationSidebar,
+  `      <main class="chat">
         <template v-if="current">
-           <header class="chat-head" aria-label="会话信息">
-             <UserAvatar v-if="current.kind === 'direct'" :user="headMember" :name="title(current)" />
-             <span v-else class="avatar">{{ title(current).slice(0, 1) }}</span>
-             <div class="chat-head-text"><strong>{{ title(current) }}<span v-if="current.dismissed" class="mute-mark" aria-label="已解散">已解散</span><span v-if="current.pinned" class="pin-mark" aria-label="已置顶">置顶</span><span v-if="current.muted" class="mute-mark" aria-label="免打扰">免打扰</span></strong><p>{{ chatHeadMeta }}</p></div>
-             <div class="chat-head-actions">
-               <GroupFiles v-if="current.kind === 'group'" :key="current.id + ':' + me.id" :conversation="current" />
-               <div class="chat-more">
-                 <button type="button" class="head-icon" title="更多" aria-label="更多操作" :aria-expanded="chatMoreOpen" @click.stop="toggleChatMore"><MoreHorizontal :size="18" /></button>
-                 <div v-if="chatMoreOpen" class="top-menu" role="menu" @click.stop>
-                   <button type="button" role="menuitem" :disabled="preferenceBusy" @click="togglePreference(current.id, 'pinned'); chatMoreOpen = false"><Pin :size="15" />{{ current.pinned ? '取消置顶' : '置顶会话' }}</button>
-                   <button type="button" role="menuitem" :disabled="preferenceBusy" @click="togglePreference(current.id, 'muted'); chatMoreOpen = false"><BellOff :size="15" />{{ current.muted ? '关闭免打扰' : '消息免打扰' }}</button>
-                   <button type="button" role="menuitem" @click="openSearch(); chatMoreOpen = false"><Search :size="15" />搜索聊天记录</button>
-                   <button v-if="current.kind === 'group'" type="button" role="menuitem" @click="openMembers(); chatMoreOpen = false"><Users :size="15" />成员管理<span v-if="current.pending_joins" class="request-count">{{ current.pending_joins > 99 ? '99+' : current.pending_joins }}</span></button>
-                   <button v-if="current.kind === 'direct'" type="button" role="menuitem" @click="chatInfoOpen = !chatInfoOpen; chatMoreOpen = false"><Info :size="15" />会话信息</button>
-                   <button type="button" role="menuitem" class="danger" @click="deleteConversation(current.id); chatMoreOpen = false">删除会话</button>
-                 </div>
-               </div>
-             </div>
-           </header>
-           <section v-if="showSearch" id="message-search-panel" class="message-search" aria-label="搜索聊天记录" @keydown.esc.stop="closeSearch">
-             <form class="message-search-form" role="search" @submit.prevent="searchMessages()">
-               <div class="message-search-field"><Search :size="18" aria-hidden="true" /><input ref="searchInput" v-model="searchQuery" type="search" maxlength="100" placeholder="搜索当前会话的聊天记录" aria-label="消息关键词" @input="changeSearch" /></div>
-              <div class="history-filters" role="group" aria-label="历史消息筛选"><label>开始日期<input v-model="searchStart" type="date" aria-label="开始日期" @change="changeSearch" /></label><label>结束日期<input v-model="searchEnd" type="date" aria-label="结束日期" @change="changeSearch" /></label><div v-if="current?.kind === 'group'" class="history-member-filter"><label>搜索成员<input v-model="historyMemberQuery" type="search" maxlength="100" aria-label="搜索历史成员" placeholder="昵称 / 账号" /></label><label>成员<select v-model="searchSender" aria-label="按成员筛选" @change="changeSearch"><option value="">所有成员</option><option v-for="person in historyMemberOptions" :key="person.id" :value="person.id">{{ person.alias || person.name }}{{ person.email ? ' · ' + person.email : '' }}</option></select></label><span v-if="historyMemberQuery.trim() && !historyMemberOptions.length" class="history-member-empty" role="status">没有匹配的成员</span></div><label>内容<select v-model="searchType" aria-label="按内容类型筛选" @change="changeSearch"><option value="all">全部类型</option><option value="images">表情/图片</option><option value="links">链接</option><option value="files">文件</option></select></label><button type="button" class="small-button" :disabled="searchBusy" @click="clearSearchFilters">清除筛选</button></div>
-               <button type="submit" class="icon-button search-submit" title="搜索" aria-label="搜索" :disabled="(!searchQuery.trim() && !searchSender && searchType === 'all' && !searchStart && !searchEnd) || searchBusy"><Search :size="19" aria-hidden="true" /></button>
-               <button type="button" class="icon-button" title="关闭搜索" aria-label="关闭搜索" @click="closeSearch"><X :size="20" aria-hidden="true" /></button>
-             </form>
-             <div class="message-search-status" role="status" aria-live="polite"><span v-if="searchBusy">正在搜索…</span><span v-else-if="searchError" class="search-error">{{ searchError }}</span><span v-else-if="!searchStarted">搜索或筛选聊天记录</span><span v-else-if="!searchResults.length">没有找到匹配的消息</span><span v-else>已找到 {{ searchResults.length }} 条{{ searchHasMore ? '以上' : '' }}匹配消息</span><button v-if="searchError" type="button" class="icon-button" title="重试搜索" aria-label="重试搜索" @click="searchMessages(searchResults.length > 0)"><RotateCw :size="17" aria-hidden="true" /></button></div>
-             <div class="message-search-results" :aria-busy="searchBusy">
-               <article v-for="item in searchResults" :key="item.id" class="message-search-result">
-                 <span class="search-result-meta"><strong>{{ item.kind === 'system' ? '系统消息' : sender(item.sender_id) }}</strong><time :datetime="item.created_at">{{ searchDate(item.created_at) }}</time></span>
-                 <span class="search-result-content history-message-content"><span v-if="item.recalled_at">{{ recalledText(item) }}</span><template v-else v-for="(segment, segmentIndex) in segmentsOf(item)" :key="segmentIndex"><span v-if="segment.type === 'text'" class="history-message-text"><template v-for="(part, index) in highlightMatches(segment.text, searchedQuery)" :key="index"><mark v-if="part.match">{{ part.text }}</mark><template v-else>{{ part.text }}</template></template></span><a v-else-if="segment.type === 'image'" class="block-image history-message-image" :href="mediaURL(segment.mediaId)" :aria-label="'查看图片 ' + segment.fileName"><img :src="mediaURL(segment.mediaId)" :alt="segment.fileName || '图片/表情'" loading="lazy" /></a><audio v-else-if="segment.type === 'audio'" class="media-audio" :src="mediaURL(segment.mediaId)" controls preload="metadata" aria-label="播放语音"></audio><span v-else class="history-message-attachment">{{ segment.type === 'video' ? '[视频]' : '[文件]' }} {{ segment.fileName }}</span></template></span>
-                 <button type="button" class="search-result-action history-locate" :disabled="locatingMessage !== null" @click="locateMessage(item)">{{ locatingMessage === item.seq ? '定位中…' : '查看原消息' }}<ArrowRight :size="15" aria-hidden="true" /></button>
-               </article>
-               <button v-if="searchHasMore && !searchError" type="button" class="older search-more" :disabled="searchBusy" @click="searchMessages(true)">{{ searchBusy ? '加载中…' : '加载更多结果' }}</button>
-             </div>
-           </section>
-           <section v-show="!showSearch" ref="stream" class="stream" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop" aria-label="聊天记录">
-          <div v-if="dragging" class="drop-hint" aria-hidden="true"><span class="drop-hint-box"><strong>松手添加图片或文件</strong><small>文件最大 50 MB，上传后点击发送</small></span></div>
-            <button v-if="messages[0]?.seq > 1" class="older" @click="loadOlder">加载更早的消息</button>
-            <div v-if="!messages.length" class="empty-chat">说声你好，开始这段对话。</div>
-            <template v-for="(item, index) in messages" :key="item.id">
-              <p v-if="dayDivider(index)" class="day-divider" role="separator">{{ dayLabel(item.created_at) }}</p>
-              <div class="message-row" :data-message-seq="item.seq" :class="{ mine: item.sender_id === me.id, 'recall-row': !!item.recalled_at, system: item.kind === 'system', 'search-target': highlightedMessage === item.seq, 'message-selected': messageActions.selectedIDs.includes(item.id), 'message-selectable': messageActions.selectionMode }" @contextmenu.prevent.stop="messageActions.openMenu($event, item)" @click.capture="messageActions.onMessageClick($event, item)">
-              <UserAvatar v-if="!item.recalled_at && item.sender_id !== me.id && item.kind !== 'system'" :user="memberByID(item.sender_id)" :name="sender(item.sender_id)" size="tiny" />
-              <button v-if="messageActions.selectionMode && item.kind !== 'system' && !item.recalled_at" type="button" class="message-select-toggle" role="checkbox" :aria-checked="messageActions.selectedIDs.includes(item.id)" aria-label="选择消息"><Check v-if="messageActions.selectedIDs.includes(item.id)" :size="14" aria-hidden="true" /></button>
-              <template v-if="item.recalled_at"><span class="recall-notice">{{ recalledText(item) }}</span></template>
-              <template v-else-if="item.kind === 'system'"><span class="system-notice">{{ item.content }}</span></template>
-              <template v-else>
-              <div><div class="message-meta">{{ sender(item.sender_id) }} · {{ time(item.created_at) }}<span v-if="readTicks(item)" class="read-ticks">{{ readTicks(item) }}</span></div><div v-if="item.reply" class="reply-quote"><strong>{{ replyAuthor(item.reply) }}</strong><span>{{ replyPreview(item.reply) }}</span></div><div class="bubble" :class="{ media: item.kind === 'image' || item.kind === 'video', recalled: item.recalled_at }"><template v-if="usesBlocks(item)"><div class="block-stack"><template v-for="(segment, index) in segmentsOf(item)" :key="index"><p v-if="segment.type === 'text'" class="block-text">{{ segment.text }}</p><a v-else-if="segment.type === 'image'" class="block-image" :href="mediaURL(segment.mediaId)" target="_blank" rel="noopener" :aria-label="'查看图片 ' + segment.fileName"><img :src="mediaURL(segment.mediaId)" :alt="segment.fileName" loading="lazy" /></a><audio v-else-if="segment.type === 'audio'" class="media-audio" :src="mediaURL(segment.mediaId)" controls preload="metadata" aria-label="播放语音"></audio><a v-else class="block-file" :href="mediaURL(segment.mediaId)" :download="segment.fileName"><Paperclip :size="16" aria-hidden="true" /><span>{{ segment.fileName }}</span></a></template></div></template><template v-else><template v-if="item.recalled_at"><span class="recalled">{{ recalledText(item) }}</span></template><template v-else-if="item.kind === 'image'"><a class="media-item" :href="mediaURL(item.media_id)" target="_blank" rel="noopener" :aria-label="'查看图片 ' + item.media.file_name"><img class="media-image" :src="mediaURL(item.media_id)" :alt="item.media.file_name" loading="lazy" /></a><p v-if="bodyOf(item)" class="media-caption">{{ bodyOf(item) }}</p></template><template v-else-if="item.kind === 'video'"><video class="media-video" :src="mediaURL(item.media_id)" controls preload="metadata" :aria-label="'播放视频 ' + item.media.file_name"></video><p v-if="bodyOf(item)" class="media-caption">{{ bodyOf(item) }}</p></template><template v-else-if="item.kind === 'audio'"><audio class="media-audio" :src="mediaURL(item.media_id)" controls preload="metadata" aria-label="播放语音"></audio><p v-if="bodyOf(item)" class="media-caption">{{ bodyOf(item) }}</p></template><template v-else-if="item.kind === 'file'"><a class="media-file" :href="mediaURL(item.media_id)" :download="item.media.file_name"><Paperclip :size="18" aria-hidden="true" /><span class="media-file-text"><strong>{{ item.media.file_name }}</strong><small>{{ formatBytes(item.media.byte_size) }}</small></span><Download :size="16" aria-hidden="true" /></a><p v-if="bodyOf(item)" class="media-caption">{{ bodyOf(item) }}</p></template><template v-else>{{ bodyOf(item) }}</template></template></div><div v-if="hasThread(item)" class="thread-inline-preview" role="button" tabindex="0" @click.stop="openThread(item)" @keydown.enter.prevent.stop="openThread(item)" @keydown.space.prevent.stop="openThread(item)"><div v-for="reply in threadPreview(item).slice(0, 2)" :key="reply.id" class="thread-inline-reply"><strong>{{ sender(reply.sender_id) }}</strong><span>{{ bodyOf(reply) || '[附件]' }}</span></div><span class="thread-inline-more">{{ threadLabel(item) }}</span></div><div v-if="item.reactions?.length && !item.recalled_at" class="reaction-row"><button v-for="entry in item.reactions" :key="entry.emoji" type="button" class="reaction-chip" :class="{ mine: entry.users.includes(me.id) }" :disabled="reactionBusy" :aria-label="(entry.users.includes(me.id) ? '取消' : '添加') + entry.emoji + '回应'" @click.stop="toggleReaction(item, entry.emoji)">{{ entry.emoji }} {{ entry.count }}</button></div></div><UserAvatar v-if="item.sender_id === me.id && item.kind !== 'system'" :user="me" :name="me.name" size="tiny" /></template>
-            </div>
-            </template>
-          </section>
-          <div v-if="messageActions.selectionMode" class="message-selection-bar" role="toolbar" aria-label="批量消息操作">
-            <span>已选 {{ messageActions.selected.length }} 条</span>
-            <button type="button" class="outline-button" :disabled="!messageActions.selected.length" @click="messageActions.copyMessages(messageActions.selected)">复制</button>
-            <button type="button" class="primary" :disabled="!messageActions.selected.length" @click="messageActions.openForward(messageActions.selected)">转发</button>
-            <button type="button" class="text-button" @click="messageActions.cancelSelection">取消多选</button>
-          </div>
-          <form v-show="!showSearch" class="composer" @submit.prevent="send"><p v-if="typingLabel" class="typing-status" role="status">{{ typingLabel }}正在输入…</p><p v-if="mutedHere" class="muted-notice" role="status">你已被禁言，暂时无法发言。</p><p v-else-if="dismissedHere" class="muted-notice" role="status">该群聊已解散，仅可查看历史消息。</p><p v-if="pendingSend?.conversation_id === active" class="pending-notice">发送结果未确认，消息可能已保存。<button type="button" @click="restorePending">恢复原文安全重试</button><button type="button" @click="discardPending">放弃确认</button></p><div v-if="uploadBusy" class="attachment-status" role="status">正在上传{{ uploadName ? '：' + uploadName : '…' }}<button v-if="uploadName" type="button" class="small-button" @click="cancelFileUpload">取消上传</button></div><div v-else-if="attachment" class="attachment-preview"><img v-if="attachment.media_type === 'image'" :src="previewFile" :alt="attachment.file_name" /><video v-else-if="attachment.media_type === 'video'" :src="previewFile" muted playsinline preload="metadata"></video><audio v-else-if="attachment.media_type === 'audio'" class="media-audio" :src="previewFile" controls preload="metadata" aria-label="播放待发送语音"></audio><span v-else class="attachment-file-icon"><Paperclip :size="22" aria-hidden="true" /></span><span class="attachment-info"><strong>{{ attachment.file_name }}</strong><small>{{ attachment.media_type === 'video' ? '视频' : attachment.media_type === 'audio' ? '语音' : attachment.media_type === 'image' ? '图片' : '文件' }} · {{ formatBytes(attachment.byte_size) }}<em class="attachment-hint">可继续输入文字，与{{ attachment.media_type === 'image' ? '图片' : '附件' }}一起发送</em></small></span><button type="button" class="icon-button" title="移除附件" aria-label="移除附件" :disabled="sending" @click="clearAttachment"><X :size="16" aria-hidden="true" /></button></div><div class="composer-toolbar"><button type="button" class="toolbar-icon voice-toggle" title="语音：按住空格录音，松开发送" aria-label="语音" :aria-pressed="voiceEnabled" :disabled="uploadBusy || sending" @click="toggleVoice"><svg class="voice-toggle-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8" /></svg></button><input ref="fileInput" class="media-input" type="file" @change="chooseMedia" /><button type="button" class="toolbar-icon" title="上传文件（最大 50 MB，上传后点击发送）" aria-label="上传文件" :disabled="uploadBusy || sending" @click="openFilePicker"><Paperclip :size="19" aria-hidden="true" /></button><input ref="mediaInput" class="media-input" type="file" accept="image/*,video/*" @change="chooseMedia" /><button type="button" class="toolbar-icon" title="发送图片（可直接粘贴或拖入）、视频或文件" aria-label="发送图片、视频或文件" :disabled="uploadBusy || sending" @click="openMediaPicker"><ImagePlus :size="19" aria-hidden="true" /></button><button type="button" class="toolbar-icon" title="截图（Ctrl+Q）" aria-label="截图（Ctrl+Q）" :disabled="uploadBusy || sending || mutedHere || dismissedHere || pendingSend?.conversation_id === active" @mousedown.prevent @click="startScreenshot"><Scissors :size="19" aria-hidden="true" /></button><span class="toolbar-spacer"></span><button type="button" class="toolbar-icon" title="聊天记录搜索" aria-label="聊天记录搜索" @click="openSearch"><Clock3 :size="18" aria-hidden="true" /></button></div><div v-if="voiceEnabled" class="voice-status" role="status" aria-live="polite"><span>{{ voiceState === 'requesting' ? '请允许使用麦克风…' : voiceState === 'recording' ? '录音中 ' + voiceSeconds + ' 秒 / 60 秒，松开发送，Esc 取消' : voiceState === 'sending' ? '正在发送语音…' : '按住空格录音，松开发送 · 最长 60 秒' }}</span><button v-if="voiceState === 'recording' || voiceState === 'requesting'" type="button" class="small-button" @click="cancelVoice">取消录音</button></div><div ref="draftArea" class="rich-composer" :contenteditable="!voiceEnabled" role="textbox" aria-multiline="true" aria-label="输入消息" data-placeholder="输入消息，可直接粘贴图片…" @paste="onComposerPaste" @input="onComposerInput" @keydown.enter="onEnter" @keydown="onComposerKeydown($event); mentionKeydown($event) && $event.preventDefault()" @keyup="updateMentionState" @click="onComposerClick" @blur="onComposerBlur"></div><div v-if="showMentions && mentionList.length" class="mention-list" role="listbox" aria-label="提及成员"><button v-for="(person, index) in mentionList" :key="person.id" type="button" role="option" :aria-selected="index === mentionIndex" :class="{ active: index === mentionIndex }" @mousedown.prevent="chooseMention(person)"><UserAvatar :user="person" :name="person.name" size="tiny" /><span>{{ person.name }}<small>{{ person.email }}</small></span></button><p v-if="!mentionList.length" class="empty-mention">没有匹配的成员</p></div><div class="composer-foot"><div class="composer-actions"><div class="send-split"><button class="primary send-main" :disabled="(!draft.trim() && !composerImages.length && !attachment) || sending || uploadBusy || mutedHere || dismissedHere">{{ mutedHere ? '已禁言' : dismissedHere ? '已解散' : sending ? '发送中…' : '发送' }}</button><button type="button" class="primary send-arrow" :aria-expanded="sendMenuOpen" title="发送键设置" aria-label="发送键设置" @click.stop="sendMenuOpen = !sendMenuOpen"><ChevronDown :size="15" aria-hidden="true" /></button><div v-if="sendMenuOpen" class="send-menu" role="menu" @click.stop><button type="button" role="menuitemradio" :aria-checked="sendKeyMode === 'enter'" @click="setSendKey('enter')">按 Enter 发送</button><button type="button" role="menuitemradio" :aria-checked="sendKeyMode === 'ctrl'" @click="setSendKey('ctrl')">按 Ctrl + Enter 发送</button></div></div></div></div></form>        </template>
-         <div v-else class="welcome"><span class="brand-mark">✦</span><h2>开启一段新对话</h2><p>从左侧联系人选择用户即可开始私聊，也可以创建群聊。</p><div class="welcome-actions"><button class="outline-button" @click="openCreate()">创建群聊</button></div></div>
+`,
+  chatHeader,
+  historySearch,
+  messageStream,
+  messageSelection,
+  messageComposer,
+  `         <div v-else class="welcome"><span class="brand-mark">✦</span><h2>开启一段新对话</h2><p>从左侧联系人选择用户即可开始私聊，也可以创建群聊。</p><div class="welcome-actions"><button class="outline-button" @click="openCreate()">创建群聊</button></div></div>
       </main>
-      <aside v-if="current && current.kind === 'group'" class="detail-panel group-detail-panel" aria-label="群信息"><LayoutDivider side="detail" />
-        <section class="announcement-block" aria-label="群公告">
-          <button type="button" class="announcement-block-head" @click="openAnnouncementPanel">
-            <span class="announcement-block-title"><span class="detail-section-icon"><Bell :size="16" aria-hidden="true" /></span>群公告<span v-if="announcementCount" class="announcement-block-count">{{ announcementCount }}</span></span>
-            <span class="announcement-block-more">全部<ChevronRight :size="13" aria-hidden="true" /></span>
-          </button>
-          <button type="button" class="announcement-summary" aria-label="查看群公告" @click="openAnnouncementPanel">
-            <template v-if="latestAnnouncement"><span class="announcement-summary-label">最新公告</span><p class="announcement-block-preview">{{ latestAnnouncement.content }}</p><span class="announcement-summary-footer"><time :datetime="latestAnnouncement.created_at">{{ searchDate(latestAnnouncement.created_at) }}</time><span>查看详情 ↗</span></span></template>
-            <template v-else><p class="announcement-block-empty">{{ canManageAnnouncements ? '让重要消息被每个人看见' : '群里还没有公告' }}</p><span class="announcement-summary-footer">{{ canManageAnnouncements ? '点击发布第一条公告' : '发布后会展示在这里' }}</span></template>
-          </button>
-        </section>
-        <section class="member-block" aria-label="群成员">
-          <header class="member-block-head"><span class="member-section-title"><span class="detail-section-icon"><UsersRound :size="16" aria-hidden="true" /></span>群成员 <b>{{ memberCount }}</b></span><button type="button" class="icon-button member-search-toggle" :aria-expanded="memberSearchOpen" title="搜索成员" aria-label="搜索成员" @click="toggleMemberSearch"><Search :size="15" aria-hidden="true" /></button></header>
-          <div v-show="memberSearchOpen" class="member-block-search"><Search :size="15" aria-hidden="true" /><input v-model="memberQuery" type="search" maxlength="100" placeholder="搜索成员" aria-label="搜索群成员" @keydown.esc.prevent="memberQuery = ''; memberSearchOpen = false" /></div>
-          <div class="member-block-list" role="list">
-            <div v-for="person in currentMembers" :key="person.id" class="member-block-item" role="listitem">
-              <span class="avatar-wrap tiny" :class="{ online: person.online }"><UserAvatar :user="person" :name="person.alias || person.name" size="tiny" /></span>
-              <span class="member-block-text"><strong :title="person.alias || person.name">{{ person.alias || person.name }}<span v-if="person.id === me.id" class="member-self">我</span></strong><small :class="{ 'member-online-label': person.online }">{{ person.online ? '在线' : '离线' }}<span v-if="person.role !== 'member'" class="role-badge" :class="'role-' + person.role">{{ roleLabel(person.role) }}</span></small></span>
-            </div>
-            <p v-if="!currentMembers.length" class="empty-member">{{ memberQuery.trim() ? '没有匹配的成员' : '暂无群成员' }}</p>
-          </div>
-          <div class="member-block-actions">
-            <button v-if="canInviteMembers" type="button" class="small-button" :disabled="memberCount >= 1000" @click="openInvite"><UserPlus :size="14" aria-hidden="true" />{{ memberCount >= 1000 ? '成员已满' : '邀请成员' }}</button>
-            <button v-if="canManageGroupMembers" type="button" class="small-button" @click="openMembers"><Users :size="14" aria-hidden="true" />管理成员</button>
-          </div>
-        </section>
-      </aside>
-      <aside v-if="current && current.kind === 'direct' && chatInfoOpen" class="detail-panel direct-panel" aria-label="会话信息"><LayoutDivider side="detail" />
-        <section class="direct-profile">
-          <UserAvatar :user="headMember" :name="title(current)" size="profile-avatar" />
-          <h3>{{ title(current) }}</h3>
-          <p class="subtle">{{ headMember ? (headMember.online ? '在线' : '离线') : '' }}</p>
-          <dl class="profile-details"><div><dt>账号</dt><dd>{{ headMember?.email }}</dd></div><div v-if="headMember && headMember.name !== title(current)"><dt>昵称</dt><dd>{{ headMember.name }}</dd></div></dl>
-          <div class="profile-actions direct-actions">
-            <button type="button" class="outline-button" @click="startDirectRemark">设置备注</button>
-            <button v-if="headMember && !isBlocked(headMember.id)" type="button" class="outline-button" @click="blockUser(headMember)">加入黑名单</button>
-            <button v-if="headMember && isBlocked(headMember.id)" type="button" class="outline-button" @click="unblockUser(headMember)">移出黑名单</button>
-            <button type="button" class="outline-button" @click="deleteConversation(current.id)">删除会话</button>
-            <button type="button" class="outline-button" @click="clearLocalHistory">清空聊天记录</button>
-          </div>
-          <p v-if="isBlocked(headMember?.id)" class="subtle">对方已在你的黑名单中，无法收到你的消息。</p>
-        </section>
-      </aside>
-      <section v-if="threadOpen" ref="threadStream" class="thread-window" role="dialog" aria-modal="false" aria-label="回复对话窗口">
-        <header class="thread-window-head"><div class="thread-window-title"><span class="avatar tiny">{{ sender(threadRoot?.sender_id).slice(0,1) }}</span><div><strong>对话窗口</strong><small>{{ sender(threadRoot?.sender_id) }} 的消息 · {{ threadReplyCount }} 条回复</small></div></div><button type="button" class="icon-button" title="关闭对话窗口" aria-label="关闭对话窗口" @click="closeThread"><X :size="18" aria-hidden="true" /></button></header>
-        <div v-if="threadError" class="thread-window-error">{{ threadError }}</div>
-        <div class="thread-window-root" :class="{ 'recall-row': !!threadRoot?.recalled_at, 'message-selected': messageActions.selectedIDs.includes(threadRoot?.id) }" @contextmenu.prevent.stop="messageActions.openMenu($event, threadRoot)" @click.capture="messageActions.onMessageClick($event, threadRoot)">
-          <div class="thread-window-label">原消息</div><div class="bubble"><template v-if="threadRoot?.recalled_at"><span class="recalled">{{ recalledText(threadRoot) }}</span></template><template v-else>{{ bodyOf(threadRoot) || '[附件]' }}</template></div><div v-if="threadRoot?.reactions?.length && !threadRoot.recalled_at" class="reaction-row"><button v-for="entry in threadRoot.reactions" :key="entry.emoji" type="button" class="reaction-chip" :class="{ mine: entry.users.includes(me.id) }" :disabled="reactionBusy" @click.stop="toggleReaction(threadRoot, entry.emoji)">{{ entry.emoji }} {{ entry.count }}</button></div><div class="message-meta">{{ sender(threadRoot?.sender_id) }} · {{ time(threadRoot?.created_at) }}</div>
-        </div>
-        <div v-if="threadBusy && !threadReplies.length" class="thread-window-status">正在加载回复…</div><div v-else-if="!threadReplies.length" class="thread-window-status">还没有人回复这条消息。</div>
-        <div v-else class="thread-window-list">
-          <div v-for="reply in threadReplies" :key="reply.id" class="thread-window-item" :class="{ mine: reply.sender_id === me.id, 'recall-row': !!reply.recalled_at, 'message-selected': messageActions.selectedIDs.includes(reply.id) }" @contextmenu.prevent.stop="messageActions.openMenu($event, reply)" @click.capture="messageActions.onMessageClick($event, reply)"><UserAvatar v-if="!reply.recalled_at" :user="memberByID(reply.sender_id)" :name="sender(reply.sender_id)" size="tiny" /><div class="thread-window-body"><div class="message-meta">{{ sender(reply.sender_id) }} · {{ time(reply.created_at) }}</div><div class="bubble" :class="{ recalled: reply.recalled_at }"><template v-if="reply.recalled_at"><span class="recalled">{{ recalledText(reply) }}</span></template><template v-else>{{ bodyOf(reply) || '[附件]' }}</template></div><div v-if="reply.reactions?.length && !reply.recalled_at" class="reaction-row"><button v-for="entry in reply.reactions" :key="entry.emoji" type="button" class="reaction-chip" :class="{ mine: entry.users.includes(me.id) }" :disabled="reactionBusy" @click.stop="toggleReaction(reply, entry.emoji)">{{ entry.emoji }} {{ entry.count }}</button></div></div></div>
-          <button v-if="threadHasMorePages" type="button" class="older" :disabled="threadBusy" @click="loadMoreThread">{{ threadBusy ? '加载中…' : '加载更多回复' }}</button>
-        </div>
-        <form class="thread-window-composer" @submit.prevent="sendInThread"><textarea ref="threadDraftArea" v-model="threadDraft" maxlength="4000" placeholder="回复这条消息…" aria-label="回复这条消息" @keydown.enter.exact="onThreadEnter"></textarea><div><span>Enter 发送 · Shift + Enter 换行</span><button type="button" class="outline-button" @click="closeThread">关闭</button><button class="primary" :disabled="!threadDraft.trim() || threadSending">{{ threadSending ? '发送中…' : '回复 ↗' }}</button></div></form>
-      </section>
-      <div v-if="announcementPanelOpen" class="modal-backdrop announcement-backdrop" @click.self="closeAnnouncementPanel"><div class="modal announcement-modal" role="dialog" aria-modal="true" aria-label="群公告"><div class="modal-head"><h2>群公告<span class="member-total">{{ announcementCount }} 条</span></h2><button v-if="canManageAnnouncements && !announcementEditorOpen" type="button" class="primary announcement-create" :disabled="announcementSaving" @click="startCreateAnnouncement">新建公告</button></div><div class="announcement-body"><p class="subtle">{{ title(current) }} · {{ canManageAnnouncements ? '群主与管理员可以发布、编辑和删除公告' : '仅群主与管理员可以修改公告' }}</p><div v-if="announcementsError" class="search-error">{{ announcementsError }}</div><div v-if="announcementsBusy && !groupAnnouncements.length" class="announcement-status">正在加载公告…</div><div v-else-if="!groupAnnouncements.length && !announcementEditorOpen" class="announcement-status">还没有群公告。</div><form v-if="announcementEditorOpen" class="announcement-editor" @submit.prevent="saveAnnouncementText"><label>{{ announcementEditingID ? '编辑群公告' : '新建群公告' }}<textarea v-model="announcementDraftText" maxlength="2000" placeholder="写给群成员的公告，最多 2000 字"></textarea></label><div class="profile-actions"><button type="button" class="outline-button" :disabled="announcementSaving" @click="cancelAnnouncementEditor">取消</button><button class="primary" :disabled="announcementSaving || !announcementDraftText.trim()">{{ announcementSaving ? '保存中…' : '保存公告' }}</button></div></form><div class="announcement-list"><article v-for="item in groupAnnouncements" :key="item.id" class="announcement-item"><div class="announcement-item-head"><span class="avatar tiny">{{ sender(item.author_id).slice(0,1) }}</span><span class="announcement-item-meta"><strong>{{ sender(item.author_id) }}</strong><small>{{ searchDate(item.created_at) }}<span v-if="item.edited"> · 已编辑</span></small></span><span v-if="canManageAnnouncements" class="announcement-item-actions"><button type="button" class="small-button" :disabled="announcementSaving" @click="startEditAnnouncement(item)">编辑</button><button type="button" class="small-button reject-button" :disabled="announcementSaving" @click="deleteAnnouncement(item)">删除</button></span></div><p class="announcement-item-content">{{ item.content }}</p></article></div></div></div></div>
-      <div v-if="showCreate" class="modal-backdrop" @click.self="showCreate = false">
-        <div class="modal">
-           <div class="modal-head"><h2>创建群聊</h2><button @click="showCreate = false">×</button></div>
-           <p class="subtle">创建后群内只有你自己，之后可在群内按需邀请其他用户。含自己最多 1000 人。</p>
-           <input v-model="groupName" maxlength="100" placeholder="群聊名称" />
-           <button class="primary" :disabled="conversationBusy || !groupName.trim()" @click="createGroup">{{ conversationBusy ? '处理中…' : '创建群聊' }}</button>
-         </div>
-       </div>
-      <div v-if="showAddUser" class="modal-backdrop" @click.self="showAddUser = false"><div class="modal"><div class="modal-head"><h2>添加用户</h2><button @click="showAddUser = false">×</button></div><p class="subtle">通过用户名或用户账号搜索，点击发送申请后再填写申请信息。</p><input v-model="friendQuery" type="search" placeholder="搜索用户名或账号" aria-label="搜索用户名或账号" /><div class="user-list"><label v-for="person in friendCandidates" :key="person.id"><span class="avatar tiny">{{ person.name.slice(0,1) }}</span><span>{{ person.name }}<small>账号：{{ person.email }}</small></span><button type="button" class="small-button" :disabled="friendBusy" @click="addFriend(person.id)">{{ friendRequestFor(person.id) ? '已发送申请' : friendBusy ? '处理中…' : '发送申请' }}</button></label><p v-if="!friendCandidates.length">没有匹配的用户。</p></div></div></div>
-<div v-if="showRequestComposer" class="modal-backdrop" @click.self="showRequestComposer = false"><div class="modal request-composer"><div class="modal-head"><h2>发送好友申请</h2><button @click="showRequestComposer = false">×</button></div><div class="request-recipient"><span class="avatar tiny">{{ requestTarget?.name?.slice(0,1) }}</span><div><strong>{{ requestTarget?.name }}</strong><small>账号：{{ requestTarget?.email }}</small></div></div><p class="subtle">申请信息可选，填写后点击发送才会提交好友申请。</p><textarea v-model="requestMessage" class="request-message" maxlength="500" placeholder="请输入申请信息（可选）"></textarea><button class="primary" :disabled="friendBusy" @click="sendFriendRequest">{{ friendBusy ? '发送中…' : '发送好友申请' }}</button></div></div>
-      <div v-if="showFriendRequests" class="modal-backdrop" @click.self="showFriendRequests = false"><div class="modal friend-requests-modal"><div class="modal-head"><h2>好友申请</h2><button @click="showFriendRequests = false">×</button></div><section><h3 class="request-section-title">收到的申请</h3><div class="request-list"><div v-for="item in friendRequests.incoming" :key="item.id" class="request-item request-with-avatar"><UserAvatar :user="item.requester" :name="item.requester.name" /><div class="request-main"><strong>{{ item.requester.name }}</strong><small>{{ item.message || '请求添加你为好友' }}</small><time>{{ time(item.created_at) }}</time></div><div class="request-actions"><button class="small-button" :disabled="friendRequestBusy" @click="decideFriendRequest(item.id, 'accept')">同意</button><button class="small-button reject-button" :disabled="friendRequestBusy" @click="decideFriendRequest(item.id, 'reject')">拒绝</button></div></div><p v-if="!friendRequests.incoming.length" class="empty-request">暂无新的好友申请。</p></div></section><section><h3 class="request-section-title">发出的申请</h3><div class="request-list"><div v-for="item in friendRequests.outgoing" :key="item.id" class="request-item request-with-avatar"><UserAvatar :user="item.recipient" :name="item.recipient.name" /><div class="request-main"><strong>{{ item.recipient.name }}</strong><small>{{ item.message || '未填写申请信息' }}</small><time>{{ time(item.updated_at) }}</time></div><span class="request-status" :class="'status-' + item.status">{{ friendRequestStatus(item.status) }}</span></div><p v-if="!friendRequests.outgoing.length" class="empty-request">暂无发出的申请。</p></div></section></div></div>
-            <div v-if="showMembers" class="modal-backdrop" @click.self="closeMembers"><div class="modal member-modal" role="dialog" aria-modal="true" aria-label="群成员列表"><div class="modal-head"><h2>群成员<span class="member-total">{{ memberCount }} 人</span></h2><button @click="closeMembers" aria-label="关闭">×</button></div><p class="subtle">{{ title(current) }} · 你的身份：{{ roleLabel(currentRole) }} · 群成员上限 1000 人{{ current.dismissed ? ' · 该群已解散' : '' }}</p><section v-if="canManageGroupMembers && joinRequests.length" class="join-request-section" aria-label="入群审批"><h3 class="request-section-title">入群审批<span class="member-total">{{ joinRequests.length }}</span></h3><div class="request-list"><div v-for="item in joinRequests" :key="item.id" class="request-item"><div class="request-main"><strong>{{ item.user.name }}</strong><small>{{ item.message || '申请加入群聊' }}</small><time>{{ time(item.created_at) }}</time></div><div class="request-actions"><button type="button" class="small-button" :disabled="joinRequestBusy" @click="decideJoinRequest(item.id, 'accept')">同意</button><button type="button" class="small-button reject-button" :disabled="joinRequestBusy" @click="decideJoinRequest(item.id, 'reject')">拒绝</button></div></div></div></section><div class="member-search"><Search :size="17" aria-hidden="true" /><input v-model="memberQuery" type="search" maxlength="100" placeholder="搜索群成员昵称或账号" aria-label="搜索群成员" /></div><div class="member-list" role="list"><div v-for="person in currentMembers" :key="person.id" class="member-item" role="listitem"><UserAvatar :user="person" :name="person.alias || person.name" size="tiny" /><span class="member-text"><strong>{{ person.alias || person.name }}<span v-if="person.id === me.id" class="member-self">我</span><span v-if="person.role !== 'member'" class="role-badge" :class="'role-' + person.role">{{ roleLabel(person.role) }}</span><span v-if="memberMuted(person)" class="mute-mark" title="已被禁言" aria-label="已被禁言">已禁言</span></strong><small>{{ person.alias && person.alias !== person.name ? person.name + ' · ' : '' }}账号：{{ person.email }}</small></span><span v-if="memberAliasEditable(person) || memberCanBeMuted(person) || memberCanChangeRole(person) || canTransferTo(person) || memberCanBeRemoved(person)" class="member-row-actions"><button type="button" class="small-button" :aria-haspopup="memberMenuID === person.id ? 'menu' : undefined" :aria-expanded="memberMenuID === person.id" @click.stop="toggleMemberMenu(person.id)">管理</button><div v-if="memberMenuID === person.id" class="member-tool-menu" role="menu" @click.stop><button v-if="memberAliasEditable(person)" type="button" role="menuitem" @click="setMemberAlias(person); memberMenuID = ''">群昵称</button><button v-if="memberCanBeMuted(person) && !memberMuted(person)" type="button" role="menuitem" @click="setMemberMute(person, 10); memberMenuID = ''">禁言 10 分钟</button><button v-if="memberCanBeMuted(person) && memberMuted(person)" type="button" role="menuitem" @click="setMemberMute(person, 0); memberMenuID = ''">解除禁言</button><button v-if="memberCanChangeRole(person)" type="button" role="menuitem" @click="changeRole(person, person.role === 'admin' ? 'member' : 'admin'); memberMenuID = ''">{{ person.role === 'admin' ? '取消管理员' : '设为管理员' }}</button><button v-if="canTransferTo(person)" type="button" role="menuitem" @click="transferOwnership(person); memberMenuID = ''">转让群主</button><button v-if="memberCanBeRemoved(person)" type="button" role="menuitem" class="danger" @click="removeMember(person); memberMenuID = ''">移出群聊</button></div></span></div><p v-if="!currentMembers.length" class="empty-member">{{ memberQuery.trim() ? '没有匹配的成员' : '暂无群成员' }}</p></div><div v-if="canManageGroupMembers && !current.dismissed" class="member-settings"><label class="settings-toggle"><input type="checkbox" :checked="current.join_approval" :disabled="groupSettingsBusy" @change="updateGroupSettings({ join_approval: $event.target.checked })" />入群需审批</label><label class="settings-toggle"><input type="checkbox" :checked="current.all_muted" :disabled="groupSettingsBusy" @change="updateGroupSettings({ all_muted: $event.target.checked })" />全员禁言</label><small class="settings-hint">设置立即对全部成员生效</small></div><div class="member-actions"><button class="outline-button" type="button" @click="closeMembers">关闭</button><button v-if="canLeaveGroup" class="outline-button leave-button" type="button" :disabled="groupBusy" @click="leaveGroup">退出群聊</button><button v-if="canInviteMembers && !current.dismissed" class="primary" type="button" :disabled="memberCount >= 1000" @click="inviteFromMembers">{{ memberCount >= 1000 ? '成员已满' : '邀请成员' }}</button><button v-if="canDismissGroup" class="outline-button dismiss-button" type="button" :disabled="groupBusy" @click="dismissGroup">解散群聊</button></div></div></div>
-      <div v-if="showGlobalSearch" class="modal-backdrop" @click.self="closeGlobalSearch"><div class="modal global-search-modal" role="dialog" aria-modal="true" aria-label="全局搜索"><div class="modal-head"><h2>全局搜索</h2><button @click="closeGlobalSearch" aria-label="关闭">×</button></div><p class="subtle">搜索你参与的全部会话，包含系统提示，不包含已撤回的消息。</p><form class="message-search-form" role="search" @submit.prevent="searchAll()"><div class="message-search-field"><Search :size="18" aria-hidden="true" /><input ref="globalInput" v-model="globalQuery" type="search" maxlength="100" placeholder="搜索所有会话的消息" aria-label="全局搜索关键词" /></div><button type="submit" class="primary" :disabled="!globalQuery.trim() || globalBusy">{{ globalBusy ? '搜索中…' : '搜索' }}</button></form><div class="message-search-status" role="status" aria-live="polite"><span v-if="globalBusy">正在搜索…</span><span v-else-if="globalError" class="search-error">{{ globalError }}</span><span v-else-if="!globalStarted">输入关键词后开始搜索。</span><span v-else-if="!globalResults.length">没有找到匹配的消息。</span><span v-else>已找到 {{ globalResults.length }} 条{{ globalHasMore ? '以上' : '' }}匹配消息</span></div><div class="message-search-results" :aria-busy="globalBusy"><button v-for="hit in globalResults" :key="hit.message.id" type="button" class="message-search-result" @click="openGlobalResult(hit)"><span class="search-result-meta"><strong>{{ hit.conversation_name || (hit.conversation_kind === 'direct' ? '私聊' : '群聊') }}</strong><span class="search-result-conversation">{{ hit.conversation_kind === 'group' ? '群聊 · ' + hit.member_count + ' 人' : '私聊' }} · {{ anySender(hit.message.sender_id) }}</span><time :datetime="hit.message.created_at">{{ searchDate(hit.message.created_at) }}</time></span><span class="search-result-content"><template v-for="(part, index) in highlightMatches(hit.message.content, globalQuery)" :key="index"><mark v-if="part.match">{{ part.text }}</mark><template v-else>{{ part.text }}</template></template></span><span class="search-result-action">查看原消息<ArrowRight :size="15" aria-hidden="true" /></span></button><button v-if="globalHasMore && !globalError" type="button" class="older search-more" :disabled="globalBusy" @click="searchAll(true)">{{ globalBusy ? '加载中…' : '加载更多结果' }}</button></div></div></div>
-      <div v-if="showInvite" class="modal-backdrop invite-backdrop" @click.self="showInvite = false">
-        <div class="invite-modal" role="dialog" aria-modal="true" aria-labelledby="invite-title">
-          <header class="invite-head">
-            <div class="invite-head-text">
-              <h2 id="invite-title">邀请成员</h2>
-              <p>{{ current?.name }} · 当前 {{ memberCount }} 人，群上限 1000 人</p>
-            </div>
-            <button type="button" class="invite-close" @click="showInvite = false" aria-label="关闭">×</button>
-          </header>
-
-          <div class="invite-controls">
-            <label class="invite-search">
-              <Search :size="16" aria-hidden="true" />
-              <input v-model="inviteQuery" type="search" maxlength="100" placeholder="搜索用户名或账号" aria-label="搜索要邀请的用户" />
-              <button v-if="inviteQuery" type="button" class="invite-search-clear" title="清除搜索" aria-label="清除搜索" @click.prevent="inviteQuery = ''"><X :size="14" aria-hidden="true" /></button>
-            </label>
-            <div class="invite-index" role="group" aria-label="按首字母筛选">
-              <button type="button" class="invite-letter" :class="{ active: !inviteInitial }" :aria-pressed="!inviteInitial" @click="inviteInitial = ''">全部</button>
-              <button v-for="initial in inviteInitials" :key="initial" type="button" class="invite-letter" :class="{ active: inviteInitial === initial }" :aria-pressed="inviteInitial === initial" @click="chooseInviteInitial(initial)">{{ initial === OTHER_INITIAL ? '其他' : initial }}</button>
-            </div>
-          </div>
-
-          <div v-if="inviteSelectedCount" class="invite-chips">
-            <span class="invite-chips-label">已选 {{ inviteSelectedCount }} 人</span>
-            <div class="invite-chips-list">
-              <button v-for="person in inviteSelectedPeople" :key="person.id" type="button" class="invite-chip" :title="'移出 ' + person.name" @click="toggleInvite(person)">{{ person.name }}<X :size="12" aria-hidden="true" /></button>
-            </div>
-            <button type="button" class="invite-chips-clear" @click="clearInvites">清空</button>
-          </div>
-
-          <div class="invite-list" role="listbox" aria-multiselectable="true" aria-label="可邀请的用户">
-            <div v-for="group in inviteGroups" :key="group.initial" class="invite-group">
-              <div class="invite-group-head">{{ group.initial === OTHER_INITIAL ? '其他' : group.initial }}</div>
-              <button v-for="person in group.people" :key="person.id" type="button" class="invite-row" role="option" :aria-selected="inviteUsers.includes(person.id)" :class="{ selected: inviteUsers.includes(person.id) }" @click="toggleInvite(person)">
-                <span class="avatar tiny">{{ person.name.slice(0,1) }}</span>
-                <span class="invite-row-text"><strong>{{ person.name }}</strong><small>{{ person.email }}</small></span>
-                <span class="invite-check" aria-hidden="true"><Check :size="14" /></span>
-              </button>
-            </div>
-            <div v-if="!inviteVisible.length" class="invite-empty">{{ inviteCandidates.length ? '没有匹配的用户，试试其它关键词或首字母。' : '暂无可邀请的用户。' }}</div>
-          </div>
-
-          <footer class="invite-foot">
-            <div class="invite-foot-info">
-              <span class="invite-foot-count">{{ inviteSelectedCount }}<span> / {{ inviteSummary.remaining }} 可选</span></span>
-              <button type="button" class="invite-link" :disabled="!inviteVisible.length" @click="selectAllInvites">全选当前结果</button>
-            </div>
-            <div class="invite-foot-buttons">
-              <button type="button" class="outline-button" @click="showInvite = false">取消</button>
-              <button class="primary" :disabled="conversationBusy || inviteSummary.disabled" @click="addMembers">{{ conversationBusy ? '邀请中…' : inviteSummary.label }}</button>
-            </div>
-          </footer>
-        </div>
-      </div>
-      <div v-if="showContacts" class="modal-backdrop" @click.self="showContacts = false"><div class="modal contacts-modal" role="dialog" aria-modal="true" aria-label="联系人管理"><div class="modal-head"><h2>联系人管理</h2><button @click="showContacts = false" aria-label="关闭">×</button></div><p class="subtle">维护好友备注、删除好友和黑名单。删除好友不会删除聊天记录，拉黑后不再收到对方私聊。</p><section><h3 class="request-section-title">好友<span class="member-total">{{ friends.length }}</span></h3><div class="request-list"><div v-for="person in sortedFriends" :key="person.id" class="request-item request-with-avatar"><UserAvatar :user="person" :name="person.remark || person.name" /><div class="request-main"><strong>{{ person.remark || person.name }}</strong><small>账号：{{ person.email }}<span v-if="isBlocked(person.id)"> · 已拉黑</span></small></div><span class="request-actions"><template v-if="remarkEditingID === person.id"><input v-model="remarkDraft" class="remark-input" maxlength="50" :aria-label="'备注 ' + person.name" :placeholder="'备注 ' + person.name" @keydown.enter.prevent="saveRemark(person)" /><button type="button" class="small-button" :disabled="contactBusy" @click="saveRemark(person)">保存</button><button type="button" class="small-button" @click="remarkEditingID = ''">取消</button></template><template v-else><button type="button" class="small-button" @click="startRemark(person)">备注</button><button type="button" class="small-button reject-button" :disabled="contactBusy" @click="removeFriend(person)">删除</button><button type="button" class="small-button reject-button" :disabled="contactBusy || isBlocked(person.id)" @click="blockUser(person)">拉黑</button></template></span></div><p v-if="!friends.length" class="empty-request">还没有好友。</p></div></section><section><h3 class="request-section-title">黑名单<span class="member-total">{{ blockedUsers.length }}</span></h3><div class="request-list"><div v-for="person in blockedUsers" :key="person.id" class="request-item request-with-avatar"><UserAvatar :user="person" :name="person.name" /><div class="request-main"><strong>{{ person.name }}</strong><small>账号：{{ person.email }}</small></div><span class="request-actions"><button type="button" class="small-button" :disabled="contactBusy" @click="unblockUser(person)">移出黑名单</button></span></div><p v-if="!blockedUsers.length" class="empty-request">黑名单为空。</p></div></section></div></div>
-      <div v-if="showProfile" class="modal-backdrop" @click.self="showProfile = false">
-        <div class="modal profile-modal" role="dialog" aria-modal="true" aria-label="个人信息">
-          <div class="modal-head"><h2>个人信息</h2><button type="button" @click="showProfile = false" aria-label="关闭"><X :size="20" aria-hidden="true" /></button></div>
-          <div class="profile-header">
-            <UserAvatar :user="me" :name="profileEditing ? profileName : me.name" size="profile-avatar" />
-            <div class="profile-avatar-controls"><h3>{{ me.name }}</h3><p class="profile-account">{{ me.email }}</p>
-              <input ref="avatarInput" class="media-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp,image/avif,image/heic,image/tiff" @change="uploadProfileAvatar" />
-              <div class="profile-avatar-actions"><button class="small-button" type="button" :disabled="profileAvatarBusy" @click="avatarInput?.click()">{{ profileAvatarBusy ? '处理中…' : me.avatar ? '更换头像' : '上传头像' }}</button><button v-if="me.avatar" class="small-button reject-button" type="button" :disabled="profileAvatarBusy" @click="removeProfileAvatar">移除</button></div>
-            </div>
-          </div>
-          <p class="profile-avatar-hint">支持拖动与缩放裁剪 · 原图最大 20 MB</p>
-          <section class="profile-section" aria-label="基本资料">
-            <header class="profile-section-head"><h3>基本资料</h3><button v-if="!profileEditing" class="profile-text-action" type="button" @click="profileEditing = true">编辑资料</button></header>
-            <form v-if="profileEditing" class="profile-edit-form" @submit.prevent="updateProfile">
-              <div class="profile-form"><label>用户名<input v-model="profileName" maxlength="64" autocomplete="name" :disabled="profileBusy" /></label><label>用户账号<input v-model="profileEmail" type="email" maxlength="254" autocomplete="email" :disabled="profileBusy" /></label></div>
-              <div class="profile-actions"><button class="outline-button" type="button" :disabled="profileBusy" @click="profileEditing = false">取消</button><button class="primary" :disabled="profileBusy || !profileName.trim() || !profileEmail.trim()">{{ profileBusy ? '保存中…' : '保存修改' }}</button></div>
-            </form>
-            <dl v-else class="profile-details"><div><dt>用户名</dt><dd>{{ me.name }}</dd></div><div><dt>用户账号</dt><dd>{{ me.email }}</dd></div><div><dt>用户 ID</dt><dd class="profile-user-id">{{ me.id }}</dd></div></dl>
-          </section>
-          <section class="profile-section profile-security" aria-label="账号安全">
-            <header class="profile-section-head"><h3>账号安全</h3></header>
-            <div v-if="!passwordEditing" class="profile-security-row"><div><strong>登录密码</strong><p>定期更新密码，保护你的账号</p></div><button class="profile-text-action" type="button" @click="startPasswordChange">修改密码</button></div>
-            <form v-else class="profile-edit-form" @submit.prevent="changePassword"><div class="profile-form"><label>当前密码<input v-model="currentPassword" type="password" maxlength="72" autocomplete="current-password" :disabled="passwordBusy" /></label><label>新密码<input v-model="newPassword" type="password" minlength="8" maxlength="72" autocomplete="new-password" placeholder="至少 8 位" :disabled="passwordBusy" /></label><label>确认新密码<input v-model="confirmPassword" type="password" minlength="8" maxlength="72" autocomplete="new-password" :disabled="passwordBusy" /></label></div><p class="profile-security-hint">修改后，其他设备需重新登录，当前设备保持登录。</p><div class="profile-actions"><button class="outline-button" type="button" :disabled="passwordBusy" @click="passwordEditing = false">取消</button><button class="primary" :disabled="passwordBusy || !currentPassword || !newPassword || !confirmPassword">{{ passwordBusy ? '修改中…' : '更新密码' }}</button></div></form>
-          </section>
-        </div>
-      </div>
-    </div>
-    <Teleport to="body">
-      <div v-if="me && messageActions.menu && messageActions.menuMessage" :ref="element => messageActions.menuElement = element" class="message-context-menu" role="menu" aria-label="消息操作" :style="{ left: messageActions.menu.x + 'px', top: messageActions.menu.y + 'px' }" @contextmenu.prevent>
-        <div class="reaction-picker" role="group" aria-label="添加表情回应"><button v-for="emoji in REACTION_CHOICES" :key="emoji" type="button" :disabled="reactionBusy" :aria-label="'回应 ' + emoji" @click="toggleReaction(messageActions.menuMessage, emoji); messageActions.closeMenu()">{{ emoji }}</button></div>
-        <button type="button" role="menuitem" @click="messageActions.runMenu('copy')">复制</button>
-        <button type="button" role="menuitem" @click="messageActions.runMenu('reply')">回复</button>
-        <button type="button" role="menuitem" @click="messageActions.runMenu('forward')">转发</button>
-        <button v-if="messageActions.menuMessage?.sender_id !== me.id" type="button" role="menuitem" @click="pokeMember(messageActions.menuMessage.sender_id); messageActions.closeMenu()">拍一拍</button>
-        <button type="button" role="menuitem" @click="messageActions.runMenu('select')">多选</button>
-        <button v-if="messageActions.recallAllowed" type="button" role="menuitem" class="danger" :disabled="sending" @click="messageActions.runMenu('recall')">撤回</button>
-      </div>
-      <div v-if="conversationMenu" :ref="element => conversationMenuElement = element" class="message-context-menu conversation-context-menu" role="menu" aria-label="会话操作" :style="{ left: conversationMenu.x + 'px', top: conversationMenu.y + 'px' }" @contextmenu.prevent>
-        <button type="button" role="menuitem" @click="runConversationMenu('pin')">{{ conversationMenu.pinned ? '取消置顶' : '置顶会话' }}</button>
-        <button type="button" role="menuitem" @click="runConversationMenu('mute')">{{ conversationMenu.muted ? '关闭免打扰' : '消息免打扰' }}</button>
-        <button type="button" role="menuitem" class="danger" @click="runConversationMenu('delete')">删除会话</button>
-      </div>
-      <div v-if="me && messageActions.forwardQueue.length" class="modal-backdrop forward-backdrop" @click.self="messageActions.closeForward">
-        <form class="modal forward-modal" role="dialog" aria-modal="true" aria-label="转发消息" @submit.prevent="messageActions.confirmForward">
-          <div class="modal-head"><h2>转发消息</h2><button type="button" class="icon-button" aria-label="关闭转发" :disabled="messageActions.forwardBusy" @click="messageActions.closeForward">×</button></div>
-          <p class="subtle">将 {{ messageActions.forwardQueue.length }} 条消息逐条转发到所选会话，图片和附件一同转发。</p>
-          <label>选择会话<select v-model="messageActions.forwardTarget" :disabled="messageActions.forwardBusy || messageActions.forwardLocked" required aria-label="转发到会话"><option disabled value="">请选择会话</option><option v-for="conversation in messageActions.forwardTargets" :key="conversation.id" :value="conversation.id">{{ title(conversation) }}</option></select></label>
-          <p v-if="!messageActions.forwardTargets.length" class="subtle">暂无可转发的会话，请先打开好友聊天或创建群聊。</p>
-          <p v-if="messageActions.forwardError" class="forward-error" role="alert">{{ messageActions.forwardError }}</p>
-          <div class="profile-actions"><button type="button" class="outline-button" :disabled="messageActions.forwardBusy" @click="messageActions.closeForward">取消</button><button type="submit" class="primary" :disabled="!messageActions.forwardTarget || messageActions.forwardBusy">{{ messageActions.forwardBusy ? '转发中…' : messageActions.forwardError ? '重试剩余消息' : '确认转发' }}</button></div>
-        </form>
-      </div>
-    </Teleport>
-    <div v-if="error" class="toast" role="alert">{{ error }}</div>`
+`,
+  conversationDetails,
+  threadWindow,
+  announcementDialog,
+  createGroupDialog,
+  friendDialogs,
+  memberDialog,
+  globalSearchDialog,
+  inviteDialog,
+  contactsDialog,
+  profileDialog,
+  `    </div>
+`,
+  actionOverlays,
+  errorToast
+].join('')
