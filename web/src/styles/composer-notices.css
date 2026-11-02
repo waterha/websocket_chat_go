@@ -1,0 +1,4 @@
+/* Typing and mute notices above the composer */
+.typing-status, .muted-notice { margin: 0 0 6px; color: var(--muted); font-size: 12px; }
+.muted-notice { color: var(--accent-dark, #8f4735); }
+
