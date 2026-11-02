@@ -1,0 +1,3 @@
+/* 表情弹出面板锚定在工具栏下方 */
+.emoji-picker-panel { top: 40px; left: 4px; }
+
