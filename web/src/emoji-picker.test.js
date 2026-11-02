@@ -4,10 +4,15 @@ import { readFileSync } from 'node:fs'
 import { JSDOM } from 'jsdom'
 import { installEmojiPicker } from './emoji-picker.js'
 
+// jsdom does not synchronously fetch CSS imports from an inline style.
+function readStyles(url) {
+  return readFileSync(url, 'utf8').replace(/@import\s+["']([^"']+)["'];/g, (_, path) => readStyles(new URL(path, url)))
+}
+
 test('emoji picker stays hidden until opened and inserts an emoji at the saved caret', () => {
   const dom = new JSDOM('<form class="composer"><div contenteditable="true">AB</div><div><span>Send</span></div></form>')
   const style = dom.window.document.createElement('style')
-  style.textContent = readFileSync(new URL('./style.css', import.meta.url), 'utf8')
+  style.textContent = readStyles(new URL('./style.css', import.meta.url))
   dom.window.document.head.append(style)
   const originalDocument = globalThis.document
   const originalWindow = globalThis.window
