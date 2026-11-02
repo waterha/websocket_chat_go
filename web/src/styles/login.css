@@ -1,0 +1,7 @@
+/* 登录窗口：微信式常规矩形界面，logo + 标语 + 表单 + 大按钮 */
+.login-card { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; width: 100%; max-width: none; height: auto; flex: 1; padding: 30px 36px; text-align: center; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.login-logo { display: grid; place-items: center; width: 74px; height: 74px; border-radius: 22px; color: #fff; font-size: 30px; background: radial-gradient(circle at 32% 28%, var(--theme-selected, #eba97e) 0, var(--accent) 58%, var(--accent-dark, #8f4735) 135%); box-shadow: 0 10px 22px rgba(143,71,53,.28); }
+.login-card h1 { margin: 2px 0 8px; font-size: 16px; line-height: 1.4; }
+.login-card form { gap: 10px; width: min(240px, 100%); }
+.login-card input { padding: 10px 12px; font-size: 13px; }
+.login-card .primary { margin-top: 2px; padding: 11px 12px; font-size: 14px; }
