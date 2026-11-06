@@ -1,3 +1,6 @@
+import { useConversationDrafts } from './conversation-drafts.js'
+import { useMessageNotifications } from './message-notifications.js'
+import './message-notifications.css'
 import { useComposerUndo } from './composables/use-composer-undo.js'
 import { useGlobalSearch } from './composables/use-global-search.js'
 import { useHistorySearch } from './composables/use-history-search.js'
@@ -39,13 +42,14 @@ import { GroupDirectory } from './group-directory.js'
 import { GroupFiles } from './group-files.js'
 import { useVoice } from './voice.js'
 import { UserAvatar } from './user-avatar.js'
+import { FavoritesPanel, useFavorites } from './favorites.js'
 import './group-directory.css'
 import './style.css'
 import './desktop.css'
 
 
 createApp({
-  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Scissors, Download, Check, Pin, BellOff, Info, ChevronRight, ChevronDown, Clock3, ImagePlus, MoreHorizontal, MessageCircle, UserPlus, Bell, Contact, UsersRound, DesktopSettings, AppearanceSettings, UserAvatar, GroupDirectory, GroupFiles, LayoutDivider },
+  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Scissors, Download, Check, Pin, BellOff, Info, ChevronRight, ChevronDown, Clock3, ImagePlus, MoreHorizontal, MessageCircle, UserPlus, Bell, Contact, UsersRound, DesktopSettings, AppearanceSettings, UserAvatar, FavoritesPanel, GroupDirectory, GroupFiles, LayoutDivider },
   setup() {
     applyTheme(loadTheme())
     const showAppearance = ref(false)
@@ -472,6 +476,8 @@ createApp({
     }
     const time = value => new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     const preview = item => {
+      const draftPreview = conversationDrafts.draftPreview(item.id)
+      if (draftPreview) return draftPreview
       const message = latestMessage(item)
       if (!message) return '暂无消息'
       const label = mediaPreview(message)
@@ -1002,7 +1008,41 @@ createApp({
       } catch (cause) { if (version === epoch) showError(cause) }
       finally { if (version === epoch) sending.value = false }
     }
-    const messageActions = useMessageActions({ messages, threadRoot, threadReplies, active, me, current, conversations, startReply, recallMessage, syncConversation, showError })
+    function captureConversationDraft() {
+      const pieces = draftArea.value ? collectPieces(draftArea.value) : [{ type: 'text', text: draft.value }]
+      return {
+        blocks: pieces.map(piece => piece.type === 'image' ? { type: 'image', media_id: piece.mediaId } : { type: 'text', text: piece.text }),
+        images: composerImages.value, attachment: attachment.value,
+      }
+    }
+    function clearConversationDraft() {
+      clearAttachment()
+      clearComposerImages()
+      draft.value = ''
+      if (draftArea.value) draftArea.value.textContent = ''
+      resetComposerUndo()
+    }
+    function restoreConversationDraft(snapshot) {
+      composerImages.value = snapshot.images
+      attachment.value = snapshot.attachment
+      previewFile.value = snapshot.attachment && snapshot.attachment.media_type !== 'file' ? mediaURL(snapshot.attachment.id) : null
+      draft.value = snapshot.blocks.filter(block => block.type === 'text').map(block => block.text).join('')
+      if (draftArea.value) renderInto(draftArea.value, snapshot.blocks, snapshot.images)
+      resetComposerUndo()
+    }
+    const conversationDrafts = useConversationDrafts({
+      active, userID: computed(() => me.value?.id), storage: saved,
+      sources: [draft, composerImages, attachment], capture: captureConversationDraft,
+      clear: clearConversationDraft, restore: restoreConversationDraft, showError,
+    })
+    const messageNotifications = useMessageNotifications({
+      me, conversations, title, showError,
+      onOpen: async id => { if (active.value !== id || !chatVisible.value) await select(id) },
+    })
+    const showFavorites = ref(false)
+    const favorites = useFavorites()
+    const { notices: messageNotices, notificationPermission, openNotice, dismissNotice, enableSystemNotifications } = messageNotifications
+    const messageActions = useMessageActions({ onFavorite: favorites.save, messages, threadRoot, threadReplies, active, me, current, conversations, startReply, recallMessage, syncConversation, showError })
     const isGenericFile = computed(() => attachment.value?.media_type === 'file')
     async function openGlobalResult(hit) {
       const id = hit.message.conversation_id
@@ -1034,6 +1074,7 @@ createApp({
         const [list, people, friendList, requestList] = await Promise.all([api('/conversations'), api('/users'), api('/friends'), api('/friends/requests')])
         if (version !== epoch || !me.value) return
         conversations.value = list
+        messageNotifications.prime(list)
         users.value = people
         friends.value = friendList
         friendRequests.value = requestList
@@ -1072,6 +1113,7 @@ createApp({
           const merged = appendPage(existing, page, id)
           cache.set(id, merged)
           cacheVersion.value++
+          messageNotifications.receive(id, page.messages)
                      if (page.messages.some(message => message.thread_root_id)) await refreshThreadSummaries(id, page.messages)
            const pending = pendingStore?.get(id)
           if (pending && page.messages.some(message => message.sender_id === me.value.id && message.client_msg_id === pending.client_msg_id)) {
@@ -1106,7 +1148,7 @@ createApp({
       if (version === epoch && me.value) await catchUp(cursors)
     }
     const searchDate = value => new Date(value).toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-    watch([active, me], () => {
+    watch([active, () => me.value?.id], () => {
       messageActions.cancelSelection()
       messageActions.closeMenu()
       messageActions.closeForward()
@@ -1219,12 +1261,11 @@ createApp({
     }
     async function logout() {
       pendingStore?.forget()
-      clearAttachment()
       epoch++; me.value = null; connected.value = false
       clearTimeout(reconnectTimer); requests?.close(); socket?.close(); socket = null
       cache.clear(); syncing.clear(); refreshTask = null; pendingStore = null; pendingSend.value = null; unreadCounts.value = {}
       active.value = null; messages.value = []; conversations.value = []; users.value = []; friends.value = []; draft.value = ''
-      showCreate.value = false; showAddUser.value = false; showInvite.value = false; showSettings.value = false; showProfile.value = false; showAppearance.value = false; showFriendRequests.value = false; showRequestComposer.value = false; showContacts.value = false; chatInfoOpen.value = false; sendMenuOpen.value = false; memberSearchOpen.value = false; sidebarMoreOpen.value = false; chatMoreOpen.value = false; requestTarget.value = null; friendRequests.value = { incoming: [], outgoing: [] }; blockedUsers.value = []; joinRequests.value = []; typingUsers.value = {}; conversationMenu.value = null; directoryQuery.value = ''; conversationFilter.value = 'current'
+      showCreate.value = false; showAddUser.value = false; showInvite.value = false; showSettings.value = false; showProfile.value = false; showFavorites.value = false; showAppearance.value = false; showFriendRequests.value = false; showRequestComposer.value = false; showContacts.value = false; chatInfoOpen.value = false; sendMenuOpen.value = false; memberSearchOpen.value = false; sidebarMoreOpen.value = false; chatMoreOpen.value = false; requestTarget.value = null; friendRequests.value = { incoming: [], outgoing: [] }; blockedUsers.value = []; joinRequests.value = []; typingUsers.value = {}; conversationMenu.value = null; directoryQuery.value = ''; conversationFilter.value = 'current'
       try { await api('/auth/logout', { method: 'POST' }) } catch (cause) { showError(cause) }
     }
     function openCreate() {
@@ -1344,11 +1385,13 @@ createApp({
       const id = active.value
       const version = epoch
       const media = attachment.value
+      const draftOwner = me.value?.id
       // The rich region is turned into ordered blocks, so an image and the text around
       // it travel together in the order they were written.
       syncDraftFromDom()
       const blocks = media ? [] : composerBlocks()
       const content = draft.value.trim()
+      const sentDraft = captureConversationDraft()
       if ((!blocks.length && !content && !media) || !id || sending.value || uploadBusy.value) return
       sending.value = true
       try {
@@ -1371,6 +1414,7 @@ createApp({
         } else await api(`/conversations/${id}/messages`, { method: 'POST', body: JSON.stringify(payload) })
         if (version !== epoch) return
         pendingStore.clear(id, input.client_msg_id)
+        conversationDrafts.clearSent(draftOwner, id, sentDraft)
         if (pendingSend.value?.client_msg_id === input.client_msg_id) pendingSend.value = null
         // The composer is emptied only if it still holds what was just sent, so text
         // typed during the round trip is not lost.
@@ -1646,7 +1690,7 @@ createApp({
     })
     const removeDesktopDownloads = installDesktopDownloads(showError)
     onUnmounted(() => { voice.dispose(); cancelFileUpload(); screenshot.dispose(); removeDesktopDownloads(); document.getElementById('app')?.removeEventListener('click', onImageLinkClick); resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearInterval(typingTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); document.removeEventListener('pointerdown', onConversationMenuOutside) })
-    return { showAppearance, historyMemberQuery, historyMemberOptions, voiceEnabled, voiceState, voiceSeconds, toggleVoice, cancelVoice: voice.cancel, fileInput, openFilePicker, cancelFileUpload, uploadName, searchSender, searchType, searchStart, searchEnd, clearSearchFilters, historyMessagePreview, startScreenshot: screenshot.start, profileAvatarBusy, avatarInput, uploadProfileAvatar, removeProfileAvatar, onGroupJoined, openGroupDirectory, groupDirectory, isDesktop, openServerSettings, sidebarMoreOpen, chatMoreOpen, toggleSidebarMore, toggleChatMore, sendKeyMode, sendKeyHint, setSendKey, sendMenuOpen, closeConversation, memberSearchOpen, toggleMemberSearch, preferenceBusy, memberByID, conversationAvatar, headMember, chatInfoOpen, dayDivider, dayLabel, pokeMember, startDirectRemark, clearLocalHistory, UserAvatar, chatHeadMeta, memberMenuID, toggleMemberMenu, messageActions, REACTION_CHOICES, reactionMine, toggleReaction, reactionBusy, typingLabel, mutedHere, dismissedHere, readTicks, showContacts, contactBusy, remarkEditingID, remarkDraft, blockedUsers, isBlocked, openContacts, startRemark, saveRemark, removeFriend, blockUser, unblockUser, conversationMenu, conversationMenuElement, openConversationMenu, closeConversationMenu, runConversationMenu, deleteConversation, joinRequests, joinRequestBusy, decideJoinRequest, updateGroupSettings, groupSettingsBusy, canDismissGroup, dismissGroup, setMemberAlias, setMemberMute, memberMuted, memberCanBeMuted, memberAliasEditable, groupToolBusy, showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, hasThread, threadPreview, threadLabel, hiddenReplyCount, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, inviteQuery, inviteInitial, inviteVisible, inviteGroups, inviteInitials, inviteSummary, inviteSelectedCount, inviteSelectedPeople, chooseInviteInitial, toggleInvite, selectAllInvites, clearInvites, resetInviteFilters, OTHER_INITIAL, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, discardPending, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, composerImages, composerHasContent, removeComposerImage, clearComposerImages, syncDraftFromDom, onComposerInput, onComposerKeydown, onComposerClick, onComposerBlur, restorePending, dragging, onComposerPaste, onDragOver, onDragLeave, onDrop, draftArea, startReply, replyPreview, replyAuthor, bodyOf, segmentsOf, usesBlocks, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
+    return { showFavorites, messageNotices, notificationPermission, openNotice, dismissNotice, enableSystemNotifications, showAppearance, historyMemberQuery, historyMemberOptions, voiceEnabled, voiceState, voiceSeconds, toggleVoice, cancelVoice: voice.cancel, fileInput, openFilePicker, cancelFileUpload, uploadName, searchSender, searchType, searchStart, searchEnd, clearSearchFilters, historyMessagePreview, startScreenshot: screenshot.start, profileAvatarBusy, avatarInput, uploadProfileAvatar, removeProfileAvatar, onGroupJoined, openGroupDirectory, groupDirectory, isDesktop, openServerSettings, sidebarMoreOpen, chatMoreOpen, toggleSidebarMore, toggleChatMore, sendKeyMode, sendKeyHint, setSendKey, sendMenuOpen, closeConversation, memberSearchOpen, toggleMemberSearch, preferenceBusy, memberByID, conversationAvatar, headMember, chatInfoOpen, dayDivider, dayLabel, pokeMember, startDirectRemark, clearLocalHistory, UserAvatar, chatHeadMeta, memberMenuID, toggleMemberMenu, messageActions, REACTION_CHOICES, reactionMine, toggleReaction, reactionBusy, typingLabel, mutedHere, dismissedHere, readTicks, showContacts, contactBusy, remarkEditingID, remarkDraft, blockedUsers, isBlocked, openContacts, startRemark, saveRemark, removeFriend, blockUser, unblockUser, conversationMenu, conversationMenuElement, openConversationMenu, closeConversationMenu, runConversationMenu, deleteConversation, joinRequests, joinRequestBusy, decideJoinRequest, updateGroupSettings, groupSettingsBusy, canDismissGroup, dismissGroup, setMemberAlias, setMemberMute, memberMuted, memberCanBeMuted, memberAliasEditable, groupToolBusy, showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, hasThread, threadPreview, threadLabel, hiddenReplyCount, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, inviteQuery, inviteInitial, inviteVisible, inviteGroups, inviteInitials, inviteSummary, inviteSelectedCount, inviteSelectedPeople, chooseInviteInitial, toggleInvite, selectAllInvites, clearInvites, resetInviteFilters, OTHER_INITIAL, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, discardPending, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, composerImages, composerHasContent, removeComposerImage, clearComposerImages, syncDraftFromDom, onComposerInput, onComposerKeydown, onComposerClick, onComposerBlur, restorePending, dragging, onComposerPaste, onDragOver, onDragLeave, onDrop, draftArea, startReply, replyPreview, replyAuthor, bodyOf, segmentsOf, usesBlocks, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
   },
   template,
 }).mount('#app')
