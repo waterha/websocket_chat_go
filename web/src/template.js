@@ -1,3 +1,4 @@
+import messageNotifications from './templates/message-notifications.js'
 import settings from './templates/settings.js'
 import authentication from './templates/authentication.js'
 import conversationSidebar from './templates/conversation-sidebar.js'
@@ -51,5 +52,6 @@ export const template = [
   `    </div>
 `,
   actionOverlays,
+  messageNotifications,
   errorToast
 ].join('')
