@@ -19,13 +19,14 @@ type Media struct {
 // is kept so replies stay readable even when the original is long or later
 // recalled.
 type ReplyRef struct {
-	ID        string `json:"id"`
-	Seq       int64  `json:"seq"`
-	SenderID  string `json:"sender_id"`
-	Kind      string `json:"kind"`
-	Excerpt   string `json:"excerpt"`
-	Recalled  bool   `json:"recalled"`
-	MediaType string `json:"media_type,omitempty"`
+	SenderName string `json:"sender_name,omitempty"`
+	ID         string `json:"id"`
+	Seq        int64  `json:"seq"`
+	SenderID   string `json:"sender_id"`
+	Kind       string `json:"kind"`
+	Excerpt    string `json:"excerpt"`
+	Recalled   bool   `json:"recalled"`
+	MediaType  string `json:"media_type,omitempty"`
 }
 
 // ThreadSummary lets the main chat view show a compact preview under a message
