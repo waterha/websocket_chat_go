@@ -93,7 +93,7 @@ test('messages have no inline replies and right click opens an in-viewport menu'
   assert.equal(document.querySelector('.thread-summary'), null)
   assert.equal(menu(), null)
   await rightClick()
-  assert.deepEqual([...menu().querySelectorAll(':scope > button')].map(button => button.textContent), ['复制', '回复', '转发', '多选', '撤回'])
+  assert.deepEqual([...menu().querySelectorAll(':scope > button')].map(button => button.textContent), ['复制', '回复', '收藏', '转发', '多选', '撤回'])
   assert.ok(menu().querySelectorAll('.reaction-picker button').length >= 6)
   assert.ok(parseFloat(menu().style.left) <= dom.window.innerWidth - 8)
   assert.ok(parseFloat(menu().style.top) <= dom.window.innerHeight - 8)
