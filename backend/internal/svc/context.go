@@ -21,6 +21,7 @@ type ServiceContext struct {
 	Redis     *redis.Client
 	Auth      *logic.Auth
 	Chat      *logic.Chat
+	Favorites *logic.FavoriteService
 	Media     *logic.MediaService
 	Presence  *logic.Presence
 	Hub       *realtime.Hub
@@ -67,18 +68,34 @@ func New(ctx context.Context, settings config.Config) (*ServiceContext, error) {
 	}
 	return &ServiceContext{
 		Config: settings, Store: store, Redis: redisClient,
-		Auth:     &logic.Auth{Store: store, Limiter: &logic.Limiter{Redis: redisClient}},
-		Chat:     &logic.Chat{Store: store},
-		Media:    &logic.MediaService{Store: store, Files: files},
-		Presence: &logic.Presence{Redis: redisClient},
-		Hub:      hub,
+		Auth:      &logic.Auth{Store: store, Limiter: &logic.Limiter{Redis: redisClient}},
+		Chat:      &logic.Chat{Store: store},
+		Media:     &logic.MediaService{Store: store, Files: files},
+		Favorites: &logic.FavoriteService{Store: store, Files: files},
+		Presence:  &logic.Presence{Redis: redisClient},
+		Hub:       hub,
 		Broadcast: &realtime.Broadcast{Publisher: redisClient, Subscriber: subscriber, Hub: hub,
 			InstanceID: instanceID, Channel: realtime.DefaultBroadcastChannel},
 	}, nil
 }
 
 func (services *ServiceContext) Start(ctx context.Context) {
-	services.workers.Add(4)
+	services.workers.Add(5)
+	go func() {
+		defer services.workers.Done()
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			attempt, cancel := context.WithTimeout(ctx, 30*time.Second)
+			_ = services.Favorites.Clean(attempt)
+			cancel()
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
 	go func() {
 		defer services.workers.Done()
 		(&realtime.Dispatcher{Store: services.Store, Hub: services.Hub, Broadcast: services.Broadcast}).Run(ctx)
