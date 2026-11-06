@@ -62,8 +62,20 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | GET | `/conversations/{id}/messages/{seq}/delivery` | 仅消息发送者可查：返回其他成员中至少一台设备确认到该序号的人数、其他成员总数及查询时间；找不到或无权查看返回 404 |
 | GET | `/devices/{device_id}/cursors` | 当前设备对每个会话的 `conversation_id,device_id,received_seq,last_seq`；用最新序号对账 |
 | POST | `/presence` | `{"user_ids":["用户ID"]}`（最多 1000 个）返回 `{"online":{"用户ID":true}}`；仅表示该用户当前是否有活动连接 |
+| POST | `/favorites` | `{"conversation_id":"...","message_id":"..."}`；服务端从可读的非撤回、非系统原消息捕获完整快照并返回 Favorite；同用户同消息幂等 |
+| GET | `/favorites?before_id=...&limit=30` | 当前用户私有收藏，按 `saved_at,id` 倒序 keyset 返回 `favorites,has_more,next_before_id` |
+| DELETE | `/favorites/{id}` | 删除当前用户收藏并安排其私有附件字节清理；成功 204 |
+| GET | `/favorites/{id}/media/{media_id}` | 仅收藏本人可读的服务端附件快照；媒体 ID 必须来自快照消息，文件以 attachment 下载且不暴露 storage key |
 
 `client_msg_id` 长度 8–100，同一发送者全局唯一；重复提交相同会话及内容返回原消息，内容或会话不同返回 409。`seq` 在单个会话内连续；未提交的事务不会消耗序号。游标只前进；超过会话最新序号会返回 400。所有历史与同步接口都检查会话成员资格。`received_seq` 是客户端声明已经连续处理到该位置的应用层接收确认，并**不是**服务端写入网络成功或用户已读；不得跳过缺失序号确认。
+
+## 消息收藏
+
+`POST /favorites` 只接受 `conversation_id,message_id`，新建和幂等重复均返回 201。服务端验证当前成员资格、源会话和消息，并与撤回/离群使用同序锁。不存在或无读取权返回 404；新收藏系统或已撤回消息返回 400 `cannot_favorite`。额外客户端 HTML、内容或媒体字段返回 400 `invalid_json`。
+
+Favorite 为 `{"id":"...","message":标准Message快照,"sender_name":"...","sender_avatar":"可为空字符串","conversation_name":"...","conversation_kind":"group|direct","saved_at":"RFC3339时间","is_own":true}`。快照保存原文与换行、blocks 原序、引用与引用作者 `reply.sender_name`、发送者和创建时间，`is_own` 表示原消息是否由收藏本人发送。重复收藏返回首次快照与首次创建时间。收藏独立于原消息后续撤回、重命名、离群；附件字节复制到私有存储，下载权限只检查收藏本人，不放宽标准 `/media` 权限。
+
+列表 `limit` 默认 30、范围 1–100，越界或非整数返回 400 `invalid_limit`。`before_id` 使用上一页 `next_before_id`，由服务端解析本人的 `(saved_at,id)`，按该二元组严格倒序分页；不存在或他人的游标返回空页。空页固定 `favorites:[],has_more:false,next_before_id:""`。`saved_at` 为首次收藏创建时间。删除返回 204，非本人或未知收藏返回 404；私有文件删除失败进入持久化队列由后台重试。媒体只从原消息的 `media_id` 与 blocks 捕获，同一媒体只复制一次；generic file（含 SVG）为附件下载，已允许的图片/视频/音频类型才可内联，响应 `nosniff` 且永不返回 storage key。
 
 ## 会话消息搜索
 
