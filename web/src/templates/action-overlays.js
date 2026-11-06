@@ -4,6 +4,7 @@ export default `    <Teleport to="body">
         <div class="reaction-picker" role="group" aria-label="添加表情回应"><button v-for="emoji in REACTION_CHOICES" :key="emoji" type="button" :disabled="reactionBusy" :aria-label="'回应 ' + emoji" @click="toggleReaction(messageActions.menuMessage, emoji); messageActions.closeMenu()">{{ emoji }}</button></div>
         <button type="button" role="menuitem" @click="messageActions.runMenu('copy')">复制</button>
         <button type="button" role="menuitem" @click="messageActions.runMenu('reply')">回复</button>
+        <button type="button" role="menuitem" :disabled="!!messageActions.favoriteBusy" @click="messageActions.runMenu('favorite')">{{ messageActions.favoriteBusy === messageActions.menuMessage?.id ? '收藏中…' : '收藏' }}</button>
         <button type="button" role="menuitem" @click="messageActions.runMenu('forward')">转发</button>
         <button v-if="messageActions.menuMessage?.sender_id !== me.id" type="button" role="menuitem" @click="pokeMember(messageActions.menuMessage.sender_id); messageActions.closeMenu()">拍一拍</button>
         <button type="button" role="menuitem" @click="messageActions.runMenu('select')">多选</button>
@@ -24,5 +25,7 @@ export default `    <Teleport to="body">
           <div class="profile-actions"><button type="button" class="outline-button" :disabled="messageActions.forwardBusy" @click="messageActions.closeForward">取消</button><button type="submit" class="primary" :disabled="!messageActions.forwardTarget || messageActions.forwardBusy">{{ messageActions.forwardBusy ? '转发中…' : messageActions.forwardError ? '重试剩余消息' : '确认转发' }}</button></div>
         </form>
       </div>
+      <FavoritesPanel v-if="me" v-model:open="showFavorites" :user-i-d="me.id" />
+      <p v-if="messageActions.favoriteNotice || messageActions.favoriteError" class="favorite-feedback" :role="messageActions.favoriteError ? 'alert' : 'status'">{{ messageActions.favoriteError || messageActions.favoriteNotice }}</p>
     </Teleport>
 `
