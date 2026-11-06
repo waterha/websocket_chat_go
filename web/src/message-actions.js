@@ -55,7 +55,12 @@ export async function prepareForward(message, conversationID, clientMsgID = cryp
   return payload
 }
 
-export function useMessageActions({ messages, threadRoot, threadReplies, active, me, current, conversations, startReply, recallMessage, syncConversation, showError }) {
+export function useMessageActions({ messages, threadRoot, threadReplies, active, me, current, conversations, startReply, recallMessage, syncConversation, showError, onFavorite }) {
+  const favoriteBusy = ref('')
+  const favoriteNotice = ref('')
+  const favoriteError = ref('')
+  let favoriteVersion = 0
+  let favoriteTimer
   const menu = ref(null)
   const menuElement = ref(null)
   const menuNow = ref(Date.now())
@@ -194,8 +199,33 @@ export function useMessageActions({ messages, threadRoot, threadReplies, active,
     } finally { if (version === forwardVersion) forwardBusy.value = false }
   }
 
+  async function saveFavorite(item) {
+    if (!isActionableMessage(item) || favoriteBusy.value) return
+    const version = ++favoriteVersion
+    favoriteBusy.value = item.id
+    favoriteNotice.value = ''; favoriteError.value = ''
+    clearTimeout(favoriteTimer)
+    try {
+      if (!onFavorite) throw new Error('收藏功能暂不可用，请刷新页面')
+      await onFavorite(item, item.conversation_id || active.value)
+      if (version !== favoriteVersion) return
+      favoriteNotice.value = '已收藏'
+      closeMenu()
+    } catch (cause) {
+      if (version !== favoriteVersion) return
+      favoriteError.value = cause.message || '收藏失败，请重试'
+      closeMenu()
+    } finally {
+      if (version === favoriteVersion) {
+        favoriteBusy.value = ''
+        favoriteTimer = setTimeout(() => { favoriteNotice.value = ''; favoriteError.value = '' }, 4500)
+      }
+    }
+  }
+
   function runMenu(action) {
     const item = menuMessage.value
+    if (action === 'favorite') { saveFavorite(item); return }
     const allowed = recallAllowed.value
     closeMenu()
     if (!item) return
@@ -225,6 +255,9 @@ export function useMessageActions({ messages, threadRoot, threadReplies, active,
   }
 
   function reset() {
+    favoriteVersion++
+    clearTimeout(favoriteTimer)
+    favoriteBusy.value = ''; favoriteNotice.value = ''; favoriteError.value = ''
     closeMenu()
     cancelSelection()
     forwardBusy.value = false
@@ -246,5 +279,5 @@ export function useMessageActions({ messages, threadRoot, threadReplies, active,
     window.removeEventListener('resize', closeMenu)
   })
 
-  return reactive({ menu, menuElement, menuMessage, recallAllowed, selectionMode, selectedIDs, selected, forwardQueue, forwardTarget, forwardBusy, forwardError, forwardLocked, forwardTargets, openMenu, closeMenu, runMenu, toggleSelected, onMessageClick, cancelSelection, copyMessages, openForward, closeForward, confirmForward })
+  return reactive({ favoriteBusy, favoriteNotice, favoriteError, saveFavorite, menu, menuElement, menuMessage, recallAllowed, selectionMode, selectedIDs, selected, forwardQueue, forwardTarget, forwardBusy, forwardError, forwardLocked, forwardTargets, openMenu, closeMenu, runMenu, toggleSelected, onMessageClick, cancelSelection, copyMessages, openForward, closeForward, confirmForward })
 }
