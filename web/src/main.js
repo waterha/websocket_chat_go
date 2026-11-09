@@ -1037,6 +1037,7 @@ createApp({
     })
     const messageNotifications = useMessageNotifications({
       me, conversations, title, showError,
+      isViewingConversation: id => active.value === id && chatVisible.value && !showSearch.value,
       onOpen: async id => { if (active.value !== id || !chatVisible.value) await select(id) },
     })
     const showFavorites = ref(false)
