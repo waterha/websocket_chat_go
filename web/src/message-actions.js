@@ -1,4 +1,5 @@
 import { ref, computed, reactive, nextTick, watch, onMounted, onUnmounted } from 'vue/dist/vue.esm-bundler.js'
+import { stickerCandidate } from './stickers.js'
 import { api, uploadMedia } from './api.js'
 import { mediaURL } from './media.js'
 import { hasBlocks, messageSegments } from './composer-blocks.js'
@@ -55,7 +56,8 @@ export async function prepareForward(message, conversationID, clientMsgID = cryp
   return payload
 }
 
-export function useMessageActions({ messages, threadRoot, threadReplies, active, me, current, conversations, startReply, recallMessage, syncConversation, showError, onFavorite }) {
+export function useMessageActions({ messages, threadRoot, threadReplies, active, me, current, conversations, startReply, recallMessage, syncConversation, showError, onFavorite, onAddSticker }) {
+  const stickerBusy = ref('')
   const favoriteBusy = ref('')
   const favoriteNotice = ref('')
   const favoriteError = ref('')
@@ -79,6 +81,7 @@ export function useMessageActions({ messages, threadRoot, threadReplies, active,
     const item = available.value.get(menu.value?.id)
     return isActionableMessage(item) ? item : null
   })
+  const canAddSticker = computed(() => Boolean(stickerCandidate(menuMessage.value, menu.value?.stickerMediaID)))
   const selected = computed(() => [...available.value.values()].filter(item => selectedIDs.value.includes(item.id) && isActionableMessage(item)).sort((left, right) => left.seq - right.seq))
   const recallAllowed = computed(() => Boolean(menuMessage.value)
     && (menuMessage.value.sender_id !== me.value?.id || Number.isFinite(Date.parse(menuMessage.value.created_at)))
@@ -94,7 +97,10 @@ export function useMessageActions({ messages, threadRoot, threadReplies, active,
     closeMenu()
     if (!isActionableMessage(item)) return
     menuNow.value = Date.now()
-    const opened = { id: item.id, x: event.clientX || 8, y: event.clientY || 8 }
+    const imageLink = event.target?.closest?.('a.block-image, a.media-item')
+    const href = imageLink?.getAttribute('href')
+    const selectedImage = messageSegments(item).find(segment => segment.type === 'image' && href === mediaURL(segment.mediaId))
+    const opened = { id: item.id, x: event.clientX || 8, y: event.clientY || 8, stickerMediaID: selectedImage?.mediaId || '' }
     menu.value = opened
     if (item.sender_id === me.value?.id && recallAllowed.value) {
       recallTimer = setTimeout(() => { menuNow.value = Date.now() }, Math.max(0, Date.parse(item.created_at) + RECALL_WINDOW_MS - Date.now() + 1))
@@ -200,7 +206,7 @@ export function useMessageActions({ messages, threadRoot, threadReplies, active,
   }
 
   async function saveFavorite(item) {
-    if (!isActionableMessage(item) || favoriteBusy.value) return
+    if (!isActionableMessage(item) || favoriteBusy.value || stickerBusy.value) return
     const version = ++favoriteVersion
     favoriteBusy.value = item.id
     favoriteNotice.value = ''; favoriteError.value = ''
@@ -223,8 +229,34 @@ export function useMessageActions({ messages, threadRoot, threadReplies, active,
     }
   }
 
+  async function addSticker(item) {
+    const mediaID = menu.value?.stickerMediaID || ''
+    if (!stickerCandidate(item, mediaID) || stickerBusy.value || favoriteBusy.value) return
+    const version = ++favoriteVersion
+    stickerBusy.value = item.id
+    favoriteNotice.value = ''; favoriteError.value = ''
+    clearTimeout(favoriteTimer)
+    try {
+      if (!onAddSticker) throw new Error('添加表情暂不可用，请刷新页面')
+      await onAddSticker(item, item.conversation_id || active.value, mediaID)
+      if (version !== favoriteVersion) return
+      favoriteNotice.value = '已添加表情'
+      closeMenu()
+    } catch (cause) {
+      if (version !== favoriteVersion) return
+      favoriteError.value = cause.message || '添加表情失败，请重试'
+      closeMenu()
+    } finally {
+      if (version === favoriteVersion) {
+        stickerBusy.value = ''
+        favoriteTimer = setTimeout(() => { favoriteNotice.value = ''; favoriteError.value = '' }, 4500)
+      }
+    }
+  }
+
   function runMenu(action) {
     const item = menuMessage.value
+    if (action === 'sticker') { addSticker(item); return }
     if (action === 'favorite') { saveFavorite(item); return }
     const allowed = recallAllowed.value
     closeMenu()
@@ -257,6 +289,7 @@ export function useMessageActions({ messages, threadRoot, threadReplies, active,
   function reset() {
     favoriteVersion++
     clearTimeout(favoriteTimer)
+    stickerBusy.value = ''
     favoriteBusy.value = ''; favoriteNotice.value = ''; favoriteError.value = ''
     closeMenu()
     cancelSelection()
@@ -279,5 +312,5 @@ export function useMessageActions({ messages, threadRoot, threadReplies, active,
     window.removeEventListener('resize', closeMenu)
   })
 
-  return reactive({ favoriteBusy, favoriteNotice, favoriteError, saveFavorite, menu, menuElement, menuMessage, recallAllowed, selectionMode, selectedIDs, selected, forwardQueue, forwardTarget, forwardBusy, forwardError, forwardLocked, forwardTargets, openMenu, closeMenu, runMenu, toggleSelected, onMessageClick, cancelSelection, copyMessages, openForward, closeForward, confirmForward })
+  return reactive({ stickerBusy, canAddSticker, addSticker, favoriteBusy, favoriteNotice, favoriteError, saveFavorite, menu, menuElement, menuMessage, recallAllowed, selectionMode, selectedIDs, selected, forwardQueue, forwardTarget, forwardBusy, forwardError, forwardLocked, forwardTargets, openMenu, closeMenu, runMenu, toggleSelected, onMessageClick, cancelSelection, copyMessages, openForward, closeForward, confirmForward })
 }
