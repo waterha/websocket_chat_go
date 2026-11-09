@@ -5,6 +5,7 @@ export default `    <Teleport to="body">
         <button type="button" role="menuitem" @click="messageActions.runMenu('copy')">复制</button>
         <button type="button" role="menuitem" @click="messageActions.runMenu('reply')">回复</button>
         <button type="button" role="menuitem" :disabled="!!messageActions.favoriteBusy" @click="messageActions.runMenu('favorite')">{{ messageActions.favoriteBusy === messageActions.menuMessage?.id ? '收藏中…' : '收藏' }}</button>
+        <button v-if="messageActions.canAddSticker" type="button" role="menuitem" :disabled="!!messageActions.stickerBusy || !!messageActions.favoriteBusy" @click="messageActions.runMenu('sticker')">{{ messageActions.stickerBusy ? '添加中…' : '添加表情' }}</button>
         <button type="button" role="menuitem" @click="messageActions.runMenu('forward')">转发</button>
         <button v-if="messageActions.menuMessage?.sender_id !== me.id" type="button" role="menuitem" @click="pokeMember(messageActions.menuMessage.sender_id); messageActions.closeMenu()">拍一拍</button>
         <button type="button" role="menuitem" @click="messageActions.runMenu('select')">多选</button>
