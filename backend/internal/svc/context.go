@@ -22,6 +22,7 @@ type ServiceContext struct {
 	Auth      *logic.Auth
 	Chat      *logic.Chat
 	Favorites *logic.FavoriteService
+	Stickers  *logic.StickerService
 	Media     *logic.MediaService
 	Presence  *logic.Presence
 	Hub       *realtime.Hub
@@ -72,6 +73,7 @@ func New(ctx context.Context, settings config.Config) (*ServiceContext, error) {
 		Chat:      &logic.Chat{Store: store},
 		Media:     &logic.MediaService{Store: store, Files: files},
 		Favorites: &logic.FavoriteService{Store: store, Files: files},
+		Stickers:  &logic.StickerService{Store: store, Files: files},
 		Presence:  &logic.Presence{Redis: redisClient},
 		Hub:       hub,
 		Broadcast: &realtime.Broadcast{Publisher: redisClient, Subscriber: subscriber, Hub: hub,
