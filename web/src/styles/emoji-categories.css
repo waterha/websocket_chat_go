@@ -1,6 +1,12 @@
-/* Categorized emoji picker */
+/* Base emoji inventory and the user's private saved expressions. */
 .emoji-picker-tabs { display: flex; flex-wrap: wrap; gap: 2px; margin: 0 0 8px; }
 .emoji-picker-tab { padding: 3px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; }
 .emoji-picker-tab.active { color: var(--accent-dark); background: var(--theme-hover, #f1e6da); }
 .emoji-picker-grid { grid-template-columns: repeat(8, 1fr); }
-
+.composer .emoji-picker-grid.emoji-picker-stickers { width: 293px; max-width: calc(90vw - 22px); grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; }
+.emoji-sticker-option { display: flex; align-items: center; justify-content: center; min-width: 0; height: 72px; padding: 4px; border: 0; border-radius: 8px; background: transparent; color: inherit; font-size: 30px; cursor: pointer; }
+.emoji-sticker-option:hover { background: var(--theme-hover, #f1e6da); }
+.emoji-sticker-option:disabled { opacity: .5; cursor: wait; }
+.emoji-sticker-option img { display: block; max-width: 100%; max-height: 100%; object-fit: contain; }
+.emoji-picker-status { grid-column: 1 / -1; padding: 20px 8px; color: var(--muted); text-align: center; font-size: 13px; }
+.emoji-picker-retry { margin-left: 8px; padding: 3px 8px; border: 0; border-radius: 6px; color: var(--accent-dark); background: var(--theme-hover, #f1e6da); cursor: pointer; }
