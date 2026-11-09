@@ -77,6 +77,24 @@ Favorite 为 `{"id":"...","message":标准Message快照,"sender_name":"...","sen
 
 列表 `limit` 默认 30、范围 1–100，越界或非整数返回 400 `invalid_limit`。`before_id` 使用上一页 `next_before_id`，由服务端解析本人的 `(saved_at,id)`，按该二元组严格倒序分页；不存在或他人的游标返回空页。空页固定 `favorites:[],has_more:false,next_before_id:""`。`saved_at` 为首次收藏创建时间。删除返回 204，非本人或未知收藏返回 404；私有文件删除失败进入持久化队列由后台重试。媒体只从原消息的 `media_id` 与 blocks 捕获，同一媒体只复制一次；generic file（含 SVG）为附件下载，已允许的图片/视频/音频类型才可内联，响应 `nosniff` 且永不返回 storage key。
 
+## 自定义表情
+
+所有路径均使用 `/api/v1` 前缀及现有 session/CSRF 规则。表情始终为个人私有数据。
+
+| 方法 | 路径 | 请求及返回 |
+| --- | --- | --- |
+| POST | `/stickers` | `{"conversation_id":"源会话","message_id":"源消息","media_id":"可选具体图片ID"}`；新建或幂等重复均201，返回 Sticker |
+| GET | `/stickers` | 200 `{"stickers":[]}`，按 `created_at,id` 倒序返回本人的完整库，最多200项 |
+| DELETE | `/stickers/{id}` | 本人删除成功204；不存在或他人表情404 |
+| GET | `/stickers/{id}/media` | 本人私有图片字节，`nosniff`、`private, no-store`；emoji或非本人404 |
+| POST | `/stickers/{id}/prepare` | `{"conversation_id":"目标会话"}`；201返回标准 Media `{id,file_name,media_type,content_type,byte_size}`，随后可将id用作普通发送的media_id或图片block |
+
+Sticker 固定结构为 `{id,kind:"image"或"emoji",text,file_name,byte_size,created_at}`；图片 `text:""`，emoji `file_name:"",byte_size:0`。图片统一通过 `/stickers/{id}/media` 下载，不返回存储路径或外部URL。prepare仅用于图片；emoji直接发送text，无需prepare。
+
+创建只接受源消息引用的image媒体（独立附件或image block），同一消息多图必须用media_id指定具体图片；只有一张时可省略。来源会话不可读返回404；源消息已撤回或系统消息返回400 `cannot_sticker`；伪造、不被引用、非图片及超过10MiB返回400 `invalid_sticker_media`。纯emoji仅从源消息的实际content提取（text blocks的content由发送流程聚合），最多64个Unicode字符，可包含空白换行分隔、ZWJ、变体、肤色、旗帜及keycap；普通文字、HTML和外部URL均拒绝，返回400 `invalid_sticker_emoji`。额外JSON字段返回400 `invalid_json`。
+
+每用户以源media ID或完整emoji内容幂等，重复返回首次ID和创建时间；总数上限200，新增超限409 `sticker_limit`，已存在项仍可幂等读取。创建与撤回/退群使用同序会话锁，再读取源消息；独立图片副本保存后原消息撤回、源会话退群均不影响库。prepare为当前用户在目标会话生成独立message_media副本，校验成员资格、群解散、个人禁言、全体禁言及私聊拉黑，错误与正常发送一致；删除表情不影响已prepare的附件或收藏。文件复制失败由共享持久化favorite_asset_cleanup队列回收，清理检查收藏、表情和message_media的存活引用。
+
 ## 会话消息搜索
 
 `GET /api/v1/conversations/{id}/messages/search?q=hello&before_seq=100&limit=30` 使用 `session` Cookie；未登录返回 401，会话不存在或当前用户不是成员均返回 404 `not_found`。仅查询该会话数据库中的消息内容（包括系统消息），不依赖客户端已加载的历史。
