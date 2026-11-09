@@ -39,6 +39,7 @@ import './appearance.css'
 import { template } from './template.js'
 import { LayoutDivider } from './layout-divider.js'
 import { GroupDirectory } from './group-directory.js'
+import { FileTypeIcon } from './file-type-icon.js'
 import { GroupFiles } from './group-files.js'
 import { useVoice } from './voice.js'
 import { UserAvatar } from './user-avatar.js'
@@ -49,7 +50,7 @@ import './desktop.css'
 
 
 createApp({
-  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Scissors, Download, Check, Pin, BellOff, Info, ChevronRight, ChevronDown, Clock3, ImagePlus, MoreHorizontal, MessageCircle, UserPlus, Bell, Contact, UsersRound, DesktopSettings, AppearanceSettings, UserAvatar, FavoritesPanel, GroupDirectory, GroupFiles, LayoutDivider },
+  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Scissors, Download, Check, Pin, BellOff, Info, ChevronRight, ChevronDown, Clock3, ImagePlus, MoreHorizontal, MessageCircle, UserPlus, Bell, Contact, UsersRound, DesktopSettings, AppearanceSettings, UserAvatar, FavoritesPanel, GroupDirectory, GroupFiles, FileTypeIcon, LayoutDivider },
   setup() {
     applyTheme(loadTheme())
     const showAppearance = ref(false)
