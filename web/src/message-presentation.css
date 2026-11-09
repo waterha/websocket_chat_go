@@ -1,0 +1,11 @@
+/* Sent and received pure images/emoji share a transparent, borderless surface.
+   Keep message-row selection/search highlighting and the image's own corner radius. */
+.bubble.borderless-image:not(.recalled), .mine .bubble.borderless-image:not(.recalled),
+.bubble.borderless-emoji:not(.recalled), .mine .bubble.borderless-emoji:not(.recalled) {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--ink);
+}
+.bubble.borderless-image .media-image, .bubble.borderless-image .block-image img { background: transparent; }
