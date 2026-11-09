@@ -1,9 +1,11 @@
 import { ref, nextTick, onUnmounted } from 'vue/dist/vue.esm-bundler.js'
+import { FileTypeIcon } from './file-type-icon.js'
 import { api } from './api.js'
 import { formatBytes, mediaURL } from './media.js'
 import './group-files.css'
 
 export const GroupFiles = {
+  components: { FileTypeIcon },
   props: { conversation: { type: Object, required: true } },
   setup(props) {
     const opened = ref(false), trigger = ref(null), panel = ref(null)
@@ -64,7 +66,7 @@ export const GroupFiles = {
         <div role="status" aria-live="polite"><p v-if="error" class="search-error">{{ error }}<button type="button" class="small-button" @click="load(files.length > 0)">重试</button></p><p v-else-if="busy && !files.length" class="subtle">正在加载群文件…</p><p v-else-if="!files.length" class="subtle">暂无群文件。在聊天输入框点击“上传文件”，发送后会出现在这里。</p></div>
         <ul class="group-files-list" :aria-busy="busy">
           <li v-for="item in files" :key="item.id" class="group-file-row">
-            <div class="group-file-info"><strong>{{ item.media.file_name }}</strong><small>{{ formatBytes(item.media.byte_size) }} · {{ uploadedBy(item.sender_id) }} · {{ uploadedAt(item.created_at) }}</small></div>
+            <FileTypeIcon :filename="item.media.file_name" :size="32" /><div class="group-file-info"><strong>{{ item.media.file_name }}</strong><small>{{ formatBytes(item.media.byte_size) }} · {{ uploadedBy(item.sender_id) }} · {{ uploadedAt(item.created_at) }}</small></div>
             <a class="outline-button group-file-download" :href="mediaURL(item.media_id)" :download="item.media.file_name" :aria-label="'下载 ' + item.media.file_name">下载</a>
           </li>
         </ul>
