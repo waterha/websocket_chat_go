@@ -1,3 +1,4 @@
+import { useStickers } from './stickers.js'
 import { messagePresentation } from './message-presentation.js'
 import { useConversationDrafts } from './conversation-drafts.js'
 import { useMessageNotifications } from './message-notifications.js'
@@ -25,7 +26,7 @@ import { availableInitials, filterCandidates, groupByInitial, keepSelectable, OT
 import { formatBytes, mediaPreview, mediaURL, validateMediaFile } from './media.js'
 import { collectImages, hasTransferableFiles, prepareImage } from './image-input.js'
 import { hasBlocks, messageSegments, nextImageIndex } from './composer-blocks.js'
-import { caretRange, collectPieces, deleteImageNearCaret, hasContent, imageIDsIn, insertImageAtCaret, piecesToBlocks, piecesToText, placeCaretAfter, removeImageFromComposer, renderInto, textBeforeCaret } from './composer-dom.js'
+import { caretRange, collectPieces, deleteImageNearCaret, hasContent, imageIDsIn, insertImageAtCaret, insertTextAtCaret, piecesToBlocks, piecesToText, placeCaretAfter, removeImageFromComposer, renderInto, textBeforeCaret } from './composer-dom.js'
 import { installEmojiPicker } from './emoji-picker.js'
 import { installScreenshot } from './screenshot.js'
 import './screenshot.css'
@@ -1044,8 +1045,46 @@ createApp({
     })
     const showFavorites = ref(false)
     const favorites = useFavorites()
+    const stickers = useStickers()
     const { notices: messageNotices, notificationPermission, openNotice, dismissNotice, enableSystemNotifications } = messageNotifications
-    const messageActions = useMessageActions({ onFavorite: favorites.save, messages, threadRoot, threadReplies, active, me, current, conversations, startReply, recallMessage, syncConversation, showError })
+    const messageActions = useMessageActions({ onAddSticker: stickers.save, onFavorite: favorites.save, messages, threadRoot, threadReplies, active, me, current, conversations, startReply, recallMessage, syncConversation, showError })
+    let stickerContextVersion = 0
+    watch([active, () => me.value?.id], () => { stickerContextVersion++ }, { flush: 'sync' })
+    function canInsertSticker() {
+      return Boolean(me.value && active.value && chatVisible.value && draftArea.value
+        && !showSearch.value && !threadOpen.value && !sending.value && !uploadBusy.value
+        && !voice.enabled.value && !mutedHere.value && !dismissedHere.value
+        && pendingSend.value?.conversation_id !== active.value)
+    }
+    async function selectSticker(sticker) {
+      if (!canInsertSticker()) throw new Error('当前无法添加表情，请先关闭搜索、语音或等待正在进行的操作完成')
+      const root = draftArea.value
+      if (sticker.kind === 'emoji') {
+        insertTextAtCaret(root, sticker.text, window.getSelection())
+        return
+      }
+      if (attachment.value) throw new Error('请先发送或移除附件，再添加图片表情')
+      if (composerImages.value.length >= MAX_COMPOSER_IMAGES) throw new Error('一条消息最多附带20张图片')
+      const id = active.value, version = stickerContextVersion
+      const range = caretRange(root, window.getSelection()).cloneRange()
+      uploadBusy.value = true
+      try {
+        const uploaded = await stickers.prepare(sticker, id)
+        if (version !== stickerContextVersion || active.value !== id || root !== draftArea.value || !root.isConnected) return
+        if (mutedHere.value || dismissedHere.value) throw new Error('当前会话不可发送消息')
+        if (!uploaded.id || uploaded.media_type !== 'image') throw new Error('图片表情准备失败，请重试')
+        const image = { index: nextImageIndex(composerImages.value), mediaId: uploaded.id,
+          previewURL: mediaURL(uploaded.id), fileName: uploaded.file_name || sticker.file_name || '表情图片' }
+        composerImages.value = [...composerImages.value, image]
+        const target = root.contains(range.startContainer) && root.contains(range.endContainer) ? range : caretRange(root, window.getSelection())
+        const chip = insertImageAtCaret(root, target, image)
+        placeCaretAfter(root, chip, window.getSelection())
+        root.focus()
+        syncDraftFromDom()
+      } finally { if (version === stickerContextVersion) uploadBusy.value = false }
+    }
+    const emojiPickerOptions = { getStickers: stickers.list, onSelectSticker: selectSticker,
+      getUserID: () => me.value?.id || '', onError: showError }
     const isGenericFile = computed(() => attachment.value?.media_type === 'file')
     async function openGlobalResult(hit) {
       const id = hit.message.conversation_id
@@ -1200,7 +1239,7 @@ createApp({
         return
       }
       await nextTick()
-      if (draftArea.value) installEmojiPicker(draftArea.value)
+      if (draftArea.value) installEmojiPicker(draftArea.value, emojiPickerOptions)
       markSeen(id, cache.get(id)?.at(-1)?.seq || 0)
       pendingSend.value = pendingStore?.get(id) || null
       visibleCount.value = 100
@@ -1689,7 +1728,7 @@ createApp({
       typingTimer = setInterval(() => { typingTick.value++ }, 1000)
     })
     onUpdated(() => {
-      if (draftArea.value) { installEmojiPicker(draftArea.value); installComposerUndo(draftArea.value) }
+      if (draftArea.value) { installEmojiPicker(draftArea.value, emojiPickerOptions); installComposerUndo(draftArea.value) }
     })
     const removeDesktopDownloads = installDesktopDownloads(showError)
     onUnmounted(() => { voice.dispose(); cancelFileUpload(); screenshot.dispose(); removeDesktopDownloads(); document.getElementById('app')?.removeEventListener('click', onImageLinkClick); resetSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearInterval(typingTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); document.removeEventListener('pointerdown', onConversationMenuOutside) })
