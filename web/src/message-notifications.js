@@ -7,7 +7,7 @@ export function messageNotificationText(message) {
 }
 
 // Only newly synchronized messages enter here; baseline sequences suppress historical replay.
-export function useMessageNotifications({ me, conversations, title, onOpen, showError, clock = () => Date.now() }) {
+export function useMessageNotifications({ me, conversations, title, onOpen, showError, isViewingConversation = () => false, clock = () => Date.now() }) {
   const notices = ref([])
   const notificationPermission = ref(globalThis.Notification?.permission || 'unsupported')
   const watermarks = new Map(), timers = new Map(), systemNotices = new Set(), recentOnly = new Set()
@@ -50,6 +50,8 @@ export function useMessageNotifications({ me, conversations, title, onOpen, show
     }
     watermarks.set(conversationID, watermark)
     if (conversation.muted || !incoming.length) return
+    // Advance the watermark first: messages already visible must not notify again after blur.
+    if (document.visibilityState === 'visible' && document.hasFocus?.() && isViewingConversation(conversationID)) return
     const latest = incoming.at(-1)
     const sender = conversation.members?.find(member => member.id === latest.sender_id)
     const senderName = sender?.alias || sender?.name || '用户'
