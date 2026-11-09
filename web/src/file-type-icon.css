@@ -1,0 +1,5 @@
+.file-type-icon { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; flex: none; vertical-align: middle; line-height: 1; }
+.file-type-icon > svg { display: block; flex: none; }
+.file-type-icon > small { font-family: system-ui, sans-serif; font-size: 9px; font-weight: 750; line-height: 1.1; letter-spacing: .2px; }
+.media-file > .file-type-icon, .block-file > .file-type-icon { margin-right: 8px; }
+.group-file-row > .file-type-icon { margin-right: 10px; }
