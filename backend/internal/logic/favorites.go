@@ -240,7 +240,7 @@ func (service *FavoriteService) Delete(ctx context.Context, userID, id string) e
 	return service.Clean(ctx)
 }
 func (service *FavoriteService) Clean(ctx context.Context) error {
-	rows, err := service.Store.DB.Query(ctx, "SELECT storage_key FROM favorite_asset_cleanup q WHERE ready_at<=now() AND NOT EXISTS (SELECT 1 FROM favorite_assets a WHERE a.storage_key=q.storage_key) ORDER BY created_at LIMIT 100")
+	rows, err := service.Store.DB.Query(ctx, "SELECT storage_key FROM favorite_asset_cleanup q WHERE ready_at<=now() AND NOT EXISTS (SELECT 1 FROM favorite_assets a WHERE a.storage_key=q.storage_key) AND NOT EXISTS (SELECT 1 FROM stickers s WHERE s.storage_key=q.storage_key) AND NOT EXISTS (SELECT 1 FROM message_media m WHERE m.storage_key=q.storage_key) ORDER BY created_at LIMIT 100")
 	if err != nil {
 		return err
 	}
