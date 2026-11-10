@@ -17,4 +17,14 @@
 .favorites-error, .favorites-confirm { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin: 12px 0; }
 .favorites-confirm button + button { margin-left: 8px; }
 .favorite-feedback { position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%); z-index: 200; border: 1px solid var(--line); border-radius: 12px; padding: 12px 18px; background: var(--theme-surface, #fffaf2); color: var(--ink); box-shadow: 0 6px 28px #0002; }
+.favorite-metadata { margin-bottom: 14px; }
+.favorite-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.favorite-tag { border: 1px solid var(--line); border-radius: 999px; padding: 3px 9px; font-size: 12px; overflow-wrap: anywhere; }
+.favorite-note { margin: 8px 0; font-size: 13px; }
+.favorite-note p { margin: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.favorite-editor { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-top: 8px; }
+.favorite-editor label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.favorite-editor input, .favorite-editor textarea { width: 100%; box-sizing: border-box; font: inherit; }
+.favorite-editor textarea { resize: vertical; min-height: 100px; }
+.favorite-editor-actions { display: flex; gap: 8px; }
 @media (max-width: 600px) { .favorites-panel { max-height: calc(100dvh - 20px); padding: 16px; } .favorite-entry { padding: 10px; } }
