@@ -1,0 +1,6 @@
+DROP INDEX conversation_members_search_user_idx;
+DROP INDEX messages_global_search_conversation_idx;
+DROP INDEX messages_global_search_recent_idx;
+DROP INDEX messages_global_search_grams_idx;
+DROP FUNCTION message_search_query_grams(text);
+DROP FUNCTION message_search_grams(text);
