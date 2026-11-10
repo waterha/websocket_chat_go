@@ -107,7 +107,11 @@ test('emoji picker stays hidden until opened and inserts an emoji at the saved c
 
 test('two tabs merge every original emoji exactly once and preserve the caret on tabs', async () => {
   await withPicker({}, async ({ dom, picker, toggle, tabs, editor }) => {
-    assert.deepEqual(tabs().map(tab => tab.textContent), ['emoji表情', '表情'])
+    assert.deepEqual(tabs().map(tab => tab.getAttribute('aria-label')), ['emoji表情', '表情'])
+    assert.deepEqual(tabs().map(tab => tab.title), ['emoji表情', '表情'])
+    assert.ok(tabs().every(tab => tab.textContent === '' && tab.querySelector('svg[aria-hidden="true"]')))
+    assert.ok(tabs()[0].querySelector('circle'))
+    assert.ok(tabs()[1].querySelector('path'))
     const expected = [...new Set(originalEmojiCategories.flatMap(category => category.emojis))]
     assert.equal(expected.length, 149)
     assert.equal(emojiCategories.length, 1)
