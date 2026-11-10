@@ -24,6 +24,12 @@ globalThis.fetch = async (url, options = {}) => {
     const after = Number(new URL(path, dom.window.location).searchParams.get('after_seq'))
     const messages = path.includes('/a/') ? stored.filter(item => item.seq > after) : []
     data = { messages, last_seq: path.includes('/a/') ? stored.at(-1).seq : 0, next_seq: messages.at(-1)?.seq || after, has_more: false }
+  } else if (path.startsWith('/api/v1/stickers/upload?')) {
+    data = { id: 'uploaded-local', kind: 'image', file_name: 'local.gif' }; saved.unshift(data)
+  } else if (path.startsWith('/api/v1/stickers/') && options.method === 'DELETE') {
+    const id = decodeURIComponent(path.split('/').at(-1)); const index = saved.findIndex(item => item.id === id)
+    if (index >= 0) saved.splice(index, 1)
+    return { ok: true, status: 204 }
   } else if (path === '/api/v1/stickers') data = options.method === 'POST' ? saved[0] : { stickers: saved }
   else if (path.endsWith('/prepare')) { if (prepareGate) await prepareGate; data = { id: `prepared-${++prepared}`, media_type: 'image', file_name: '表情.gif', byte_size: 8 } }
   return { ok: true, status: 200, json: async () => ({ data }) }
@@ -72,5 +78,24 @@ test('images and emoji can be added by context menu and selected from the person
   await vm.select('b'); await wait(); await vm.select('a'); await wait()
   releasePrepare(); prepareGate = null; await wait()
   assert.equal(vm.composerImages.length, 0)
+})
+test('personal library uploads and deletes through the real main callbacks without sending messages', async () => {
+  openCustom(); await wait()
+  const picker = document.querySelector('.emoji-picker')
+  const input = picker.querySelector('input[type="file"]')
+  picker.querySelector('[aria-label="上传表情"]').click()
+  Object.defineProperty(input, 'files', { configurable: true, value: [new File(['local'], 'local.gif', { type: 'image/gif' })] })
+  input.dispatchEvent(new dom.window.Event('change', { bubbles: true })); await wait()
+  const uploadCall = calls.find(call => call.path.startsWith('/api/v1/stickers/upload?'))
+  assert.ok(uploadCall)
+  assert.equal(uploadCall.options.body.name, 'local.gif')
+  const option = picker.querySelector('img[src="/api/v1/stickers/uploaded-local/media"]').closest('button')
+  option.dispatchEvent(new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true })); await wait()
+  const remove = picker.querySelector('[role="menuitem"]')
+  assert.equal(remove.textContent, '删除表情'); remove.click(); await wait()
+  assert.ok(calls.some(call => call.path === '/api/v1/stickers/uploaded-local' && call.options.method === 'DELETE'))
+  assert.equal(picker.querySelector('img[src="/api/v1/stickers/uploaded-local/media"]'), null)
+  assert.equal(vm.composerImages.length, 0)
+  assert.equal(calls.filter(call => /\/conversations\/[^/]+\/messages$/.test(call.path) && call.options.method === 'POST').length, 0)
 })
 test.after(() => { app.unmount(); for (const timer of timers) { clearTimeout(timer); clearInterval(timer) }; dom.window.close() })
