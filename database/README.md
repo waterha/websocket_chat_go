@@ -5,7 +5,7 @@
 - `conversations.next_seq`：会话序号，发送事务锁会话行并加一；`messages` 对 `(conversation_id, seq)` 和 `(sender_id, client_msg_id)` 唯一。
 - `messages.kind`：普通消息为 `user`，群成员邀请提示为 `system`，附件消息为 `image` 或 `video`；提示与普通消息共用会话序号，可离线同步与历史漫游。
 - `message_media`：一次上传的归属（上传者、会话）、文件名、媒体类型（`image`/`video`/`file`）、MIME、字节数与磁盘存储键。`messages.media_id` 外键指向它，并对非空值建唯一索引，使一份上传最多只能被一条消息引用。磁盘文件不随消息或会话删除，清理策略尚未实现。
-- `messages_content_trgm_idx`（已移除）：最初为全局搜索建立 `pg_trgm` GIN 索引，但搜索使用 `strpos(lower(content),lower(q))`，是函数调用而非 `LIKE` 操作符，该索引无法被使用；同时 `CREATE EXTENSION` 受迁移 `search_path` 限制，在临时 schema 中不可见。因此 `000012` 删除它，全局搜索当前**没有**专用索引，只靠成员资格过滤、时间排序与行数上限约束。真正需要时（例如 `tsvector` 列或外部搜索服务）应作为独立工作实现。
+- `messages_content_trgm_idx`（已移除）：旧 `pg_trgm` 索引无法加速原来的 `strpos` 搜索，迁移 `000012` 已删除。`000031` 使用无需扩展的 Unicode 1/2/3 字符词元 GIN 表达式索引；搜索使用最长查询词元的包含条件筛选候选，并以原 `strpos(lower(content),lower(q))` 精确复核，支持单字中文、两字词、emoji 与字面标点，不引入通配符或分词语义。成员权限、撤回条件和 `(created_at,id)` 游标均在分页前校验；先限定一页候选，再读取完整消息及每个结果会话的成员数。查询显式读取索引词元频率，让高频词使用成员范围精确检索，避免展开巨大的 GIN 倒排列表；建索引后采集统计，之后由 autovacuum/analyze 刷新。规模测试、写入成本和迁移注意事项见 [全局搜索性能验证](../docs/global-search-performance.md)。
 - `sessions.csrf_token` / `created_at`：每个登录会话的 CSRF 令牌（写请求必须在 `X-CSRF-Token` 中回传）与创建时间。修改密码时删除该用户除当前会话外的所有行，从而撤销其他设备的登录。
 - `conversation_members.pinned_at` / `muted`：每个成员私有的会话偏好（置顶时间、免打扰）。索引 `conversation_members_prefs_idx` 服务置顶优先的列表排序。`archived_at` 曾由 `000013` 加入，`000014` 已移除：归档不改变消息可见性，只是把会话移出列表，属于多余的第二生命周期。
 - `message_media.bytes_removed_at`：附件字节已被保留清理删除的时间。行保留以便消息仍能解析到「曾有什么被撤回」，但文件不再存在。`message_media_removable_idx` 与 `message_outbox_published_age_idx` 服务清理扫描。清理**只**处理已发布且过期的 outbox 行与「被撤回消息引用」的附件；未发布行与正常引用的附件永不删除。
