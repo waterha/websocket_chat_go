@@ -64,6 +64,7 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 | POST | `/presence` | `{"user_ids":["用户ID"]}`（最多 1000 个）返回 `{"online":{"用户ID":true}}`；仅表示该用户当前是否有活动连接 |
 | POST | `/favorites` | `{"conversation_id":"...","message_id":"..."}`；服务端从可读的非撤回、非系统原消息捕获完整快照并返回 Favorite；同用户同消息幂等 |
 | GET | `/favorites?before_id=...&limit=30` | 当前用户私有收藏，按 `saved_at,id` 倒序 keyset 返回 `favorites,has_more,next_before_id` |
+| PATCH | `/favorites/{id}` | `{"tags":["项目"],"note":"个人备注"}`；两字段可选，200返回完整Favorite，仅本人可改 |
 | DELETE | `/favorites/{id}` | 删除当前用户收藏并安排其私有附件字节清理；成功 204 |
 | GET | `/favorites/{id}/media/{media_id}` | 仅收藏本人可读的服务端附件快照；媒体 ID 必须来自快照消息，文件以 attachment 下载且不暴露 storage key |
 
@@ -73,7 +74,9 @@ HTTP 前缀 `/api/v1`；成功 `{"data":...}`，失败 `{"error":{"code":"...","
 
 `POST /favorites` 只接受 `conversation_id,message_id`，新建和幂等重复均返回 201。服务端验证当前成员资格、源会话和消息，并与撤回/离群使用同序锁。不存在或无读取权返回 404；新收藏系统或已撤回消息返回 400 `cannot_favorite`。额外客户端 HTML、内容或媒体字段返回 400 `invalid_json`。
 
-Favorite 为 `{"id":"...","message":标准Message快照,"sender_name":"...","sender_avatar":"可为空字符串","conversation_name":"...","conversation_kind":"group|direct","saved_at":"RFC3339时间","is_own":true}`。快照保存原文与换行、blocks 原序、引用与引用作者 `reply.sender_name`、发送者和创建时间，`is_own` 表示原消息是否由收藏本人发送。重复收藏返回首次快照与首次创建时间。收藏独立于原消息后续撤回、重命名、离群；附件字节复制到私有存储，下载权限只检查收藏本人，不放宽标准 `/media` 权限。
+Favorite 为 `{"id":"...","message":标准Message快照,"sender_name":"...","sender_avatar":"可为空字符串","conversation_name":"...","conversation_kind":"group|direct","saved_at":"RFC3339时间","is_own":true,"tags":[],"note":""}`。快照保存原文与换行、blocks 原序、引用与引用作者 `reply.sender_name`、发送者和创建时间，`is_own` 表示原消息是否由收藏本人发送。重复收藏返回首次快照与首次创建时间。收藏独立于原消息后续撤回、重命名、离群；附件字节复制到私有存储，下载权限只检查收藏本人，不放宽标准 `/media` 权限。
+
+`PATCH /favorites/{id}` 仅允许 `tags,note`，省略的字段保持不变，`tags:[]` 或 `note:""` 可显式清空；空对象为不改动。拒绝 null、错误类型及其他字段。标签先 trim Unicode 首尾空白、丢弃空项，再按首次出现顺序精确去重；去重后最多10项，每项最多20个Unicode字符，非法返回400 `invalid_tags`。备注最多2000个Unicode字符，原样保留空白换行，非法返回400 `invalid_note`。返回完整Favorite；未知或他人收藏404。create/list均返回元数据，重复收藏保留已存标签与备注；PATCH不修改message快照、来源信息、saved_at或附件。
 
 列表 `limit` 默认 30、范围 1–100，越界或非整数返回 400 `invalid_limit`。`before_id` 使用上一页 `next_before_id`，由服务端解析本人的 `(saved_at,id)`，按该二元组严格倒序分页；不存在或他人的游标返回空页。空页固定 `favorites:[],has_more:false,next_before_id:""`。`saved_at` 为首次收藏创建时间。删除返回 204，非本人或未知收藏返回 404；私有文件删除失败进入持久化队列由后台重试。媒体只从原消息的 `media_id` 与 blocks 捕获，同一媒体只复制一次；generic file（含 SVG）为附件下载，已允许的图片/视频/音频类型才可内联，响应 `nosniff` 且永不返回 storage key。
 
@@ -83,6 +86,7 @@ Favorite 为 `{"id":"...","message":标准Message快照,"sender_name":"...","sen
 
 | 方法 | 路径 | 请求及返回 |
 | --- | --- | --- |
+| POST | `/stickers/upload?file_name=原名` | 无需会话，raw图片字节，Content-Length必填，Content-Type与普通媒体上传相同；201返回Sticker |
 | POST | `/stickers` | `{"conversation_id":"源会话","message_id":"源消息","media_id":"可选具体图片ID"}`；新建或幂等重复均201，返回 Sticker |
 | GET | `/stickers` | 200 `{"stickers":[]}`，按 `created_at,id` 倒序返回本人的完整库，最多200项 |
 | DELETE | `/stickers/{id}` | 本人删除成功204；不存在或他人表情404 |
@@ -91,7 +95,9 @@ Favorite 为 `{"id":"...","message":标准Message快照,"sender_name":"...","sen
 
 Sticker 固定结构为 `{id,kind:"image"或"emoji",text,file_name,byte_size,created_at}`；图片 `text:""`，emoji `file_name:"",byte_size:0`。图片统一通过 `/stickers/{id}/media` 下载，不返回存储路径或外部URL。prepare仅用于图片；emoji直接发送text，无需prepare。
 
-创建只接受源消息引用的image媒体（独立附件或image block），同一消息多图必须用media_id指定具体图片；只有一张时可省略。来源会话不可读返回404；源消息已撤回或系统消息返回400 `cannot_sticker`；伪造、不被引用、非图片及超过10MiB返回400 `invalid_sticker_media`。纯emoji仅从源消息的实际content提取（text blocks的content由发送流程聚合），最多64个Unicode字符，可包含空白换行分隔、ZWJ、变体、肤色、旗帜及keycap；普通文字、HTML和外部URL均拒绝，返回400 `invalid_sticker_emoji`。额外JSON字段返回400 `invalid_json`。
+直接上传仅允许声明为PNG (`image/png`)、JPEG (`image/jpeg`)、GIF (`image/gif`)、WebP (`image/webp`)；拒绝SVG及其他类型（415 `unsupported_media_type`），复用普通media允许类型，并额外校验前512字节的图片签名与声明匹配，拒绝伪装为PNG等的HTML/SVG。空或缺失Content-Length返回400 `invalid_upload`，超过10MiB返回413 `media_too_large`；文件名通过query传递并去除目录。相同用户以内容SHA256去重（即使文件名不同），不增加数量；不同用户各自独立。写字节前在事务外持久登记孤儿cleanup，成功提交同事务移除登记，失败保留durable cleanup以应对回滚或未知提交结果；不在持有事务时借用pool连接。既有DELETE/media/prepare路径直接复用。
+
+从消息创建只接受源消息引用的image媒体（独立附件或image block），同一消息多图必须用media_id指定具体图片；只有一张时可省略。来源会话不可读返回404；源消息已撤回或系统消息返回400 `cannot_sticker`；伪造、不被引用、非图片及超过10MiB返回400 `invalid_sticker_media`。纯emoji仅从源消息的实际content提取（text blocks的content由发送流程聚合），最多64个Unicode字符，可包含空白换行分隔、ZWJ、变体、肤色、旗帜及keycap；普通文字、HTML和外部URL均拒绝，返回400 `invalid_sticker_emoji`。额外JSON字段返回400 `invalid_json`。
 
 每用户以源media ID或完整emoji内容幂等，重复返回首次ID和创建时间；总数上限200，新增超限409 `sticker_limit`，已存在项仍可幂等读取。创建与撤回/退群使用同序会话锁，再读取源消息；独立图片副本保存后原消息撤回、源会话退群均不影响库。prepare为当前用户在目标会话生成独立message_media副本，校验成员资格、群解散、个人禁言、全体禁言及私聊拉黑，错误与正常发送一致；删除表情不影响已prepare的附件或收藏。文件复制失败由共享持久化favorite_asset_cleanup队列回收，清理检查收藏、表情和message_media的存活引用。
 
