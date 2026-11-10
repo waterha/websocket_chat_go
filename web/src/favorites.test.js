@@ -79,7 +79,7 @@ test('panel removal needs confirmation, retries errors, traps focus and restores
   assert.match(document.querySelector('.favorites-confirm [role="alert"]').textContent, /删除失败/)
   fail = false; document.querySelector('.favorites-confirm .danger').click(); await settle()
   assert.equal(document.querySelectorAll('.favorite-entry').length, 0)
-  const controls = [...document.querySelector('.favorites-panel').querySelectorAll('button:not(:disabled),input,a[href],audio[controls],video[controls]')]
+  const controls = [...document.querySelector('.favorites-panel').querySelectorAll('button:not(:disabled),input:not(:disabled),textarea:not(:disabled),a[href],audio[controls],video[controls]')]
   controls.at(-1).focus(); controls.at(-1).dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true })); assert.equal(document.activeElement, controls[0])
   controls[0].dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await settle()
   assert.equal(document.querySelector('.favorites-panel'), null)
