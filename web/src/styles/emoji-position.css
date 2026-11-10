@@ -1,3 +1,4 @@
-/* 表情弹出面板锚定在工具栏下方 */
-.emoji-picker-panel { top: 40px; left: 4px; }
+/* Anchor both emoji tabs above their toolbar button, outside the typing area. */
+.emoji-picker { position: relative; display: inline-flex; flex: none; }
+.emoji-picker-panel { top: auto; bottom: calc(100% + 8px); left: 0; }
 
