@@ -10,7 +10,7 @@ globalThis.localStorage = dom.window.localStorage
 globalThis.sessionStorage = dom.window.sessionStorage
 globalThis.WebSocket = class { close() {} }
 const me = { id: 'me', name: 'Me', email: 'me@test' }
-const group = { id: 'history', name: 'History', kind: 'group', members: [{ ...me, role: 'owner' }, { id: 'bob', name: 'Bob', role: 'member' }], last_seq: 0 }
+const group = { id: 'history', name: 'History', kind: 'group', members: [{ ...me, role: 'owner' }, { id: 'bob', name: 'Bob', role: 'member', avatar: 'bob-avatar' }], last_seq: 0 }
 const requests = []
 let pendingResolve
 let hold = false
@@ -61,6 +61,13 @@ test('history UI filters combine without keywords and persist across pagination'
   assert.ok(params.get('from'))
   assert.ok(params.get('to'))
   assert.match(panel.textContent, /表情\/图片/)
+  assert.equal(panel.querySelector('.history-result-sender img').getAttribute('src'), '/api/v1/media/bob-avatar')
+  const bob = vm.current.members.find(member => member.id === 'bob')
+  bob.avatar = ''
+  await tick()
+  assert.equal(panel.querySelector('.history-result-sender img').getAttribute('src'), '/default-avatar.svg')
+  bob.avatar = 'bob-avatar'
+  await tick()
   await vm.searchMessages(true)
   assert.equal(requests.at(-1).searchParams.get('before_seq'), '8')
   assert.equal(requests.at(-1).searchParams.get('sender_id'), 'bob')
@@ -124,9 +131,9 @@ test('history renders real photos and GIF stickers in order and previews without
   await tick()
   const rows = document.querySelectorAll('#message-search-panel article.message-search-result')
   assert.equal(rows.length, 3)
-  assert.match(rows[0].querySelector('img').src, /\/api\/v1\/media\/photo-1$/)
-  assert.equal(rows[1].querySelector('img').alt, '开心.gif')
-  assert.match(rows[1].querySelector('img').src, /sticker-gif$/)
+  assert.match(rows[0].querySelector('.history-message-content img').src, /\/api\/v1\/media\/photo-1$/)
+  assert.equal(rows[1].querySelector('.history-message-content img').alt, '开心.gif')
+  assert.match(rows[1].querySelector('.history-message-content img').src, /sticker-gif$/)
   assert.deepEqual([...rows[1].querySelector('.history-message-content').children].map(node => node.tagName), ['SPAN', 'A', 'SPAN'])
   assert.match(rows[1].textContent, /前面的文字😀/)
   assert.equal(rows[2].querySelector('img'), null)
@@ -135,7 +142,7 @@ test('history renders real photos and GIF stickers in order and previews without
   const originalShowModal = dom.window.HTMLDialogElement.prototype.showModal
   dom.window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute('open', '') }
   try {
-    rows[1].querySelector('img').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }))
+    rows[1].querySelector('.history-message-content img').dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }))
     const dialog = document.querySelector('dialog.image-viewer')
     assert.ok(dialog)
     assert.match(dialog.querySelector('img').src, /sticker-gif$/)
