@@ -31,7 +31,7 @@ func (server *Server) cors(next http.Handler) http.Handler {
 			// than an ordinary JSON request; every other route keeps the short
 			// bound that protects the rest of the API.
 			timeout := 15 * time.Second
-			if request.Method == "POST" && strings.HasSuffix(request.URL.Path, "/media") {
+			if request.Method == "POST" && (strings.HasSuffix(request.URL.Path, "/media") || request.URL.Path == "/api/v1/stickers/upload") {
 				timeout = 10 * time.Minute
 			}
 			ctx, cancel := context.WithTimeout(request.Context(), timeout)
