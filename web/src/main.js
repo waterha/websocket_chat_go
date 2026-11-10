@@ -1084,6 +1084,7 @@ createApp({
       } finally { if (version === stickerContextVersion) uploadBusy.value = false }
     }
     const emojiPickerOptions = { getStickers: stickers.list, onSelectSticker: selectSticker,
+      uploadSticker: stickers.upload, removeSticker: stickers.remove,
       getUserID: () => me.value?.id || '', onError: showError }
     const isGenericFile = computed(() => attachment.value?.media_type === 'file')
     async function openGlobalResult(hit) {
