@@ -27,6 +27,34 @@ type favoriteAsset struct {
 func (service *FavoriteService) Create(ctx context.Context, userID, conversationID, messageID string) (model.Favorite, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
+	// Discover immutable attachment IDs and reserve orphan keys before Begin.
+	// No pool connection may be borrowed while holding conversation locks.
+	preview, err := scanMessage(service.Store.DB.QueryRow(ctx, "SELECT "+messageColumns+" FROM messages WHERE id=$1 AND conversation_id=$2", messageID, conversationID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return model.Favorite{}, model.Fail(404, "not_found")
+	}
+	if err != nil {
+		return model.Favorite{}, err
+	}
+	reserved := map[string]string{}
+	reserve := func(id string) error {
+		if id == "" || reserved[id] != "" {
+			return nil
+		}
+		key, e := (&StickerService{Store: service.Store, Files: service.Files}).reserveCopy(ctx)
+		if e == nil {
+			reserved[id] = key
+		}
+		return e
+	}
+	if err = reserve(preview.MediaID); err != nil {
+		return model.Favorite{}, err
+	}
+	for _, block := range preview.Blocks {
+		if err = reserve(block.MediaID); err != nil {
+			return model.Favorite{}, err
+		}
+	}
 	tx, err := service.Store.DB.Begin(ctx)
 	if err != nil {
 		return model.Favorite{}, err
@@ -50,7 +78,7 @@ func (service *FavoriteService) Create(ctx context.Context, userID, conversation
 	}
 	var existing model.Favorite
 	var raw []byte
-	err = tx.QueryRow(ctx, `SELECT id,message,sender_name,sender_avatar,conversation_name,conversation_kind,saved_at,is_own FROM favorites WHERE user_id=$1 AND message_id=$2 AND conversation_id=$3`, userID, messageID, conversationID).Scan(&existing.ID, &raw, &existing.SenderName, &existing.SenderAvatar, &existing.ConversationName, &existing.ConversationKind, &existing.SavedAt, &existing.IsOwn)
+	err = tx.QueryRow(ctx, `SELECT id,message,sender_name,sender_avatar,conversation_name,conversation_kind,saved_at,is_own,tags,note FROM favorites WHERE user_id=$1 AND message_id=$2 AND conversation_id=$3`, userID, messageID, conversationID).Scan(&existing.ID, &raw, &existing.SenderName, &existing.SenderAvatar, &existing.ConversationName, &existing.ConversationKind, &existing.SavedAt, &existing.IsOwn, &existing.Tags, &existing.Note)
 	if err == nil {
 		err = json.Unmarshal(raw, &existing.Message)
 		return existing, err
@@ -109,7 +137,11 @@ func (service *FavoriteService) Create(ctx context.Context, userID, conversation
 	for _, id := range ids {
 		var a favoriteAsset
 		a.mediaID = id
-		a.key = model.NewID()
+		a.key = reserved[id]
+		if a.key == "" {
+			cleanup()
+			return model.Favorite{}, model.Fail(400, "invalid_upload")
+		}
 		var oldKey string
 		err = tx.QueryRow(ctx, "SELECT file_name,media_type,content_type,byte_size,storage_key FROM message_media WHERE id=$1", id).Scan(&a.fileName, &a.mediaType, &a.contentType, &a.size, &oldKey)
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -120,11 +152,7 @@ func (service *FavoriteService) Create(ctx context.Context, userID, conversation
 			cleanup()
 			return model.Favorite{}, err
 		}
-		// Register before writing bytes; rollback/crash leaves a delayed retry.
-		if _, err = service.Store.DB.Exec(ctx, `INSERT INTO favorite_asset_cleanup(storage_key,ready_at) VALUES($1,now()+interval '1 hour')`, a.key); err != nil {
-			cleanup()
-			return model.Favorite{}, err
-		}
+
 		created = append(created, a.key)
 		in, e := service.Files.Open(oldKey)
 		if e != nil {
@@ -177,6 +205,7 @@ func (service *FavoriteService) Create(ctx context.Context, userID, conversation
 	}
 	var item model.Favorite
 	item.ID = id
+	item.Tags = []string{}
 	item.Message = message
 	item.SenderName = senderName
 	item.SenderAvatar = senderAvatar
@@ -192,7 +221,7 @@ func (service *FavoriteService) List(ctx context.Context, userID, beforeID strin
 	if limit < 1 || limit > 100 {
 		return page, model.Fail(400, "invalid_limit")
 	}
-	q := `SELECT f.id,f.message,f.sender_name,f.sender_avatar,f.conversation_name,f.conversation_kind,f.saved_at,f.is_own FROM favorites f WHERE f.user_id=$1`
+	q := `SELECT f.id,f.message,f.sender_name,f.sender_avatar,f.conversation_name,f.conversation_kind,f.saved_at,f.is_own,f.tags,f.note FROM favorites f WHERE f.user_id=$1`
 	args := []any{userID}
 	if beforeID != "" {
 		q += ` AND (f.saved_at,f.id)<(SELECT saved_at,id FROM favorites WHERE id=$2 AND user_id=$1)`
@@ -208,7 +237,7 @@ func (service *FavoriteService) List(ctx context.Context, userID, beforeID strin
 	for rows.Next() {
 		var f model.Favorite
 		var raw []byte
-		if err = rows.Scan(&f.ID, &raw, &f.SenderName, &f.SenderAvatar, &f.ConversationName, &f.ConversationKind, &f.SavedAt, &f.IsOwn); err != nil {
+		if err = rows.Scan(&f.ID, &raw, &f.SenderName, &f.SenderAvatar, &f.ConversationName, &f.ConversationKind, &f.SavedAt, &f.IsOwn, &f.Tags, &f.Note); err != nil {
 			return page, err
 		}
 		if err = json.Unmarshal(raw, &f.Message); err != nil {
@@ -253,6 +282,10 @@ func (service *FavoriteService) Clean(ctx context.Context) error {
 		}
 		keys = append(keys, k)
 	}
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	rows.Close()
 	for _, k := range keys {
 		if err = service.Files.Remove(k); err != nil {
 			continue
