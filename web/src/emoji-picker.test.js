@@ -286,7 +286,37 @@ test('old-account pending selections neither block nor unlock the next account',
   })
 })
 
-test('private upload stays pinned while loading, empty or failed and never auto-sends', async () => {
+test('both tabs share an area and upload is the first equal-size cell before stickers in added order', async () => {
+  let items = [
+    { id: 'later', kind: 'emoji', text: '🎉', created_at: '2026-11-10T02:00:00Z' },
+    { id: 'first', kind: 'emoji', text: '😀', created_at: '2026-11-10T01:00:00Z' },
+  ]
+  await withPicker({ getStickers: async () => items, uploadSticker: async () => {
+    items = [{ id: 'new', kind: 'emoji', text: '❤️', created_at: '2026-11-10T03:00:00Z' }, ...items]
+  } }, async ({ dom, picker, toggle, custom }) => {
+    const style = document.createElement('style')
+    style.textContent = readStyles(new URL('./style.css', import.meta.url))
+    document.head.append(style)
+    const grid = picker.querySelector('.emoji-picker-grid')
+    const before = dom.window.getComputedStyle(grid)
+    assert.equal(before.width, '293px'); assert.equal(before.height, '246px')
+    toggle.click(); custom(); await settle()
+    const plus = picker.querySelector('.emoji-sticker-upload')
+    assert.equal(grid.firstElementChild, plus)
+    assert.deepEqual([...grid.children].map(node => node.textContent), ['+', '😀', '🎉'])
+    assert.equal(dom.window.getComputedStyle(grid).width, before.width)
+    assert.equal(dom.window.getComputedStyle(grid).height, before.height)
+    const cell = dom.window.getComputedStyle(grid.querySelector('.emoji-sticker-option'))
+    const uploadStyle = dom.window.getComputedStyle(plus)
+    assert.equal(cell.width, uploadStyle.width)
+    assert.equal(cell.aspectRatio, uploadStyle.aspectRatio)
+    plus.click(); chooseFile(dom, picker, new dom.window.File(['x'], 'new.png', { type: 'image/png' })); await settle()
+    assert.deepEqual([...grid.children].map(node => node.textContent), ['+', '😀', '🎉', '❤️'])
+    assert.equal(grid.firstElementChild, plus)
+  })
+})
+
+test('private upload stays in the first grid cell while loading, empty or failed and never auto-sends', async () => {
   const pending = deferred()
   const saved = { id: 'new', kind: 'image', file_name: 'cat.webp' }
   let fetches = 0
@@ -301,8 +331,8 @@ test('private upload stays pinned while loading, empty or failed and never auto-
     toggle.click()
     custom()
     const plus = picker.querySelector('.emoji-sticker-upload')
-    assert.equal(plus.parentElement.hidden, false)
-    assert.equal(plus.parentElement.nextElementSibling, picker.querySelector('.emoji-picker-grid'))
+    assert.equal(plus.parentElement, picker.querySelector('.emoji-picker-grid'))
+    assert.equal(plus.parentElement.firstElementChild, plus)
     assert.equal(plus.disabled, false)
     assert.match(picker.textContent, /加载中/)
     pending.resolve([])
