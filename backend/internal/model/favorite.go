@@ -2,7 +2,7 @@ package model
 
 import "time"
 
-// Favorite is an immutable, server-captured message owned by one user.
+// Favorite holds an immutable message snapshot with owner-editable metadata.
 type Favorite struct {
 	ID               string    `json:"id"`
 	Message          Message   `json:"message"`
@@ -12,6 +12,8 @@ type Favorite struct {
 	ConversationKind string    `json:"conversation_kind"`
 	SavedAt          time.Time `json:"saved_at"`
 	IsOwn            bool      `json:"is_own"`
+	Tags             []string  `json:"tags"`
+	Note             string    `json:"note"`
 }
 
 type FavoritePage struct {
