@@ -22,6 +22,8 @@
 .message-search-result:hover:not(:disabled) { background: #faf5ee; }
 .message-search-result:disabled { cursor: wait; }
 .search-result-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 12px; }
+.history-result-sender { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.history-result-sender .avatar { flex: none; }
 .search-result-meta strong { min-width: 0; overflow-wrap: anywhere; color: var(--ink); font-size: 13px; }
 .search-result-meta time { flex: none; font-size: 11px; }
 .search-result-content { display: block; margin: 9px 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; font-size: 14px; }
