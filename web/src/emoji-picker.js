@@ -86,10 +86,7 @@ export function installEmojiPicker(root, options = {}) {
   grid.setAttribute('role', 'group')
   grid.setAttribute('aria-label', '表情')
 
-  // The upload cell stays above the scrolling library, even during fetch failures.
-  const privateToolbar = document.createElement('div')
-  privateToolbar.className = 'emoji-picker-private-toolbar'
-  privateToolbar.hidden = true
+  // The upload button is the first cell of the same scrolling sticker grid.
   const upload = document.createElement('button')
   upload.type = 'button'
   upload.className = 'emoji-sticker-upload'
@@ -101,7 +98,6 @@ export function installEmojiPicker(root, options = {}) {
   fileInput.accept = 'image/png,image/jpeg,image/gif,image/webp,image/*'
   fileInput.hidden = true
   fileInput.setAttribute('aria-label', '选择表情图片')
-  privateToolbar.append(upload, fileInput)
   const connected = account => root.isConnected && picker.isConnected && account === userID()
   const updateBusy = () => {
     upload.disabled = mutating || selecting
@@ -227,7 +223,6 @@ export function installEmojiPicker(root, options = {}) {
     }
   }
   const renderTabs = () => {
-    privateToolbar.hidden = active !== '表情'
     updateBusy()
     tabs.replaceChildren()
     for (const category of [emojiCategories[0], { name: '表情' }]) {
@@ -257,7 +252,7 @@ export function installEmojiPicker(root, options = {}) {
   }
   const status = (message, retry = false) => {
     grid.classList.add('emoji-picker-stickers')
-    grid.replaceChildren()
+    grid.replaceChildren(upload)
     const text = document.createElement('div')
     text.className = 'emoji-picker-status'
     text.setAttribute('role', retry ? 'alert' : 'status')
@@ -287,8 +282,12 @@ export function installEmojiPicker(root, options = {}) {
       if (!valid()) return
       grid.setAttribute('aria-busy', 'false')
       if (!stickers.length) return status('还没有保存的表情')
-      grid.replaceChildren()
-      for (const sticker of stickers) {
+      grid.replaceChildren(upload)
+      const ordered = [...stickers].sort((a, b) => {
+        const first = Date.parse(a.created_at), second = Date.parse(b.created_at)
+        return Number.isFinite(first) && Number.isFinite(second) ? first - second || String(a.id).localeCompare(String(b.id)) : 0
+      })
+      for (const sticker of ordered) {
         const option = document.createElement('button')
         option.type = 'button'
         option.className = 'emoji-sticker-option'
@@ -342,7 +341,7 @@ export function installEmojiPicker(root, options = {}) {
   // 标签和网格同住一个弹出面板，关闭时整体隐藏，不再有内容泄漏到输入框上。
   const panel = document.createElement('div')
   panel.className = 'emoji-picker-panel'
-  panel.append(tabs, privateToolbar, grid)
+  panel.append(tabs, grid, fileInput)
   picker.append(toggle, panel)
   toolbar.prepend(picker)
   const escape = event => {
