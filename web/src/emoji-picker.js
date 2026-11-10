@@ -234,7 +234,11 @@ export function installEmojiPicker(root, options = {}) {
       const tab = document.createElement('button')
       tab.type = 'button'
       tab.className = 'emoji-picker-tab' + (category.name === active ? ' active' : '')
-      tab.textContent = category.name
+      tab.title = category.name
+      tab.setAttribute('aria-label', category.name)
+      tab.innerHTML = category.name === '表情'
+        ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z" /></svg>'
+        : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="10" /><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" /></svg>'
       tab.setAttribute('role', 'tab')
       tab.setAttribute('aria-selected', String(category.name === active))
       tab.addEventListener('pointerdown', event => event.preventDefault())
