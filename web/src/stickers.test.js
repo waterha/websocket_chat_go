@@ -35,3 +35,27 @@ test('sticker API deduplicates saves, only submits source identities and prepare
   assert.deepEqual(JSON.parse(calls.at(-1).options.body), { conversation_id: 'target' })
   await assert.rejects(stickers.save({ id: 'text', content: '非表情' }, 'chat'), /右键图片或纯表情/)
 })
+
+test('personal upload sends raw bytes with CSRF and deletion accepts an empty response', async t => {
+  const oldDocument = globalThis.document, oldFetch = globalThis.fetch
+  globalThis.document = { cookie: 'csrf=personal-token' }
+  const calls = []
+  globalThis.fetch = async (path, options) => {
+    calls.push({ path, options })
+    return options.method === 'DELETE' ? { ok: true, status: 204, json() { throw new Error('empty response must not be read') } }
+      : { ok: true, json: async () => ({ data: { id: 'uploaded', kind: 'image' } }) }
+  }
+  t.after(() => { globalThis.document = oldDocument; globalThis.fetch = oldFetch })
+  const stickers = useStickers(), file = new File(['gif-bytes'], '开心.gif', { type: 'image/gif' })
+  assert.equal((await stickers.upload(file)).id, 'uploaded')
+  assert.equal(calls[0].options.body, file)
+  assert.equal(calls[0].options.headers['Content-Type'], 'image/gif')
+  assert.equal(calls[0].options.headers['X-CSRF-Token'], 'personal-token')
+  assert.equal(new URL(calls[0].path, 'http://local').searchParams.get('file_name'), '开心.gif')
+  await stickers.remove({ id: 'personal/id' })
+  assert.equal(calls[1].path, '/api/v1/stickers/personal%2Fid')
+  assert.equal(calls[1].options.headers['X-CSRF-Token'], 'personal-token')
+  await assert.rejects(stickers.upload(new File([], 'empty.png', { type: 'image/png' })), /不能为空/)
+  await assert.rejects(stickers.upload(new File(['x'], 'test.svg', { type: 'image/svg+xml' })), /PNG/)
+  assert.equal(calls.length, 2)
+})
