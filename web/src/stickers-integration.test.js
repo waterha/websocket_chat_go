@@ -44,7 +44,7 @@ const app = document.querySelector('#app').__vue_app__, vm = app._instance.setup
 function openCustom() {
   const picker = document.querySelector('.emoji-picker')
   if (!picker.classList.contains('open')) picker.querySelector('.emoji-picker-toggle').click()
-  const tab = [...picker.querySelectorAll('[role="tab"]')].find(item => item.textContent === '表情')
+  const tab = [...picker.querySelectorAll('[role="tab"]')].find(item => item.getAttribute('aria-label') === '表情')
   assert.ok(tab, '用户表情入口应存在'); tab.click()
 }
 test('images and emoji can be added by context menu and selected from the personal tab into a safe draft', async () => {
