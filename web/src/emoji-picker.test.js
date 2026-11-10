@@ -5,6 +5,18 @@ import { JSDOM } from 'jsdom'
 import { emojiCategories, originalEmojiCategories, installEmojiPicker } from './emoji-picker.js'
 
 const settle = () => new Promise(resolve => setImmediate(resolve))
+const chooseFile = (dom, picker, file) => {
+  const input = picker.querySelector('input[type="file"]')
+  Object.defineProperty(input, 'files', { configurable: true, value: file ? [file] : [] })
+  input.dispatchEvent(new dom.window.Event('change', { bubbles: true }))
+  return input
+}
+const contextMenu = (dom, picker) => {
+  const event = new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })
+  picker.querySelector('.emoji-sticker-option').dispatchEvent(event)
+  assert.equal(event.defaultPrevented, true)
+  return picker.querySelector('[role="menuitem"]')
+}
 const deferred = () => {
   let resolve, reject
   const promise = new Promise((yes, no) => { resolve = yes; reject = no })
@@ -267,6 +279,256 @@ test('old-account pending selections neither block nor unlock the next account',
     selections[1].resolve()
     await settle()
     assert.equal(toggle.getAttribute('aria-expanded'), 'false')
+  })
+})
+
+test('private upload stays pinned while loading, empty or failed and never auto-sends', async () => {
+  const pending = deferred()
+  const saved = { id: 'new', kind: 'image', file_name: 'cat.webp' }
+  let fetches = 0
+  let sends = 0
+  const uploaded = []
+  await withPicker({ getStickers: async () => {
+    fetches++
+    if (fetches === 1) return pending.promise
+    return [saved]
+  }, uploadSticker: file => { uploaded.push(file); return Promise.resolve(saved) },
+  onSelectSticker: () => { sends++ } }, async ({ dom, picker, toggle, custom, tabs }) => {
+    toggle.click()
+    custom()
+    const plus = picker.querySelector('.emoji-sticker-upload')
+    assert.equal(plus.parentElement.hidden, false)
+    assert.equal(plus.parentElement.nextElementSibling, picker.querySelector('.emoji-picker-grid'))
+    assert.equal(plus.disabled, false)
+    assert.match(picker.textContent, /加载中/)
+    pending.resolve([])
+    await settle()
+    assert.match(picker.textContent, /还没有保存/)
+    plus.click()
+    chooseFile(dom, picker, null)
+    assert.equal(uploaded.length, 0)
+    const file = new dom.window.File(['image'], 'cat.webp', { type: 'image/webp' })
+    plus.click()
+    const input = chooseFile(dom, picker, file)
+    assert.equal(input.value, '')
+    assert.equal(plus.disabled, true)
+    await settle()
+    assert.deepEqual(uploaded, [file])
+    assert.equal(fetches, 2)
+    assert.equal(sends, 0)
+    assert.equal(tabs()[1].getAttribute('aria-selected'), 'true')
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true')
+    assert.equal(picker.querySelector('img').alt, 'cat.webp')
+    plus.click()
+    chooseFile(dom, picker, file)
+    await settle()
+    assert.deepEqual(uploaded, [file, file])
+  })
+})
+
+test('upload failures call onError, release busy state and allow the same file retry', async () => {
+  const failure = new Error('upload failed')
+  const pending = deferred()
+  const errors = []
+  let uploads = 0
+  await withPicker({ getStickers: async () => { throw new Error('fetch failed') },
+    uploadSticker: () => { uploads++; return pending.promise },
+    onError: error => errors.push(error) }, async ({ dom, picker, toggle, custom }) => {
+    toggle.click()
+    custom()
+    await settle()
+    const plus = picker.querySelector('.emoji-sticker-upload')
+    assert.equal(plus.disabled, false)
+    assert.match(picker.textContent, /加载表情失败/)
+    const file = new dom.window.File(['x'], 'x.png', { type: 'image/png' })
+    plus.click()
+    chooseFile(dom, picker, file)
+    chooseFile(dom, picker, file)
+    assert.equal(uploads, 1)
+    pending.reject(failure)
+    await settle()
+    assert.equal(errors.at(-1), failure)
+    assert.equal(plus.disabled, false)
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true')
+    plus.click()
+    chooseFile(dom, picker, file)
+    await settle()
+    assert.equal(uploads, 2)
+  })
+})
+
+test('right click only deletes through its menu, prevents duplicate deletes and refreshes', async () => {
+  const sticker = { id: 'one', kind: 'emoji', text: '😀' }
+  const pending = deferred()
+  const removed = []
+  let sends = 0
+  let fetches = 0
+  await withPicker({ getStickers: async () => ++fetches === 1 ? [sticker] : [],
+    removeSticker: value => { removed.push(value); return pending.promise },
+    onSelectSticker: () => { sends++ } }, async ({ dom, picker, toggle, custom, tabs }) => {
+    dom.window.confirm = () => { throw new Error('confirm must not be used') }
+    dom.window.prompt = () => { throw new Error('prompt must not be used') }
+    toggle.click()
+    custom()
+    await settle()
+    const remove = contextMenu(dom, picker)
+    assert.equal(remove.textContent, '删除表情')
+    assert.equal(picker.querySelectorAll('[role="menuitem"]').length, 1)
+    assert.equal(sends, 0)
+    remove.click()
+    remove.click()
+    assert.deepEqual(removed, [sticker])
+    assert.match(remove.textContent, /删除中/)
+    assert.equal(remove.disabled, true)
+    assert.equal(picker.querySelector('.emoji-sticker-upload').disabled, true)
+    picker.querySelector('.emoji-sticker-option').click()
+    assert.equal(sends, 0)
+    pending.resolve()
+    await settle()
+    assert.equal(fetches, 2)
+    assert.equal(picker.querySelector('[role="menu"]'), null)
+    assert.equal(picker.querySelector('.emoji-sticker-option'), null)
+    assert.equal(tabs()[1].getAttribute('aria-selected'), 'true')
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true')
+  })
+})
+
+test('failed delete reports error, keeps retry menu, and Esc or outside closes just the menu', async () => {
+  const errors = []
+  let deletes = 0
+  await withPicker({ getStickers: async () => [{ id: 'one', kind: 'emoji', text: '😀' }],
+    removeSticker: async () => { if (++deletes < 3) throw new Error('delete failed') },
+    onError: error => errors.push(error) }, async ({ dom, picker, toggle, custom }) => {
+    toggle.click()
+    custom()
+    await settle()
+    let remove = contextMenu(dom, picker)
+    remove.click()
+    await settle()
+    assert.equal(errors.length, 1)
+    assert.equal(remove.disabled, false)
+    assert.match(remove.textContent, /失败.*重试/)
+    remove.click()
+    await settle()
+    assert.equal(deletes, 2)
+    remove.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    assert.equal(picker.querySelector('[role="menu"]'), null)
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true')
+    contextMenu(dom, picker)
+    dom.window.document.body.dispatchEvent(new dom.window.MouseEvent('pointerdown', { bubbles: true }))
+    assert.equal(picker.querySelector('[role="menu"]'), null)
+    assert.equal(toggle.getAttribute('aria-expanded'), 'true')
+    remove = contextMenu(dom, picker)
+    remove.click()
+    await settle()
+    assert.equal(deletes, 3)
+    assert.equal(picker.querySelector('[role="menu"]'), null)
+  })
+})
+
+test('old-account upload completion cannot refresh or unlock a new-account operation', async () => {
+  let account = 'alice'
+  const pending = [deferred(), deferred()]
+  let uploads = 0
+  let fetches = 0
+  const errors = []
+  const options = { getUserID: () => account,
+    getStickers: async () => { fetches++; return [] },
+    uploadSticker: () => pending[uploads++].promise, onError: error => errors.push(error) }
+  await withPicker(options, async ({ dom, editor, picker, toggle, custom }) => {
+    const file = new dom.window.File(['x'], 'x.png', { type: 'image/png' })
+    toggle.click()
+    custom()
+    await settle()
+    let plus = picker.querySelector('.emoji-sticker-upload')
+    plus.click()
+    chooseFile(dom, picker, file)
+    account = 'bob'
+    installEmojiPicker(editor, options)
+    toggle.click()
+    custom()
+    await settle()
+    plus = picker.querySelector('.emoji-sticker-upload')
+    assert.equal(plus.disabled, false)
+    plus.click()
+    chooseFile(dom, picker, file)
+    const previousFetches = fetches
+    pending[0].reject(new Error('alice stale'))
+    await settle()
+    assert.equal(errors.length, 0)
+    assert.equal(fetches, previousFetches)
+    assert.equal(plus.disabled, true)
+    pending[1].resolve({ id: 'bob' })
+    await settle()
+    assert.equal(fetches, previousFetches + 1)
+    assert.equal(plus.disabled, false)
+  })
+})
+
+test('stale file chooser and detached upload never mutate or refresh another library', async () => {
+  let account = 'alice'
+  let uploads = 0
+  let fetches = 0
+  const pending = deferred()
+  const errors = []
+  const options = { getUserID: () => account, getStickers: async () => { fetches++; return [] },
+    uploadSticker: () => { uploads++; return pending.promise }, onError: error => errors.push(error) }
+  await withPicker(options, async ({ dom, editor, picker, toggle, custom }) => {
+    const file = new dom.window.File(['x'], 'x.png', { type: 'image/png' })
+    toggle.click()
+    custom()
+    await settle()
+    const plus = picker.querySelector('.emoji-sticker-upload')
+    plus.click()
+    account = 'bob'
+    chooseFile(dom, picker, file)
+    assert.equal(uploads, 0)
+    installEmojiPicker(editor, options)
+    toggle.click()
+    custom()
+    await settle()
+    plus.click()
+    chooseFile(dom, picker, file)
+    const previousFetches = fetches
+    editor.remove()
+    pending.reject(new Error('detached'))
+    await settle()
+    assert.equal(errors.length, 0)
+    assert.equal(fetches, previousFetches)
+  })
+})
+
+test('old-account delete failure and detached menus are cleaned up without affecting the next account', async () => {
+  let account = 'alice'
+  const pending = deferred()
+  let fetches = 0
+  const errors = []
+  const options = { getUserID: () => account,
+    getStickers: async () => { fetches++; return [{ id: account, kind: 'emoji', text: '😀' }] },
+    removeSticker: () => pending.promise, onError: error => errors.push(error) }
+  await withPicker(options, async ({ dom, editor, picker, toggle, custom }) => {
+    toggle.click()
+    custom()
+    await settle()
+    contextMenu(dom, picker).click()
+    account = 'bob'
+    installEmojiPicker(editor, options)
+    toggle.click()
+    custom()
+    await settle()
+    const previousFetches = fetches
+    pending.reject(new Error('stale delete'))
+    await settle()
+    assert.equal(errors.length, 0)
+    assert.equal(fetches, previousFetches)
+    assert.equal(picker.querySelector('.emoji-sticker-option').disabled, false)
+    contextMenu(dom, picker)
+    editor.closest('.composer').remove()
+    await settle()
+    assert.equal(picker.querySelector('[role="menu"]'), null)
+    const escape = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })
+    dom.window.document.body.dispatchEvent(escape)
+    assert.equal(escape.defaultPrevented, false)
   })
 })
 
