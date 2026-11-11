@@ -15,6 +15,9 @@ desktop/frontend/wailsjs/
 # Migration SQL files are copied from database/migrations by
 # scripts/build-desktop.ps1 before the launcher is built; only the placeholder
 # that lets `go build` compile the embedded filesystem is committed.
+# Compressed portable runtimes and generated manifest embedded in release EXE.
+desktop/internal/local/runtimes/*
+!desktop/internal/local/runtimes/.keep
 desktop/migrations/*
 !desktop/migrations/.keep
 desktop/build/bin/
