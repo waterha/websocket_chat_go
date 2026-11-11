@@ -23,6 +23,11 @@ type bootstrapState struct {
 	Message string `json:"message"`
 }
 
+type bootstrapManager interface {
+	Run(context.Context, client.Config, func(string)) error
+	Stop(time.Duration)
+}
+
 type App struct {
 	ctx    context.Context
 	path   string
@@ -33,7 +38,8 @@ type App struct {
 	bootMu     sync.Mutex
 	boot       bootstrapState
 	bootCancel context.CancelFunc
-	manager    *local.Manager
+	manager    bootstrapManager
+	stopped    bool
 }
 
 func newApp(path, root string, migrations fs.FS, config client.Config) (*App, error) {
@@ -57,6 +63,7 @@ func (a *App) startup(ctx context.Context) {
 
 func (a *App) shutdown(context.Context) {
 	a.bootMu.Lock()
+	a.stopped = true
 	cancel := a.bootCancel
 	a.bootMu.Unlock()
 	if cancel != nil {
@@ -111,7 +118,7 @@ func (a *App) RetryBootstrap() { a.beginBootstrap() }
 // attempt is already running or the configured server is not local.
 func (a *App) beginBootstrap() {
 	a.bootMu.Lock()
-	if a.boot.Stage == "running" {
+	if a.stopped || a.boot.Stage == "running" {
 		a.bootMu.Unlock()
 		return
 	}
@@ -121,20 +128,27 @@ func (a *App) beginBootstrap() {
 		a.bootMu.Unlock()
 		return
 	}
-	a.boot = bootstrapState{Stage: "running", Message: "正在准备本机聊天服务…"}
-	a.bootMu.Unlock()
-	a.emitBootstrap()
-	go a.runBootstrap(config)
-}
-
-func (a *App) runBootstrap(config client.Config) {
-	ctx, cancel := context.WithCancel(context.Background())
-	a.bootMu.Lock()
+	// Register cancellation before scheduling work. Shutdown must be able to
+	// cancel an attempt even if its goroutine has not run yet.
+	parent := a.ctx
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithCancel(parent)
 	if a.bootCancel != nil {
 		a.bootCancel()
 	}
 	a.bootCancel = cancel
+	a.boot = bootstrapState{Stage: "running", Message: "正在准备本机聊天服务…"}
 	a.bootMu.Unlock()
+	a.emitBootstrap()
+	go a.runBootstrap(ctx, cancel, config)
+}
+
+func (a *App) runBootstrap(ctx context.Context, cancel context.CancelFunc, config client.Config) {
+	if ctx.Err() != nil {
+		return
+	}
 	err := a.manager.Run(ctx, config, func(message string) {
 		a.setBootstrap(bootstrapState{Stage: "running", Message: message})
 	})
