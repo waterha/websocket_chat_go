@@ -5,7 +5,7 @@ export function appendPage(messages, page, conversationID) {
     expected++
   }
   if (page.next_seq !== expected - 1 || (page.has_more && page.messages.length === 0)) throw new Error('同步游标无效')
-  return [...messages, ...page.messages]
+  return page.messages.length ? [...messages, ...page.messages] : messages
 }
 
 export class SyncTasks {
