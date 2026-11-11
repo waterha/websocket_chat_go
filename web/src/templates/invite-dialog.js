@@ -38,7 +38,7 @@ export default `      <div v-if="showInvite" class="modal-backdrop invite-backdr
                 <span class="invite-check" aria-hidden="true"><Check :size="14" /></span>
               </button>
             </div>
-            <div v-if="!inviteVisible.length" class="invite-empty">{{ inviteCandidates.length ? '没有匹配的用户，试试其它关键词或首字母。' : '暂无可邀请的用户。' }}</div>
+            <ContentState v-if="!inviteVisible.length" class="invite-empty" compact :description="inviteCandidates.length ? '没有匹配的用户，试试其它关键词或首字母。' : '暂无可邀请的用户。'" />
           </div>
 
           <footer class="invite-foot">
