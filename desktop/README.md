@@ -29,7 +29,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-desktop.ps1
 - `desktop/build/bin/WebsocketChat.exe`
 - `desktop/build/bin/WebsocketChat-windows-amd64.zip`
 
-构建前脚本会把 `database/migrations` 复制到 `desktop/migrations`（git 忽略，仅提交 `.keep` 占位），聊天服务的数据库结构随启动器一起发布。
+构建前脚本会把 `database/migrations` 复制到 `desktop/migrations`（git 忽略，仅提交 `.keep` 占位），聊天服务的数据库结构随启动器一起发布。Wails 随后根据 `desktop/wails.json` 执行 `web/package.json` 中的 `build:desktop`，重新生成 `desktop/frontend/dist`，最后将迁移和前端资源一起嵌入可执行文件。直接 `go build` / `go test` 不会同步这些资源；修改共享前端或新增迁移后，发布必须走完整构建流程，不能手工编辑生成目录。全局搜索索引需要包含 `000031_global_search_indexes`；旧的本地生成目录或已分发的 EXE 不会因源码更新而自动升级。
 
 构建机需要 Go 1.26、Node.js 22 以上及网络访问，以安装 Wails CLI 和前端依赖。用户机器不需要安装 Go、Node.js 或 Redis，但需要 Windows 10/11、WebView2 Runtime，以及本机 PostgreSQL 12+（一键本机运行时）或可访问的聊天服务器。
 
@@ -40,6 +40,12 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-desktop.ps1
 设置、WebView 缓存和聊天草稿优先存于 `%APPDATA%\WebsocketChat`。登录 Cookie 仅留在运行中进程的内存里；关闭应用后重新登录即可。待确认消息、接收设备 ID 和已读位置按服务器地址隔离保存在本机。图片在系统 WebView 中按需加载，点击图片与文件时通过系统“另存为”保存附件。单实例锁可避免重复窗口和设备连接。
 
 登录后点击侧边栏“同事通讯录”，可以按姓名、账号、部门和职位查找本服务器的同事、按部门筛选并直接发消息。“我的工作资料”用于维护自己的部门和职位，这些信息由本人填写。连接远程服务器时，服务端需同步升级到包含迁移 `000019` 的版本；一键本机启动会在服务启动时自动执行迁移。尚不提供部门层级、企业管理员或多企业隔离。
+
+## 原生侧资源与性能回归
+
+- 启动健康轮询读完小型响应后复用 HTTP 连接，最多额外读取 64 KiB；2 秒请求超时保留，不会无限排空未知服务的响应。`TestHealthyReusesConnectionAcrossPolls` 使用真实 TCP 连接计数，验证带 JSON 响应的连续 10 次轮询仅建立 1 条连接。
+- WebSocket 在拨号前预留连接 ID，重复调用不再发起多余握手；关闭尚在连接中的 socket 会立即取消拨号，而不是等 10 秒超时。`TestPendingSocketDeduplicatesAndCancelsHandshake` 验证重复请求只有 1 次服务端握手、关闭后 2 秒测试期限内返回，以及取消后可重用 ID。
+- 关闭客户端时先在锁内获取连接快照，再于锁外关闭，避免连接释放与读循环清理争用注册表锁。原生 Cookie、CSRF、Origin、重定向隔离和附件流式传输保持不变；不更改 WebView 安全选项。
 
 桌面网络适配、本机服务管理与配置保存测试：
 
