@@ -1,5 +1,6 @@
 import { onMounted, onUnmounted, ref, watch } from 'vue/dist/vue.esm-bundler.js'
 import { Copy, Minus, Pin, Settings, Square, X } from 'lucide-vue-next'
+import ContentState from './content-state.js'
 import { bootstrapStatus, checkServer, desktopConfig, isDesktop, onBootstrap, retryBootstrap, saveServer } from './desktop.js'
 
 // 无边框窗口的自定义标题栏：置顶、最小化、最大化（还原）、关闭。
@@ -42,7 +43,7 @@ const onTitleBarMouseDown = event => {
 
 export const DesktopSettings = {
   props: { loggedIn: Boolean },
-  components: { Copy, Minus, Pin, Settings, Square, X },
+  components: { ContentState, Copy, Minus, Pin, Settings, Square, X },
   setup(props) {
     const enabled = isDesktop()
     const current = desktopConfig() || { serverURL: '', origin: '' }
@@ -131,8 +132,8 @@ export const DesktopSettings = {
           <button type="button" class="close" title="关闭" aria-label="关闭" @click="closeWindow"><X :size="16" /></button>
         </div>
       </header>
-      <div v-if="bootstrap && bootstrap.stage === 'running'" class="desktop-bootstrap" role="status">{{ bootstrap.message || '正在启动本机聊天服务…' }}</div>
-      <div v-else-if="bootstrap && bootstrap.stage === 'failed'" class="desktop-bootstrap failed" role="alert"><span>{{ bootstrap.message || '本机服务启动失败' }}</span><button type="button" @click="retry">重试</button></div>
+      <ContentState v-if="bootstrap && bootstrap.stage === 'running'" kind="loading" class="desktop-bootstrap" :description="bootstrap.message || '正在启动本机聊天服务…'" compact />
+      <ContentState v-else-if="bootstrap && bootstrap.stage === 'failed'" kind="error" class="desktop-bootstrap failed" :description="bootstrap.message || '本机服务启动失败'" @retry="retry" compact />
       <div v-if="opened" class="modal-backdrop desktop-settings-backdrop" @click.self="!busy && (opened = false)" @keydown.esc="!busy && (opened = false)">
         <section class="modal desktop-settings" role="dialog" aria-modal="true" aria-labelledby="desktop-settings-title">
           <div class="modal-head"><h2 id="desktop-settings-title">连接服务器</h2><button type="button" :disabled="busy" @click="opened = false" aria-label="关闭">×</button></div>
