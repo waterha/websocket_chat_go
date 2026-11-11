@@ -2,7 +2,7 @@
 export default `           <section v-show="!showSearch" ref="stream" class="stream" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop" aria-label="聊天记录">
           <div v-if="dragging" class="drop-hint" aria-hidden="true"><span class="drop-hint-box"><strong>松手添加图片或文件</strong><small>文件最大 50 MB，上传后点击发送</small></span></div>
             <button v-if="messages[0]?.seq > 1" class="older" @click="loadOlder">加载更早的消息</button>
-            <div v-if="!messages.length" class="empty-chat">说声你好，开始这段对话。</div>
+            <ContentState v-if="messagesLoading && !messages.length" kind="loading" description="正在加载聊天记录…" /><ContentState v-else-if="messagesError" kind="error" :description="messagesError" :retry-disabled="messagesLoading" @retry="loadCurrentMessages()" /><ContentState v-else-if="!messages.length" class="empty-chat" description="说声你好，开始这段对话。" />
             <template v-for="(item, index) in messages" :key="item.id">
               <p v-if="dayDivider(index)" class="day-divider" role="separator">{{ dayLabel(item.created_at) }}</p>
               <div class="message-row" :data-message-seq="item.seq" :class="{ mine: item.sender_id === me.id, 'recall-row': !!item.recalled_at, system: item.kind === 'system', 'search-target': highlightedMessage === item.seq, 'message-selected': messageActions.selectedIDs.includes(item.id), 'message-selectable': messageActions.selectionMode }" @contextmenu.prevent.stop="messageActions.openMenu($event, item)" @click.capture="messageActions.onMessageClick($event, item)">
