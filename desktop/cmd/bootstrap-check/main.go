@@ -26,7 +26,11 @@ func main() {
 		root, _ = os.MkdirTemp("", "bootstrap-check-*")
 		defer os.RemoveAll(root)
 	}
-	config := client.Config{ServerURL: "http://127.0.0.1:18080", Origin: "http://127.0.0.1:4173"}
+	serverURL := os.Getenv("BOOTSTRAP_CHECK_SERVER")
+	if serverURL == "" {
+		serverURL = "http://127.0.0.1:18081"
+	}
+	config := client.Config{ServerURL: serverURL, Origin: "http://127.0.0.1:4173"}
 	manager := local.New(root, os.DirFS(os.Getenv("BOOTSTRAP_CHECK_MIGRATIONS")))
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -35,6 +39,7 @@ func main() {
 		fmt.Printf("[%4.1fs] %s\n", time.Since(started).Seconds(), message)
 	})
 	if err != nil {
+		manager.Stop(15 * time.Second)
 		fmt.Println("失败：", err)
 		os.Exit(1)
 	}
