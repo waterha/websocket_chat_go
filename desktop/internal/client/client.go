@@ -27,6 +27,7 @@ type Client struct {
 	cancel  context.CancelFunc
 	mu      sync.Mutex
 	sockets map[string]*websocket.Conn
+	pending map[string]*socketDial
 }
 
 func New(config Config) (*Client, error) {
@@ -37,7 +38,7 @@ func New(config Config) (*Client, error) {
 	base, _ := url.Parse(c.ServerURL)
 	jar, _ := cookiejar.New(nil)
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Client{Config: c, base: base, ctx: ctx, cancel: cancel, sockets: make(map[string]*websocket.Conn), http: &http.Client{
+	return &Client{Config: c, base: base, ctx: ctx, cancel: cancel, sockets: make(map[string]*websocket.Conn), pending: make(map[string]*socketDial), http: &http.Client{
 		Jar: jar,
 		Transport: &http.Transport{
 			Proxy:               http.ProxyFromEnvironment,
@@ -134,8 +135,14 @@ func (c *Client) Close() {
 	c.cancel()
 	c.http.CloseIdleConnections()
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	sockets := make([]*websocket.Conn, 0, len(c.sockets))
 	for _, socket := range c.sockets {
+		sockets = append(sockets, socket)
+	}
+	c.mu.Unlock()
+	// Closing a connection can wait for network/read goroutines. Do not hold
+	// the registry lock needed by those goroutines while releasing resources.
+	for _, socket := range sockets {
 		_ = socket.CloseNow()
 	}
 }
