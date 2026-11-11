@@ -6,13 +6,15 @@
 
 双击 `desktop/build/bin/WebsocketChat.exe` 即可，无需先运行任何脚本。当“服务器设置”中的地址是本机 HTTP 地址（默认 `http://127.0.0.1:8080`）且该端口上还没有聊天服务时，启动器会在窗口后台自动完成整个本机服务栈：
 
-- 启动私有 PostgreSQL（端口 5434；数据目录在应用数据目录的 `pgdata` 下，首次运行自动 `initdb` 并创建应用账号与数据库）
-- 启动 Redis（端口 6380；未安装时自动下载便携版到应用数据目录的 `redis` 下）
+- 从 EXE 内释放便携 PostgreSQL 16 和必要的微软 VC DLL，启动私有数据库（端口 5434；数据目录在应用数据目录的 `pgdata` 下，首次运行自动 `initdb` 并创建应用账号与数据库）
+- 从 EXE 内释放并启动 Redis（端口 6380），首次运行同样不需要联网下载
 - 在进程内运行聊天服务（监听端口与服务器地址一致），并应用 `database/migrations` 的数据库结构
 
 窗口顶部显示每个步骤的进度；失败时给出原因和“重试”按钮。由启动器拉起的服务在关闭窗口时一并停止。若端口上已有聊天服务在运行则直接复用；启动器自己的数据库和 Redis 使用 5434/6380，与开发脚本的 5433/6379 互不影响。
 
-启动器要求本机装有 PostgreSQL 12+：按 `IM_POSTGRES_BIN`、`PATH`、Program Files 和各磁盘根目录的顺序查找 `pg_ctl`。Redis 不需要预装。数据库与 Redis 端口可用环境变量 `IM_DESKTOP_PGPORT`、`IM_DESKTOP_REDIS_PORT` 覆盖。
+**用户不需要预装 PostgreSQL、Redis、VC 运行库、Go、Node.js，也不需要运行任何项目脚本。** 默认先使用 EXE 内置的私有依赖，避免扫描系统盘或依赖开发机的 PATH。首次释放归档会稍慢，后续启动复用版本/校验值对应的缓存。数据库与 Redis 端口可用高级环境变量 `IM_DESKTOP_PGPORT`、`IM_DESKTOP_REDIS_PORT` 覆盖；显式设置 `IM_POSTGRES_BIN`、`IM_REDIS_DIR` 时仍由使用者指定的运行时负责。
+
+已有 PostgreSQL 16 数据可以直接复用内置的同主版本更新；若数据属于其他主版本，程序不会强制升级或删除数据，而是要求使用匹配的原运行时。运行时安装采用 SHA256 校验、临时目录和完整后原子改名，不会把半下载/半解压文件标记为可用；重试可恢复缺失的运行时文件，用户数据库、附件与设置不受影响。
 
 应用数据（pgdata、redis-data、media、migrations、logs）优先存于 `%APPDATA%\WebsocketChat`；不可写时自动使用程序旁的 `WebsocketChat-data`，再尝试系统临时目录中的同名目录。
 
@@ -31,7 +33,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\build-desktop.ps1
 
 构建前脚本会把 `database/migrations` 复制到 `desktop/migrations`（git 忽略，仅提交 `.keep` 占位），聊天服务的数据库结构随启动器一起发布。Wails 随后根据 `desktop/wails.json` 执行 `web/package.json` 中的 `build:desktop`，重新生成 `desktop/frontend/dist`，最后将迁移和前端资源一起嵌入可执行文件。直接 `go build` / `go test` 不会同步这些资源；修改共享前端或新增迁移后，发布必须走完整构建流程，不能手工编辑生成目录。全局搜索索引需要包含 `000031_global_search_indexes`；旧的本地生成目录或已分发的 EXE 不会因源码更新而自动升级。
 
-构建机需要 Go 1.26、Node.js 22 以上及网络访问，以安装 Wails CLI 和前端依赖。用户机器不需要安装 Go、Node.js 或 Redis，但需要 Windows 10/11、WebView2 Runtime，以及本机 PostgreSQL 12+（一键本机运行时）或可访问的聊天服务器。
+构建机需要 Go 1.26、Node.js 22 以上及网络访问。正式构建先执行 `scripts/prepare-desktop-runtimes.ps1`，下载并校验固定版本的 EDB PostgreSQL、redis-windows 和微软 VC 官方包，只保留运行所需内容与许可，生成被 git 忽略的嵌入归档和校验清单。上游固定 URL 版本发生变化或哈希不符时停止构建，不能静默替换依赖。
+
+用户机器只需要 Windows 10/11 x64 和 Microsoft Edge WebView2。通常系统已有 WebView2；缺少时 Wails 启动器会提示下载安装（这一特殊步骤需要联网）。数据库与 Redis 不需用户下载安装，默认本机模式不需要先启动其他服务。单 EXE 包体会增大，这是携带离线依赖的预期成本。
 
 ## 连接团队服务器
 
@@ -54,3 +58,12 @@ Set-Location desktop
 go test ./...
 go vet ./...
 ```
+
+离线依赖首次使用的真实集成验证（先运行完整构建或运行时准备脚本）：
+
+```powershell
+$env:IM_TEST_BUNDLED_RUNTIME = '1'
+go test ./internal/local -run '^TestStandaloneBundledRuntimeFirstLaunchAndRestart$' -count=1 -v -timeout=8m
+```
+
+该测试不复用开发服务：使用新建的中文含空格数据目录、动态空闲端口及内置运行时，检查初始化、注册登录、会话接口、关闭后的端口回收、再次启动登录同一账户。Windows 数据库工具的 ANSI 路径问题通过短路径或受当前用户私有 ACL 保护的 ASCII 目录别名自动处理，不移动或删除原数据。
