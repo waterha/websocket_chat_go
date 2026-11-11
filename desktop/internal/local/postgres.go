@@ -111,6 +111,32 @@ func (service *postgresService) psqlOutput(ctx context.Context, statement string
 // ensure brings the private cluster up, or reuses whichever PostgreSQL already
 // listens on the port, and then aligns the application role and database.
 func (service *postgresService) ensure(ctx context.Context, progress func(string)) error {
+	for _, directory := range []string{service.data, service.logs} {
+		if err := os.MkdirAll(directory, 0755); err != nil {
+			return err
+		}
+	}
+	// Keep bin/../share and bin/../lib relative to one installation alias.
+	if strings.EqualFold(filepath.Base(service.bin), "bin") {
+		installation, err := postgresPath(filepath.Dir(service.bin))
+		if err != nil {
+			return err
+		}
+		service.bin = filepath.Join(installation, "bin")
+	} else {
+		compatible, err := postgresPath(service.bin)
+		if err != nil {
+			return err
+		}
+		service.bin = compatible
+	}
+	for _, path := range []*string{&service.data, &service.logs} {
+		compatible, err := postgresPath(*path)
+		if err != nil {
+			return err
+		}
+		*path = compatible
+	}
 	if tcpOpen(service.port) {
 		progress(fmt.Sprintf("检测到 PostgreSQL 已在运行（端口 %d）", service.port))
 		if err := service.ensureDatabase(ctx, progress); err != nil {
@@ -124,7 +150,15 @@ func (service *postgresService) ensure(ctx context.Context, progress func(string
 	return service.ensureDatabase(ctx, progress)
 }
 
-func (service *postgresService) start(ctx context.Context, progress func(string)) error {
+func (service *postgresService) start(ctx context.Context, progress func(string)) (result error) {
+	defer func() {
+		if result != nil {
+			service.stop()
+		}
+	}()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if !fileExists(filepath.Join(service.data, "PG_VERSION")) {
 		progress("首次运行：初始化本地 PostgreSQL 数据目录（只在本机，不影响已安装的数据库）")
 		if err := os.MkdirAll(service.data, 0755); err != nil {
@@ -143,6 +177,14 @@ func (service *postgresService) start(ctx context.Context, progress func(string)
 	ctx, cancel := context.WithTimeout(ctx, listenTimeout)
 	defer cancel()
 	progress(fmt.Sprintf("启动本地 PostgreSQL（端口 %d）", service.port))
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// This private cluster is ours even if cancellation races pg_ctl's exit.
+	// stop uses a fresh context and safely attempts pg_ctl stop on failure.
+	service.startMu.Lock()
+	service.started = true
+	service.startMu.Unlock()
 	if err := service.pgctl(ctx, "-D", service.data, "-l", filepath.Join(service.logs, "postgres.log"),
 		"-o", fmt.Sprintf("-p %d -h 127.0.0.1", service.port), "-w", "start"); err != nil {
 		return fmt.Errorf("PostgreSQL 启动失败：%w", err)
@@ -157,9 +199,6 @@ func (service *postgresService) start(ctx context.Context, progress func(string)
 		case <-time.After(300 * time.Millisecond):
 		}
 	}
-	service.startMu.Lock()
-	service.started = true
-	service.startMu.Unlock()
 	return nil
 }
 
