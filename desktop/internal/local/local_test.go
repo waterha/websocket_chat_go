@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -61,6 +62,32 @@ func TestHealthyDetectsRunningChatServer(t *testing.T) {
 	stopped := Target{Host: "127.0.0.1", Port: 1}
 	if healthy(context.Background(), stopped) {
 		t.Fatal("expected a closed port to be unhealthy")
+	}
+}
+
+func TestHealthyReusesConnectionAcrossPolls(t *testing.T) {
+	var connections atomic.Int64
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	}))
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			connections.Add(1)
+		}
+	}
+	server.Start()
+	defer server.Close()
+	target, ok := Plan(client.Config{ServerURL: server.URL})
+	if !ok {
+		t.Fatal("expected local target")
+	}
+	for i := 0; i < 10; i++ {
+		if !healthy(t.Context(), target) {
+			t.Fatal("expected healthy response")
+		}
+	}
+	if got := connections.Load(); got != 1 {
+		t.Fatalf("10 health polls opened %d connections, want 1", got)
 	}
 }
 
