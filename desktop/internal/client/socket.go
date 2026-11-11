@@ -13,6 +13,10 @@ import (
 
 var validID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 
+type socketDial struct {
+	cancel context.CancelFunc
+}
+
 type SocketEvent struct {
 	ID   string `json:"id"`
 	Type string `json:"type"`
@@ -23,6 +27,25 @@ func (c *Client) OpenSocket(id, device string, emit func(SocketEvent)) error {
 	if !validID.MatchString(id) || !validID.MatchString(device) {
 		return fmt.Errorf("无效的设备标识")
 	}
+	ctx, cancel := context.WithTimeout(c.ctx, 10*time.Second)
+	defer cancel()
+	dial := &socketDial{cancel: cancel}
+	c.mu.Lock()
+	if c.ctx.Err() != nil || c.sockets[id] != nil || c.pending[id] != nil {
+		c.mu.Unlock()
+		return fmt.Errorf("连接已关闭或重复")
+	}
+	// Reserve before performing network I/O: duplicate opens do not consume a
+	// second handshake and CloseSocket can cancel a stalled handshake at once.
+	c.pending[id] = dial
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		if c.pending[id] == dial {
+			delete(c.pending, id)
+		}
+		c.mu.Unlock()
+	}()
 	target := *c.base
 	if target.Scheme == "https" {
 		target.Scheme = "wss"
@@ -31,8 +54,6 @@ func (c *Client) OpenSocket(id, device string, emit func(SocketEvent)) error {
 	}
 	target.Path = "/ws"
 	target.RawQuery = url.Values{"device_id": []string{device}}.Encode()
-	ctx, cancel := context.WithTimeout(c.ctx, 10*time.Second)
-	defer cancel()
 	conn, resp, err := websocket.Dial(ctx, target.String(), &websocket.DialOptions{HTTPClient: c.http, HTTPHeader: http.Header{"Origin": []string{c.Config.Origin}}})
 	if err != nil {
 		if resp != nil && resp.Body != nil {
@@ -42,11 +63,12 @@ func (c *Client) OpenSocket(id, device string, emit func(SocketEvent)) error {
 	}
 	conn.SetReadLimit(4 << 20)
 	c.mu.Lock()
-	if c.ctx.Err() != nil || c.sockets[id] != nil {
+	if ctx.Err() != nil || c.pending[id] != dial || c.sockets[id] != nil {
 		c.mu.Unlock()
 		conn.CloseNow()
 		return fmt.Errorf("连接已关闭或重复")
 	}
+	delete(c.pending, id)
 	c.sockets[id] = conn
 	c.mu.Unlock()
 	go func() {
@@ -89,6 +111,11 @@ func (c *Client) SendSocket(id, payload string) error {
 func (c *Client) CloseSocket(id string) {
 	c.mu.Lock()
 	conn := c.sockets[id]
+	dial := c.pending[id]
+	if dial != nil {
+		dial.cancel()
+		delete(c.pending, id)
+	}
 	c.mu.Unlock()
 	if conn != nil {
 		// Abrupt close releases native resources immediately; reconnect/sync already
