@@ -1,4 +1,4 @@
-﻿param([switch]$SkipInstall)
+param([switch]$SkipInstall)
 
 $ErrorActionPreference = 'Stop'
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
@@ -43,6 +43,10 @@ try {
     if (-not $SkipInstall) { npm.cmd ci; Assert-Exit '前端依赖安装' }
 } finally { Pop-Location }
 
+# Embed private PostgreSQL/Redis binaries; no dependency downloads are needed
+# on the end user's machine, even on the very first launch.
+& (Join-Path $PSScriptRoot 'prepare-desktop-runtimes.ps1')
+
 Push-Location $DesktopRoot
 $PreviousTemp = $env:TEMP
 $PreviousTmp = $env:TMP
@@ -67,8 +71,9 @@ try {
 协作聊天 · Windows 桌面客户端
 
 双击 WebsocketChat.exe 即可运行，无需安装 Go、Node.js 或浏览器扩展。
-需要 Windows 10/11、Microsoft Edge WebView2 Runtime，以及本机安装的 PostgreSQL 12+
-（或设置环境变量 IM_POSTGRES_BIN 指向其 bin 目录）。Redis 缺失时会自动下载便携版。
+适用于 Windows 10/11 x64。PostgreSQL 与 Redis 已包含在EXE里，无需手动安装、运行脚本或下载。
+首次打开会自动释放私有运行时并初始化数据，请等待窗口顶部启动进度完成。
+系统缺少 Microsoft Edge WebView2 时，程序会提示并引导安装（该步骤需要联网）。
 
 默认连接本机 http://127.0.0.1:8080。启动器会自动完成其余工作：启动私有 PostgreSQL
 （端口 5434）、启动 Redis（端口 6380）、应用数据库结构并启动内置聊天服务（端口 8080）。
