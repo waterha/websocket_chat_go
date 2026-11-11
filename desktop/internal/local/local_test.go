@@ -244,7 +244,9 @@ func TestManagerRunRejectsRemoteServers(t *testing.T) {
 func TestStopShutsDownStartedPostgresAndRedis(t *testing.T) {
 	pg := &postgresService{started: true}
 	redis := &redisService{started: true}
-	handle := &runHandle{pg: pg, redis: redis, done: make(chan error, 1)}
+	_, cancel := context.WithCancel(context.Background())
+	handle := &runHandle{pg: pg, redis: redis, cancel: cancel, startupDone: make(chan struct{})}
+	close(handle.startupDone)
 	manager := New(t.TempDir(), fstest.MapFS{})
 	manager.resources = []*runHandle{handle}
 	manager.Stop(time.Second)
