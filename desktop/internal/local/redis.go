@@ -20,6 +20,7 @@ type redisService struct {
 	startMu sync.Mutex
 	started bool
 	process *os.Process
+	done    chan struct{}
 }
 
 func (service *redisService) address() string {
@@ -101,7 +102,10 @@ func (service *redisService) ensure(ctx context.Context, progress func(string)) 
 	service.startMu.Lock()
 	service.started = true
 	service.process = command.Process
+	service.done = make(chan struct{})
+	done := service.done
 	service.startMu.Unlock()
+	go func() { defer close(done); _ = command.Wait() }()
 	for start := time.Now(); !redisPing(address, time.Second); {
 		if time.Since(start) > 20*time.Second {
 			return fmt.Errorf("Redis 启动后未响应端口 %d", service.port)
@@ -123,12 +127,21 @@ func (service *redisService) stop() {
 	}
 	service.started = false
 	process := service.process
+	done := service.done
 	service.process = nil
+	service.done = nil
 	service.startMu.Unlock()
 	if process == nil {
 		return
 	}
 	if !redisShutdown(service.address(), time.Second) {
 		_ = process.Kill()
+	}
+	if done != nil {
+		select {
+		case <-done:
+		case <-time.After(3 * time.Second):
+			_ = process.Kill()
+		}
 	}
 }
