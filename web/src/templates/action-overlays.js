@@ -21,7 +21,7 @@ export default `    <Teleport to="body">
           <div class="modal-head"><h2>转发消息</h2><button type="button" class="icon-button" aria-label="关闭转发" :disabled="messageActions.forwardBusy" @click="messageActions.closeForward">×</button></div>
           <p class="subtle">将 {{ messageActions.forwardQueue.length }} 条消息逐条转发到所选会话，图片和附件一同转发。</p>
           <label>选择会话<select v-model="messageActions.forwardTarget" :disabled="messageActions.forwardBusy || messageActions.forwardLocked" required aria-label="转发到会话"><option disabled value="">请选择会话</option><option v-for="conversation in messageActions.forwardTargets" :key="conversation.id" :value="conversation.id">{{ title(conversation) }}</option></select></label>
-          <p v-if="!messageActions.forwardTargets.length" class="subtle">暂无可转发的会话，请先打开好友聊天或创建群聊。</p>
+          <ContentState v-if="!messageActions.forwardTargets.length" class="subtle" compact description="暂无可转发的会话，请先打开好友聊天或创建群聊。" />
           <p v-if="messageActions.forwardError" class="forward-error" role="alert">{{ messageActions.forwardError }}</p>
           <div class="profile-actions"><button type="button" class="outline-button" :disabled="messageActions.forwardBusy" @click="messageActions.closeForward">取消</button><button type="submit" class="primary" :disabled="!messageActions.forwardTarget || messageActions.forwardBusy">{{ messageActions.forwardBusy ? '转发中…' : messageActions.forwardError ? '重试剩余消息' : '确认转发' }}</button></div>
         </form>
