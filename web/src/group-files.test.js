@@ -80,3 +80,20 @@ test('failure is retryable and closing prevents late results and restores focus'
 })
 
 test.after(() => { app.unmount(); dom.window.close() })
+
+test('unified file states retry a failed page with its cursor and retain loaded files', async () => {
+  await vm.open(); await tick()
+  fail = true; await vm.load(true); await tick()
+  assert.ok(document.querySelector('.search-error.content-state--error'))
+  assert.equal(document.querySelectorAll('.group-file-row').length, 1)
+  assert.equal(document.querySelector('.content-state--empty'), null)
+  fail = false; hold = true
+  document.querySelector('.content-state__retry').click(); await tick()
+  assert.equal(calls.at(-1).searchParams.get('before_seq'), '20')
+  assert.ok(document.querySelector('.content-state--loading'))
+  assert.equal(document.querySelector('.group-files-more').disabled, true)
+  resolvePending(); await tick(); hold = false
+  assert.equal(document.querySelectorAll('.group-file-row').length, 2)
+  vm.files = []; vm.hasMore = false; await tick()
+  assert.ok(document.querySelector('.content-state--empty'))
+})
