@@ -40,6 +40,8 @@ type App struct {
 	bootCancel context.CancelFunc
 	manager    bootstrapManager
 	stopped    bool
+	// Testable transport; production uses the Wails runtime event bridge.
+	bootstrapEvent func(bootstrapState)
 }
 
 func newApp(path, root string, migrations fs.FS, config client.Config) (*App, error) {
@@ -150,7 +152,7 @@ func (a *App) runBootstrap(ctx context.Context, cancel context.CancelFunc, confi
 		return
 	}
 	err := a.manager.Run(ctx, config, func(message string) {
-		a.setBootstrap(bootstrapState{Stage: "running", Message: message})
+		a.publishBootstrap(ctx, bootstrapState{Stage: "running", Message: message})
 	})
 	if ctx.Err() != nil {
 		return
@@ -158,13 +160,23 @@ func (a *App) runBootstrap(ctx context.Context, cancel context.CancelFunc, confi
 	// 上下文不能随本函数返回而取消：启动成功的聊天服务要一直挂在它上面，
 	// 直到下次引导重试或应用关停（shutdown 里的 bootCancel）。
 	if err != nil {
-		cancel()
 		log.Printf("本机服务引导失败：%v", err)
-		a.setBootstrap(bootstrapState{Stage: "failed", Message: err.Error()})
+		a.publishBootstrap(ctx, bootstrapState{Stage: "failed", Message: err.Error()})
+		cancel()
 	} else {
 		log.Printf("本机服务已就绪（%s）", config.ServerURL)
-		a.setBootstrap(bootstrapState{Stage: "ready", Message: "本机服务已就绪"})
+		a.publishBootstrap(ctx, bootstrapState{Stage: "ready", Message: "本机服务已就绪"})
 	}
+}
+
+func (a *App) publishBootstrap(ctx context.Context, state bootstrapState) {
+	a.bootMu.Lock()
+	if a.stopped || ctx.Err() != nil {
+		a.bootMu.Unlock()
+		return
+	}
+	a.boot = state
+	a.bootMu.Unlock()
 	a.emitBootstrap()
 }
 
@@ -178,7 +190,9 @@ func (a *App) emitBootstrap() {
 	a.bootMu.Lock()
 	state := a.boot
 	a.bootMu.Unlock()
-	if a.ctx != nil {
+	if a.bootstrapEvent != nil {
+		a.bootstrapEvent(state)
+	} else if a.ctx != nil {
 		runtime.EventsEmit(a.ctx, "desktop:bootstrap", state)
 	}
 }
