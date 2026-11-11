@@ -4,7 +4,7 @@ import { register } from 'node:module'
 import { JSDOM } from 'jsdom'
 register('../css-hook.mjs', import.meta.url)
 const dom = new JSDOM('<!doctype html><html><body><button id="trigger">收藏入口</button><div id="app"></div></body></html>', { url: 'http://localhost' })
-for (const key of ['window', 'document', 'HTMLElement', 'Element', 'Node', 'SVGElement', 'Text', 'Comment', 'DocumentFragment']) globalThis[key] = key === 'window' ? dom.window : key === 'document' ? dom.window.document : dom.window[key]
+for (const key of ['window', 'document', 'HTMLElement', 'Element', 'Node', 'SVGElement', 'Text', 'Comment', 'Document', 'DocumentFragment']) globalThis[key] = key === 'window' ? dom.window : key === 'document' ? dom.window.document : dom.window[key]
 const { createApp, ref, nextTick } = await import('vue/dist/vue.esm-bundler.js')
 const { FavoritesPanel, useFavorites } = await import('./favorites.js')
 const { SavedMessageContent } = await import('./saved-message-content.js')
@@ -113,5 +113,24 @@ test('favorite menu saves thread snapshots once, exposes busy and success/error 
   handler = () => { throw new Error('保存失败') }
   await vm.actions.openMenu({}, item); vm.actions.runMenu('favorite'); await settle(); assert.equal(vm.actions.favoriteError, '保存失败')
   for (const extra of [{ recalled_at: 'now' }, { kind: 'system' }]) { await vm.actions.openMenu({}, { ...item, ...extra }); assert.equal(vm.actions.menu, null) }
+  await cleanup()
+})
+
+test('unified favorites states prioritize loading then error over empty and preserve search empty text', async () => {
+  let finish
+  handler = () => new Promise(resolve => { finish = resolve })
+  const { vm } = mount(FavoritesPanel, { open: true, userID: 'me' }); await settle()
+  assert.ok(document.querySelector('.content-state--loading'))
+  assert.equal(document.querySelector('.content-state--empty'), null)
+  finish({ favorites: [], has_more: false }); await settle()
+  assert.match(document.querySelector('.content-state--empty').textContent, /暂无收藏/)
+  handler = () => { throw new Error('无法加载收藏') }
+  await vm.load(); await settle()
+  assert.ok(document.querySelector('.favorites-error.content-state--error'))
+  assert.equal(document.querySelector('.content-state--empty'), null)
+  handler = () => ({ favorites: [snapshot()], has_more: false })
+  document.querySelector('.content-state__retry').click(); await settle()
+  vm.query = '不匹配'; await settle()
+  assert.match(document.querySelector('.content-state--empty').textContent, /没有匹配结果/)
   await cleanup()
 })
