@@ -14,6 +14,12 @@ test('sync advances only contiguous pages for the correct conversation', () => {
   assert.equal(previous.length, 1)
 })
 
+test('an empty sync page preserves history identity without skipping cursor validation', () => {
+  const previous = Object.freeze(Array.from({ length: 10000 }, (_, index) => message(index + 1)))
+  assert.equal(appendPage(previous, { messages: [], next_seq: 10000, has_more: false }, 'chat'), previous)
+  assert.throws(() => appendPage(previous, { messages: [], next_seq: 9999, has_more: false }, 'chat'), /游标无效/)
+})
+
 test('ACK and errors correlate with requests; close rejects outstanding sends', async () => {
   const sent = []
   const requests = new Requests({ readyState: 1, send: payload => sent.push(JSON.parse(payload)) })
