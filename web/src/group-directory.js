@@ -1,3 +1,4 @@
+import ContentState from './content-state.js'
 import { ref, nextTick, onUnmounted } from 'vue/dist/vue.esm-bundler.js'
 import { api } from './api.js'
 
@@ -11,19 +12,20 @@ const errors = {
 }
 
 export const GroupDirectory = {
+  components: { ContentState },
   props: { showTrigger: { type: Boolean, default: true } },
   emits: ['joined'],
   setup(_, { emit }) {
     const opened = ref(false), panel = ref(null), trigger = ref(null)
     const query = ref(''), groups = ref([]), history = ref([])
-    const busy = ref(false), actionBusy = ref(false), error = ref(''), notice = ref('')
+    const busy = ref(false), actionBusy = ref(false), error = ref(''), loadError = ref(''), notice = ref('')
     const target = ref(null), message = ref('')
     let generation = 0, request
     async function load() {
       request?.abort()
       const version = ++generation
       request = new AbortController()
-      busy.value = true; error.value = ''
+      busy.value = true; loadError.value = ''; error.value = ''
       try {
         const [entries, requests] = await Promise.all([
           api(`/groups/discover?${new URLSearchParams({ q: query.value.trim() })}`, { signal: request.signal }),
@@ -32,7 +34,7 @@ export const GroupDirectory = {
         if (version !== generation) return
         groups.value = entries; history.value = requests
       } catch (cause) {
-        if (version === generation && cause.name !== 'AbortError') error.value = '群列表加载失败，请重试。'
+        if (version === generation && cause.name !== 'AbortError') loadError.value = '群列表加载失败，请重试。'
       } finally { if (version === generation) busy.value = false }
     }
     async function open() {
@@ -77,7 +79,7 @@ export const GroupDirectory = {
       if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
     }
     onUnmounted(() => { generation++; request?.abort() })
-    return { opened, panel, trigger, query, groups, history, busy, actionBusy, error, notice, target, message, open, close, load, choose, join, withdraw, keyboard }
+    return { opened, panel, trigger, query, groups, history, busy, actionBusy, error, loadError, notice, target, message, open, close, load, choose, join, withdraw, keyboard }
   },
   template: `
     <button v-if="showTrigger" ref="trigger" type="button" class="outline-button group-directory-trigger" aria-haspopup="dialog" @click="open">加入群聊</button>
@@ -89,7 +91,7 @@ export const GroupDirectory = {
           <input v-model="query" type="search" maxlength="100" placeholder="搜索群名称或群 ID" aria-label="搜索群名称或群 ID" :disabled="actionBusy" />
           <button class="primary" type="submit" :disabled="busy || actionBusy">{{ busy ? '搜索中…' : '搜索' }}</button>
         </form>
-        <p v-if="error" class="search-error" role="alert">{{ error }} <button type="button" :disabled="busy || actionBusy" @click="load">刷新列表</button></p>
+        <p v-if="error" class="search-error" role="alert">{{ error }}</p>
         <p v-if="notice" role="status">{{ notice }}</p>
         <form v-if="target" class="group-join-form" @submit.prevent="join">
           <strong>{{ target.name }}</strong>
@@ -98,8 +100,9 @@ export const GroupDirectory = {
           <div class="request-actions"><button type="submit" class="primary" :disabled="actionBusy">{{ actionBusy ? '处理中…' : target.join_approval ? '提交入群申请' : '确认加入' }}</button><button type="button" class="outline-button" :disabled="actionBusy" @click="target = null">取消</button></div>
         </form>
         <div class="group-directory-results" :aria-busy="busy">
-          <p v-if="busy" role="status">正在加载群聊…</p>
-          <p v-else-if="!groups.length && !error" role="status">没有找到可加入的群聊，可更换关键词。</p>
+          <ContentState v-if="busy" kind="loading" description="正在加载群聊…" compact />
+          <ContentState v-else-if="loadError" kind="error" class="search-error" :description="loadError" retry-label="刷新列表" :retry-disabled="busy || actionBusy" compact @retry="load()" />
+          <ContentState v-else-if="!groups.length && !error" description="没有找到可加入的群聊，可更换关键词。" compact />
           <ul class="group-directory-list"><li v-for="group in groups" :key="group.id">
             <span class="avatar" aria-hidden="true">{{ group.name.slice(0,1) }}</span>
             <div class="group-directory-info"><strong>{{ group.name }}</strong><small>{{ group.member_count }} 人 · {{ group.join_approval ? '需审批' : '可直接加入' }}</small><small>群 ID：{{ group.id }}</small></div>
