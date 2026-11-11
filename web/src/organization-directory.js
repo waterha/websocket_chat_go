@@ -1,8 +1,10 @@
+import ContentState from './content-state.js'
 import { ref, nextTick, onUnmounted } from 'vue/dist/vue.esm-bundler.js'
 import { api } from './api.js'
 import { mediaURL } from './media.js'
 
 export const OrganizationDirectory = {
+  components: { ContentState },
   emits: ['chat'],
   setup(_, { emit }) {
     const opened = ref(false), panel = ref(null), trigger = ref(null)
@@ -11,7 +13,7 @@ export const OrganizationDirectory = {
     const profileReady = ref(false), profileBusy = ref(false), profileError = ref(''), saved = ref(false)
     const workDepartment = ref(''), jobTitle = ref('')
     const appliedQuery = ref(''), appliedDepartment = ref('')
-    let directoryRequest, profileRequest, generation = 0, profileGeneration = 0, lifetime = 0
+    let directoryRequest, profileRequest, generation = 0, profileGeneration = 0, lifetime = 0, retryAppend = false
 
     function cancel() {
       generation++; profileGeneration++; lifetime++
@@ -25,7 +27,7 @@ export const OrganizationDirectory = {
         entries.value = []; hasMore.value = false; nextOffset.value = 0
         appliedQuery.value = query.value.trim(); appliedDepartment.value = department.value
       }
-      busy.value = true; error.value = ''
+      busy.value = true; error.value = ''; retryAppend = append
       try {
         const params = new URLSearchParams({ q: appliedQuery.value, department: appliedDepartment.value, offset: String(nextOffset.value), limit: '50' })
         const page = await api(`/directory?${params}`, { signal: directoryRequest.signal })
@@ -85,7 +87,7 @@ export const OrganizationDirectory = {
     onUnmounted(cancel)
     return { mediaURL, opened, panel, trigger, query, department, entries, departments, busy, error, hasMore, nextOffset,
       profileReady, profileBusy, profileError, saved, workDepartment, jobTitle, appliedQuery, appliedDepartment,
-      open, close, load, loadProfile, saveProfile, chat, keyboard }
+      open, close, load, retry: () => load(retryAppend), loadProfile, saveProfile, chat, keyboard }
   },
   template: `
     <button ref="trigger" type="button" class="org-entry" aria-haspopup="dialog" @click="open">同事通讯录 <span>查找同事 · 发起聊天</span></button>
@@ -99,7 +101,9 @@ export const OrganizationDirectory = {
             <label>职位<input v-model="jobTitle" maxlength="100" :disabled="!profileReady || profileBusy" @input="saved = false" placeholder="例如：产品经理" /></label>
             <button class="primary" :disabled="!profileReady || profileBusy">{{ profileBusy ? '处理中…' : '保存工作资料' }}</button>
           </form>
-          <p v-if="profileError" role="alert" class="org-error">{{ profileError }} <button v-if="!profileReady" type="button" :disabled="profileBusy" @click="loadProfile">重试加载资料</button></p>
+          <ContentState v-if="profileBusy && !profileReady" kind="loading" description="正在加载工作资料…" compact />
+          <ContentState v-else-if="profileError && !profileReady" kind="error" class="org-error" :description="profileError" retry-label="重试加载资料" :retry-disabled="profileBusy" compact @retry="loadProfile" />
+          <p v-else-if="profileError" role="alert" class="org-error">{{ profileError }}</p>
           <p v-if="saved" role="status">工作资料已保存</p>
         </details>
         <form class="org-search" role="search" @submit.prevent="load()">
@@ -107,10 +111,10 @@ export const OrganizationDirectory = {
           <label>部门<select v-model="department" @change="load()"><option value="">全部部门</option><option v-for="name in departments" :key="name" :value="name">{{ name }}</option></select></label>
           <button class="primary" type="submit">搜索</button>
         </form>
-        <p v-if="error" role="alert" class="org-error">{{ error }} <button type="button" :disabled="busy" @click="load(entries.length > 0)">重试</button></p>
         <div class="org-results" :aria-busy="busy">
-          <p v-if="busy" role="status">正在加载同事…</p>
-          <p v-else-if="!entries.length && !error" role="status">没有找到同事。可更换关键词或选择全部部门。</p>
+          <ContentState v-if="busy" kind="loading" description="正在加载同事…" compact />
+          <ContentState v-else-if="error" kind="error" class="org-error" :description="error" :retry-disabled="busy" compact @retry="retry" />
+          <ContentState v-else-if="!entries.length" description="没有找到同事。可更换关键词或选择全部部门。" compact />
           <ul class="org-list"><li v-for="person in entries" :key="person.id" class="org-person">
             <img v-if="person.avatar" :src="mediaURL(person.avatar)" class="avatar" alt="" loading="lazy" /><span v-else class="avatar" aria-hidden="true">{{ person.name.slice(0,1) }}</span>
             <div class="org-info"><strong>{{ person.name }}</strong><span>{{ person.department || '未填写部门' }} · {{ person.job_title || '未填写职位' }}</span><small>{{ person.email }}</small></div>
