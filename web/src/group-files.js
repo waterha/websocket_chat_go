@@ -1,3 +1,4 @@
+import ContentState from './content-state.js'
 import { ref, nextTick, onUnmounted } from 'vue/dist/vue.esm-bundler.js'
 import { FileTypeIcon } from './file-type-icon.js'
 import { api } from './api.js'
@@ -5,12 +6,12 @@ import { formatBytes, mediaURL } from './media.js'
 import './group-files.css'
 
 export const GroupFiles = {
-  components: { FileTypeIcon },
+  components: { FileTypeIcon, ContentState },
   props: { conversation: { type: Object, required: true } },
   setup(props) {
     const opened = ref(false), trigger = ref(null), panel = ref(null)
     const files = ref([]), busy = ref(false), error = ref(''), hasMore = ref(false)
-    let cursor = 0, generation = 0, request
+    let cursor = 0, generation = 0, request, retryMore = false
     const uploadedBy = id => props.conversation.members?.find(person => person.id === id)?.name || '已离群成员'
     const uploadedAt = value => new Date(value).toLocaleString('zh-CN')
     async function load(more = false) {
@@ -20,7 +21,7 @@ export const GroupFiles = {
       const controller = new AbortController()
       request = controller
       const id = props.conversation.id
-      busy.value = true; error.value = ''
+      busy.value = true; error.value = ''; retryMore = more
       if (!more) { files.value = []; cursor = 0; hasMore.value = false }
       const params = new URLSearchParams({ type: 'files', limit: '30' })
       if (more) params.set('before_seq', String(cursor))
@@ -54,7 +55,7 @@ export const GroupFiles = {
       if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus() }
     }
     onUnmounted(() => { generation++; request?.abort() })
-    return { opened, trigger, panel, files, busy, error, hasMore, uploadedBy, uploadedAt, formatBytes, mediaURL, open, close, load, keyboard }
+    return { opened, trigger, panel, files, busy, error, hasMore, uploadedBy, uploadedAt, formatBytes, mediaURL, open, close, load, retry: () => load(retryMore), keyboard }
   },
   template: `
     <button ref="trigger" type="button" class="small-button group-files-trigger" aria-haspopup="dialog" @click="open">群文件</button>
@@ -63,7 +64,9 @@ export const GroupFiles = {
         <div class="modal-head"><h2 id="group-files-title">群文件</h2><button type="button" aria-label="关闭群文件" @click="close">×</button></div>
         <p class="subtle">群内已发送的文件，所有群成员均可查看和下载，包含加入群聊之前的文件。</p>
         <div class="group-files-toolbar"><span>{{ conversation.name }}</span><button type="button" class="small-button" :disabled="busy" @click="load()">刷新列表</button></div>
-        <div role="status" aria-live="polite"><p v-if="error" class="search-error">{{ error }}<button type="button" class="small-button" @click="load(files.length > 0)">重试</button></p><p v-else-if="busy && !files.length" class="subtle">正在加载群文件…</p><p v-else-if="!files.length" class="subtle">暂无群文件。在聊天输入框点击“上传文件”，发送后会出现在这里。</p></div>
+        <ContentState v-if="busy" kind="loading" description="正在加载群文件…" compact />
+        <ContentState v-else-if="error" kind="error" class="search-error" :description="error" :retry-disabled="busy" compact @retry="retry" />
+        <ContentState v-else-if="!files.length" description="暂无群文件。在聊天输入框点击“上传文件”，发送后会出现在这里。" compact />
         <ul class="group-files-list" :aria-busy="busy">
           <li v-for="item in files" :key="item.id" class="group-file-row">
             <FileTypeIcon :filename="item.media.file_name" :size="32" /><div class="group-file-info"><strong>{{ item.media.file_name }}</strong><small>{{ formatBytes(item.media.byte_size) }} · {{ uploadedBy(item.sender_id) }} · {{ uploadedAt(item.created_at) }}</small></div>
