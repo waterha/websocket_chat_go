@@ -172,6 +172,63 @@ func TestOpenSocketPreservesAuthOriginAndEvents(t *testing.T) {
 	wait("close")
 }
 
+func TestPendingSocketDeduplicatesAndCancelsHandshake(t *testing.T) {
+	var handshakes atomic.Int64
+	entered := make(chan struct{}, 4)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		handshakes.Add(1)
+		entered <- struct{}{}
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	c, err := New(Config{ServerURL: server.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	open := func() <-chan error {
+		done := make(chan error, 1)
+		go func() { done <- c.OpenSocket("pending", "device", func(SocketEvent) {}) }()
+		return done
+	}
+	waitEntered := func() {
+		t.Helper()
+		select {
+		case <-entered:
+		case <-time.After(2 * time.Second):
+			t.Fatal("handshake never reached server")
+		}
+	}
+	waitFailed := func(done <-chan error) {
+		t.Helper()
+		select {
+		case err := <-done:
+			if err == nil {
+				t.Fatal("expected a rejected/cancelled handshake")
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatal("handshake did not stop promptly (dial timeout is 10 seconds)")
+		}
+	}
+	first := open()
+	waitEntered()
+	duplicate := open()
+	waitFailed(duplicate)
+	if got := handshakes.Load(); got != 1 {
+		t.Fatalf("duplicate performed %d handshakes, want 1", got)
+	}
+	c.CloseSocket("pending")
+	waitFailed(first)
+	// Reusing the ID after cancellation must not be deleted by the old dial.
+	retry := open()
+	waitEntered()
+	c.Close()
+	waitFailed(retry)
+	if got := handshakes.Load(); got != 2 {
+		t.Fatalf("retry handshakes = %d, want 2", got)
+	}
+}
+
 func TestDownloadStreamsAndPreservesExistingFileOnFailure(t *testing.T) {
 	const content = "authenticated-download"
 	var revoked atomic.Bool
