@@ -1,3 +1,5 @@
+import { register } from 'node:module'
+register('../css-hook.mjs', import.meta.url)
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { JSDOM } from 'jsdom'
@@ -75,4 +77,25 @@ test('closing invalidates in-flight list results and restores focus', async () =
   assert.equal(vm.opened, false)
   assert.equal(document.activeElement, document.querySelector('.group-directory-trigger'))
   assert.notEqual(vm.groups[0]?.name, '旧响应')
+})
+
+test('unified list states retain results and keep join failures inline', async () => {
+  await vm.open(); await settle()
+  let finish
+  handler = async path => path.includes('/discover?') ? new Promise(resolve => { finish = resolve }) : response([])
+  const pending = vm.load(); await settle()
+  assert.ok(document.querySelector('.group-directory-results .content-state--loading'))
+  assert.ok(document.querySelector('.group-directory-list li'))
+  finish(response([])); await pending; await settle()
+  assert.ok(document.querySelector('.group-directory-results .content-state--empty'))
+  handler = async () => { throw new Error('offline') }
+  await vm.load(); await settle()
+  assert.ok(document.querySelector('.search-error.content-state--error'))
+  assert.equal(document.querySelector('.content-state--empty'), null)
+  handler = async path => response(path.includes('/discover?') ? [group] : [])
+  click('.content-state__retry'); await settle()
+  vm.choose(group); handler = async () => { throw new Error('join failure') }
+  await vm.join(); await settle()
+  assert.ok(document.querySelector('.search-error[role="alert"]'))
+  assert.equal(document.querySelector('.search-error .content-state__retry'), null)
 })
