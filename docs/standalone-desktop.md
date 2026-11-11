@@ -1,0 +1,44 @@
+# 双击即用的桌面发布包
+
+## 使用方式
+
+构建后的 `desktop/build/bin/WebsocketChat.exe` 可以单独复制运行，不依赖项目源码、开发环境、启动脚本、系统 PATH 中的数据库或 Redis。Windows 10/11 x64 上双击 EXE，等待顶部的本机服务准备进度完成；没有账户时先注册，再登录使用。若已有团队服务器设置，继续连接所配置的服务器，不擅自覆盖该设置。
+
+EXE 内包含：
+
+- 聊天前端、Go 聊天服务与数据库迁移；
+- EDB PostgreSQL 16.15-5 所需的 bin/lib/share 及授权通知；
+- redis-windows 8.10.2 Cygwin 便携运行时及其归档中的附带文件；
+- 来自已校验微软签名分发包的 x64 VC DLL，应用本地加载，不向系统安装组件。
+
+数据库与 Redis 首次释放及初始化无需用户联网下载。系统 WebView2 仍是 Windows 图形层前提，通常已预装；缺少时 Wails 负责提示下载安装，该特殊情况需要网络，不能宣称所有裸系统都完全离线。
+
+## 首次启动和旧数据
+
+首次启动将版本化压缩运行时释放到应用数据目录，校验归档 SHA256，完整解压后原子发布。后续启动直接使用缓存；缺文件的安装会重建，但不会删除用户数据库、附件、密码文件或设置。运行时目录与 `pgdata` 分离。
+
+旧的 PostgreSQL 16 数据直接使用同主版本更新；其他主版本不会被误打开或自动覆盖。显式高级环境变量覆盖仍生效，但默认不再扫描开发机安装位置。中文/空格数据目录会自动使用 Windows 短路径；磁盘关闭8.3短文件名时，建立仅当前用户和 SYSTEM 可访问的 ASCII 目录别名，按目录文件身份校验目标，保持 PostgreSQL 的相对 bin/lib/share 布局，不移动原数据。
+
+每一步启动进度实时发到桌面窗口。启动失败清理已拥有的服务后允许重试。关闭窗口会取消在途初始化，迟到资源由启动方兜底清理；关闭客户端不会关闭此前已存在、由外部管理的服务。
+
+## 依赖来源与复现
+
+- [EDB 官方 Windows 二进制包](https://www.enterprisedb.com/download-postgresql-binaries)
+- [redis-windows 8.10.2 及公开哈希](https://github.com/redis-windows/redis-windows/releases/tag/8.10.2)
+- [Microsoft VC 官方再分发包](https://aka.ms/vs/17/release/vc_redist.x64.exe)
+
+下载版本和源包 SHA256 固定在 `scripts/desktop-runtime-sources.json`；VC 包固定校验值和签名校验位于准备脚本。仅构建机需要第一次下载上游包，二进制缓存和生成嵌入文件被 git 忽略。构建不会静默接受上游同 URL 内容变化。
+
+```powershell
+.\scripts\build-desktop.ps1 -SkipInstall
+Set-Location desktop
+$env:IM_TEST_BUNDLED_RUNTIME = '1'
+go test ./... -count=1 -timeout=8m
+go vet ./...
+```
+
+真实服务栈集成测试创建新的中文、空格和 `&` 字符数据目录，选择独立空闲端口，清空 PostgreSQL/Redis 覆盖配置；仅使用内置运行时初始化数据库并执行迁移，验证注册、登录、认证会话、会话列表，再关闭全部自有服务、确认端口释放，最后从同一数据库重启并登录原账户。该测试验证的不是开发环境已有服务的健康接口。
+
+本次一个定向通过样本中，首次释放和初始化到服务启动约31秒，再次启动约2秒；这是本机功能验证样本，非跨机器性能承诺。随后包含特殊路径的完整桌面测试与静态检查通过。
+
+最终发布 EXE 还以隔离 APPDATA、仅保留 Windows 系统目录的 PATH 实际启动过：创建“协作聊天”主窗口，自动服务健康检查 HTTP 200，首次约31.8秒；真实接口注册、登录和认证会话成功。正常关闭主窗口后 EXE 退出码0，HTTP/PostgreSQL/Redis三个私有端口均释放。同一EXE和同一数据再次打开约3.8秒，原测试账户可登录，正常关闭和资源回收再次通过。未做界面像素/截图验收，不将进程与接口验证冒充视觉测试。
