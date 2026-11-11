@@ -5,9 +5,11 @@ export default `      <aside v-if="current && current.kind === 'group'" class="d
             <span class="announcement-block-title"><span class="detail-section-icon"><Bell :size="16" aria-hidden="true" /></span>群公告<span v-if="announcementCount" class="announcement-block-count">{{ announcementCount }}</span></span>
             <span class="announcement-block-more">全部<ChevronRight :size="13" aria-hidden="true" /></span>
           </button>
-          <button type="button" class="announcement-summary" aria-label="查看群公告" @click="openAnnouncementPanel">
+          <ContentState v-if="announcementsBusy && !latestAnnouncement" kind="loading" description="正在加载公告…" compact />
+          <ContentState v-else-if="announcementsError && !latestAnnouncement && !announcementEditorOpen" kind="error" :description="announcementsError" @retry="loadAnnouncements" compact />
+          <button v-else type="button" class="announcement-summary" aria-label="查看群公告" @click="openAnnouncementPanel">
             <template v-if="latestAnnouncement"><span class="announcement-summary-label">最新公告</span><p class="announcement-block-preview">{{ latestAnnouncement.content }}</p><span class="announcement-summary-footer"><time :datetime="latestAnnouncement.created_at">{{ searchDate(latestAnnouncement.created_at) }}</time><span>查看详情 ↗</span></span></template>
-            <template v-else><p class="announcement-block-empty">{{ canManageAnnouncements ? '让重要消息被每个人看见' : '群里还没有公告' }}</p><span class="announcement-summary-footer">{{ canManageAnnouncements ? '点击发布第一条公告' : '发布后会展示在这里' }}</span></template>
+            <template v-else><ContentState class="announcement-block-empty" compact :description="canManageAnnouncements ? '让重要消息被每个人看见' : '群里还没有公告'" /><span class="announcement-summary-footer">{{ canManageAnnouncements ? '点击发布第一条公告' : '发布后会展示在这里' }}</span></template>
           </button>
         </section>
         <section class="member-block" aria-label="群成员">
@@ -18,7 +20,7 @@ export default `      <aside v-if="current && current.kind === 'group'" class="d
               <span class="avatar-wrap tiny" :class="{ online: person.online }"><UserAvatar :user="person" :name="person.alias || person.name" size="tiny" /></span>
               <span class="member-block-text"><strong :title="person.alias || person.name">{{ person.alias || person.name }}<span v-if="person.id === me.id" class="member-self">我</span></strong><small :class="{ 'member-online-label': person.online }">{{ person.online ? '在线' : '离线' }}<span v-if="person.role !== 'member'" class="role-badge" :class="'role-' + person.role">{{ roleLabel(person.role) }}</span></small></span>
             </div>
-            <p v-if="!currentMembers.length" class="empty-member">{{ memberQuery.trim() ? '没有匹配的成员' : '暂无群成员' }}</p>
+            <ContentState v-if="!currentMembers.length" class="empty-member" compact :description="memberQuery.trim() ? '没有匹配的成员' : '暂无群成员'" />
           </div>
           <div class="member-block-actions">
             <button v-if="canInviteMembers" type="button" class="small-button" :disabled="memberCount >= 1000" @click="openInvite"><UserPlus :size="14" aria-hidden="true" />{{ memberCount >= 1000 ? '成员已满' : '邀请成员' }}</button>
