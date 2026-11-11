@@ -54,6 +54,7 @@ export function useThreadWindow({ active, syncConversation, showError, getEpoch 
     const id = active.value
     const version = getEpoch()
     const last = threadReplies.value.at(-1)
+    threadError.value = ''
     threadBusy.value = true
     try {
       const page = await api(`/conversations/${id}/messages/${threadRoot.value.id}/thread?limit=100&after_seq=${last?.seq || 0}`)
