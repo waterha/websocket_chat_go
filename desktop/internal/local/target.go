@@ -7,6 +7,7 @@ package local
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
@@ -59,5 +60,9 @@ func healthy(ctx context.Context, target Target) bool {
 		return false
 	}
 	defer response.Body.Close()
+	// A health response includes a small JSON body. Read through EOF so the
+	// shared HTTP transport can reuse its connection across startup polls.
+	// Bound the drain in case a foreign service answers on the configured port.
+	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 64<<10))
 	return response.StatusCode == http.StatusOK
 }
