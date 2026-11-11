@@ -1,3 +1,5 @@
+import { register } from 'node:module'
+register('../css-hook.mjs', import.meta.url)
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { JSDOM } from 'jsdom'
@@ -105,4 +107,24 @@ test('newer profile requests win and Escape closes and restores focus', async ()
   await settle()
   assert.equal(document.querySelector('[role="dialog"]'), null)
   assert.equal(document.activeElement, document.querySelector('.org-entry'))
+})
+
+test('unified directory pagination retries keep cursor and profile save errors stay inline', async () => {
+  await vm.open(); await settle()
+  handler = async () => { throw new Error('offline') }
+  await vm.load(true); await settle()
+  assert.ok(document.querySelector('.org-results .content-state--error.org-error'))
+  assert.equal(document.querySelectorAll('.org-person').length, 1)
+  assert.equal(document.querySelector('.org-results .content-state--empty'), null)
+  let finish
+  handler = async () => new Promise(resolve => { finish = resolve })
+  click('.org-results .content-state__retry'); await settle()
+  assert.equal(new URL(requests.at(-1).path, dom.window.location).searchParams.get('offset'), '50')
+  assert.ok(document.querySelector('.org-results .content-state--loading'))
+  finish(response(page([carol]))); await settle()
+  assert.equal(document.querySelectorAll('.org-person').length, 2)
+  handler = async () => { throw new Error('save failure') }
+  await vm.saveProfile(); await settle()
+  assert.match(document.querySelector('.org-profile .org-error').textContent, /保存失败/)
+  assert.equal(document.querySelector('.org-profile .content-state__retry'), null)
 })
