@@ -1,3 +1,5 @@
+import ContentState from './content-state.js'
+import { buildConversationIndex, latestVisibleMessages, sortConversationsByLatest } from './conversation-index.js'
 import { useStickers } from './stickers.js'
 import { messagePresentation } from './message-presentation.js'
 import { useConversationDrafts } from './conversation-drafts.js'
@@ -52,7 +54,7 @@ import './desktop.css'
 
 
 createApp({
-  components: { Search, X, ArrowRight, RotateCw, Users, Paperclip, Scissors, Download, Check, Pin, BellOff, Info, ChevronRight, ChevronDown, Clock3, ImagePlus, MoreHorizontal, MessageCircle, UserPlus, Bell, Contact, UsersRound, DesktopSettings, AppearanceSettings, UserAvatar, FavoritesPanel, GroupDirectory, GroupFiles, FileTypeIcon, LayoutDivider },
+  components: { ContentState, Search, X, ArrowRight, RotateCw, Users, Paperclip, Scissors, Download, Check, Pin, BellOff, Info, ChevronRight, ChevronDown, Clock3, ImagePlus, MoreHorizontal, MessageCircle, UserPlus, Bell, Contact, UsersRound, DesktopSettings, AppearanceSettings, UserAvatar, FavoritesPanel, GroupDirectory, GroupFiles, FileTypeIcon, LayoutDivider },
   setup() {
     applyTheme(loadTheme())
     const showAppearance = ref(false)
@@ -68,6 +70,9 @@ createApp({
     const active = ref(null)
     const chatVisible = ref(false)
     const messages = ref([])
+    const messagesLoading = ref(false)
+    const messagesError = ref('')
+    let messageLoadVersion = 0
     const pendingSend = ref(null)
     const draft = ref('')
     const groupName = ref('')
@@ -200,21 +205,21 @@ createApp({
     let epoch = 0
     let disposed = false
 
-    const current = computed(() => conversations.value.find(item => item.id === active.value))
+    const conversationIndex = computed(() => {
+      cacheVersion.value
+      return buildConversationIndex(conversations.value, me.value?.id, cache)
+    })
+    const current = computed(() => conversationIndex.value.byID.get(active.value))
     const {
       showSearch, searchInput, searchQuery, searchedQuery, searchSender, historyMemberQuery,
       historyMemberOptions, searchType, searchStart, searchEnd, searchResults, searchBusy, searchError,
       searchHasMore, searchBefore, searchStarted, resetSearch, closeSearch, clearSearchFilters,
       openSearch, changeSearch, searchMessages,
     } = useHistorySearch({ active, current, onReset: () => { locateVersion++; locatingMessage.value = null } })
-    const latestMessage = item => [...(cache.get(item?.id) || [])].reverse().find(message => !message.thread_root_id)
+    const latestMessage = item => conversationIndex.value.latestByID.get(item?.id)
     const latestTime = item => Date.parse(latestMessage(item)?.created_at || '') || 0
-    const sortByLatestTime = items => items.sort((left, right) => {
-      const difference = latestTime(right) - latestTime(left)
-      if (difference) return difference
-      return (left.name || '').localeCompare(right.name || '', 'zh-CN')
-    })
-    const directConversation = userID => conversations.value.find(item => item.kind === 'direct' && item.members.some(member => member.id === userID))
+    const sortByLatestTime = items => sortConversationsByLatest(items, conversationIndex.value)
+    const directConversation = userID => conversationIndex.value.directByUser.get(userID)
     // Pinned conversations are surfaced separately so they stay in view even
     // when other conversations receive newer messages.
     const pinnedConversations = computed(() => {
@@ -392,7 +397,8 @@ createApp({
     const currentMuted = computed(() => Boolean(current.value?.muted))
     // Conversation titles prefer the caller's private friend remark; names
     // inside a conversation prefer the group card over the account name.
-    const friendRemark = id => friends.value.find(friend => friend.id === id)?.remark || ''
+    const friendsByID = computed(() => new Map(friends.value.map(friend => [friend.id, friend])))
+    const friendRemark = id => friendsByID.value.get(id)?.remark || ''
     const memberOf = (conversation, id) => conversation?.members.find(member => member.id === id)
     const myMembership = computed(() => current.value?.members.find(member => member.id === me.value?.id))
     // Muted members and plain members of an all-muted group see a quiet composer.
@@ -403,7 +409,8 @@ createApp({
       return Boolean(until && Date.parse(until) > Date.now())
     })
     const dismissedHere = computed(() => Boolean(current.value?.dismissed))
-    const memberByID = id => current.value?.members.find(member => member.id === id) || null
+    const currentMembersByID = computed(() => new Map((current.value?.members || []).map(member => [member.id, member])))
+    const memberByID = id => currentMembersByID.value.get(id) || null
     const conversationAvatar = conversation => conversation?.kind === 'direct'
       ? conversation.members?.find(member => member.id !== me.value?.id) || null
       : null
@@ -466,18 +473,12 @@ createApp({
       return (otherID && friendRemark(otherID)) || memberOf(item, otherID)?.name || '私聊'
     }
     const sender = id => {
-      const member = memberOf(current.value, id)
+      const member = memberByID(id)
       return member ? member.alias || member.name || '成员' : '成员'
     }
     // Global search hits may belong to any of the caller's conversations, so the
     // name is resolved across every known member list rather than the active one.
-    const anySender = id => {
-      for (const conversation of conversations.value) {
-        const member = conversation.members?.find(person => person.id === id)
-        if (member) return member.name
-      }
-      return me.value?.id === id ? me.value?.name : '成员'
-    }
+    const anySender = id => conversationIndex.value.memberNames.get(id) || (me.value?.id === id ? me.value?.name : '成员')
     const time = value => new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     const preview = item => {
       const draftPreview = conversationDrafts.draftPreview(item.id)
@@ -508,7 +509,7 @@ createApp({
     const scroll = async () => { await nextTick(); if (stream.value) stream.value.scrollTop = stream.value.scrollHeight }
     function showError(cause) { error.value = cause?.message || '操作失败'; clearTimeout(errorTimer); errorTimer = setTimeout(() => { error.value = '' }, 5000) }
     const atBottom = () => !stream.value || stream.value.scrollHeight - stream.value.scrollTop - stream.value.clientHeight < 64
-    const showMessages = id => { if (id === active.value) messages.value = (cache.get(id) || []).filter(item => !item.thread_root_id).slice(-visibleCount.value) }
+    const showMessages = id => { if (id === active.value) messages.value = latestVisibleMessages(cache.get(id) || [], visibleCount.value) }
     function discardPending() {
       if (!pendingSend.value || !confirm('放弃确认不等于撤回：消息可能已经保存在服务器。请先检查聊天记录，确定仍要放弃吗？')) return
       pendingStore.clear(pendingSend.value.conversation_id, pendingSend.value.client_msg_id)
@@ -1156,7 +1157,7 @@ createApp({
            const stick = atBottom()
           const merged = appendPage(existing, page, id)
           cache.set(id, merged)
-          cacheVersion.value++
+          if (merged !== existing) cacheVersion.value++
           messageNotifications.receive(id, page.messages)
                      if (page.messages.some(message => message.thread_root_id)) await refreshThreadSummaries(id, page.messages)
            const pending = pendingStore?.get(id)
@@ -1165,7 +1166,7 @@ createApp({
             if (pendingSend.value?.client_msg_id === pending.client_msg_id) pendingSend.value = null
             if (active.value === id && draft.value.trim() === pending.content) draft.value = ''
           }
-          showMessages(id)
+          if (merged !== existing) showMessages(id)
           const conversation = conversations.value.find(item => item.id === id)
           if (conversation) conversation.last_seq = Math.max(conversation.last_seq, page.last_seq)
            if (page.next_seq > 0) await api(`/conversations/${id}/received`, { method: 'POST', body: JSON.stringify({ device_id: deviceID, seq: page.next_seq }) })
@@ -1236,6 +1237,9 @@ createApp({
       const selection = toggleConversationSelection(active.value, chatVisible.value, id)
       active.value = selection.activeID
       chatVisible.value = selection.chatVisible
+      messageLoadVersion++
+      messagesLoading.value = false
+      messagesError.value = ''
       if (!selection.chatVisible) {
         closeSearch()
         return
@@ -1246,13 +1250,24 @@ createApp({
       pendingSend.value = pendingStore?.get(id) || null
       visibleCount.value = 100
       showMessages(id)
+      await loadCurrentMessages(id)
+    }
+    async function loadCurrentMessages(id = active.value) {
+      if (!id) return
+      const version = ++messageLoadVersion
+      const accountEpoch = epoch
+      messagesLoading.value = true
+      messagesError.value = ''
       try {
         await syncConversation(id)
-        // The right-hand panel shows the group's announcements, so they are
-        // loaded when a conversation is opened rather than on every refresh.
+        if (version !== messageLoadVersion || accountEpoch !== epoch || active.value !== id) return
         await loadAnnouncements()
-        if (active.value === id && chatVisible.value) await scroll()
-      } catch (cause) { showError(cause) }
+        if (version === messageLoadVersion && active.value === id && chatVisible.value) await scroll()
+      } catch (cause) {
+        if (version === messageLoadVersion && accountEpoch === epoch && active.value === id) messagesError.value = cause.message || '聊天记录加载失败，请重试。'
+      } finally {
+        if (version === messageLoadVersion && accountEpoch === epoch) messagesLoading.value = false
+      }
     }
     const onVisible = () => { if (me.value) reconcile().catch(showError) }
     function connect() {
@@ -1727,14 +1742,24 @@ createApp({
       window.addEventListener('focus', onVisible)
       document.addEventListener('pointerdown', onConversationMenuOutside)
       document.getElementById('app')?.addEventListener('click', onImageLinkClick)
-      typingTimer = setInterval(() => { typingTick.value++ }, 1000)
+      typingTimer = setInterval(() => {
+        const now = Date.now()
+        let activeChanged = false
+        for (const [id, typists] of Object.entries(typingUsers.value)) {
+          for (const [userID, expiry] of Object.entries(typists)) {
+            if (expiry <= now) { delete typists[userID]; if (id === active.value) activeChanged = true }
+          }
+          if (!Object.keys(typists).length) delete typingUsers.value[id]
+        }
+        if (activeChanged) typingTick.value++
+      }, 1000)
     })
     onUpdated(() => {
       if (draftArea.value) { installEmojiPicker(draftArea.value, emojiPickerOptions); installComposerUndo(draftArea.value) }
     })
     const removeDesktopDownloads = installDesktopDownloads(showError)
     onUnmounted(() => { voice.dispose(); cancelFileUpload(); screenshot.dispose(); removeDesktopDownloads(); document.getElementById('app')?.removeEventListener('click', onImageLinkClick); resetSearch(); resetGlobalSearch(); clearTimeout(highlightTimer); releaseAttachment(); disposed = true; epoch++; requests?.close(); socket?.close(); clearTimeout(reconnectTimer); clearInterval(refreshTimer); clearInterval(typingTimer); clearTimeout(errorTimer); document.removeEventListener('visibilitychange', onVisible); window.removeEventListener('focus', onVisible); document.removeEventListener('pointerdown', onConversationMenuOutside) })
-    return { messagePresentation, showFavorites, messageNotices, notificationPermission, openNotice, dismissNotice, enableSystemNotifications, showAppearance, historyMemberQuery, historyMemberOptions, voiceEnabled, voiceState, voiceSeconds, toggleVoice, cancelVoice: voice.cancel, fileInput, openFilePicker, cancelFileUpload, uploadName, searchSender, searchType, searchStart, searchEnd, clearSearchFilters, historyMessagePreview, startScreenshot: screenshot.start, profileAvatarBusy, avatarInput, uploadProfileAvatar, removeProfileAvatar, onGroupJoined, openGroupDirectory, groupDirectory, isDesktop, openServerSettings, sidebarMoreOpen, chatMoreOpen, toggleSidebarMore, toggleChatMore, sendKeyMode, sendKeyHint, setSendKey, sendMenuOpen, closeConversation, memberSearchOpen, toggleMemberSearch, preferenceBusy, memberByID, conversationAvatar, headMember, chatInfoOpen, dayDivider, dayLabel, pokeMember, startDirectRemark, clearLocalHistory, UserAvatar, chatHeadMeta, memberMenuID, toggleMemberMenu, messageActions, REACTION_CHOICES, reactionMine, toggleReaction, reactionBusy, typingLabel, mutedHere, dismissedHere, readTicks, showContacts, contactBusy, remarkEditingID, remarkDraft, blockedUsers, isBlocked, openContacts, startRemark, saveRemark, removeFriend, blockUser, unblockUser, conversationMenu, conversationMenuElement, openConversationMenu, closeConversationMenu, runConversationMenu, deleteConversation, joinRequests, joinRequestBusy, decideJoinRequest, updateGroupSettings, groupSettingsBusy, canDismissGroup, dismissGroup, setMemberAlias, setMemberMute, memberMuted, memberCanBeMuted, memberAliasEditable, groupToolBusy, showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, hasThread, threadPreview, threadLabel, hiddenReplyCount, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, inviteQuery, inviteInitial, inviteVisible, inviteGroups, inviteInitials, inviteSummary, inviteSelectedCount, inviteSelectedPeople, chooseInviteInitial, toggleInvite, selectAllInvites, clearInvites, resetInviteFilters, OTHER_INITIAL, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, discardPending, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, composerImages, composerHasContent, removeComposerImage, clearComposerImages, syncDraftFromDom, onComposerInput, onComposerKeydown, onComposerClick, onComposerBlur, restorePending, dragging, onComposerPaste, onDragOver, onDragLeave, onDrop, draftArea, startReply, replyPreview, replyAuthor, bodyOf, segmentsOf, usesBlocks, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
+    return { messagesLoading, messagesError, loadCurrentMessages, loadAnnouncements, messagePresentation, showFavorites, messageNotices, notificationPermission, openNotice, dismissNotice, enableSystemNotifications, showAppearance, historyMemberQuery, historyMemberOptions, voiceEnabled, voiceState, voiceSeconds, toggleVoice, cancelVoice: voice.cancel, fileInput, openFilePicker, cancelFileUpload, uploadName, searchSender, searchType, searchStart, searchEnd, clearSearchFilters, historyMessagePreview, startScreenshot: screenshot.start, profileAvatarBusy, avatarInput, uploadProfileAvatar, removeProfileAvatar, onGroupJoined, openGroupDirectory, groupDirectory, isDesktop, openServerSettings, sidebarMoreOpen, chatMoreOpen, toggleSidebarMore, toggleChatMore, sendKeyMode, sendKeyHint, setSendKey, sendMenuOpen, closeConversation, memberSearchOpen, toggleMemberSearch, preferenceBusy, memberByID, conversationAvatar, headMember, chatInfoOpen, dayDivider, dayLabel, pokeMember, startDirectRemark, clearLocalHistory, UserAvatar, chatHeadMeta, memberMenuID, toggleMemberMenu, messageActions, REACTION_CHOICES, reactionMine, toggleReaction, reactionBusy, typingLabel, mutedHere, dismissedHere, readTicks, showContacts, contactBusy, remarkEditingID, remarkDraft, blockedUsers, isBlocked, openContacts, startRemark, saveRemark, removeFriend, blockUser, unblockUser, conversationMenu, conversationMenuElement, openConversationMenu, closeConversationMenu, runConversationMenu, deleteConversation, joinRequests, joinRequestBusy, decideJoinRequest, updateGroupSettings, groupSettingsBusy, canDismissGroup, dismissGroup, setMemberAlias, setMemberMute, memberMuted, memberCanBeMuted, memberAliasEditable, groupToolBusy, showMembers, memberQuery, currentMembers, memberCount, memberBusy, currentRole, isGroupOwner, canInviteMembers, canManageGroupMembers, canEditGroupAnnouncement, canLeaveGroup, memberCanBeRemoved, memberCanChangeRole, canTransferTo, roleLabel, groupAnnouncements, announcementsBusy, announcementsError, announcementPanelOpen, announcementEditorOpen, announcementEditingID, announcementDraftText, announcementSaving, announcementCount, latestAnnouncement, canManageAnnouncements, loadAnnouncements, openAnnouncementPanel, closeAnnouncementPanel, startCreateAnnouncement, startEditAnnouncement, cancelAnnouncementEditor, saveAnnouncementText, deleteAnnouncement, groupBusy, removeMember, changeRole, transferOwnership, leaveGroup, pinnedConversations, showsBadge, threadOpen, threadRoot, threadReplies, threadHasMorePages, hasThread, threadPreview, threadLabel, hiddenReplyCount, threadBusy, threadError, threadReplyCount, threadStream, openThread, closeThread, loadMoreThread, threadDraft, threadSending, threadDraftArea, sendInThread, refreshThread, onThreadEnter, hasThread, threadLabel, threadPreview, hiddenReplyCount, setPreference, togglePreference, currentPinned, currentMuted, openMembers, closeMembers, inviteFromMembers, globalQuery, globalResults, globalBusy, globalError, globalHasMore, globalStarted, showGlobalSearch, globalInput, openGlobalSearch, closeGlobalSearch, searchAll, openGlobalResult, anySender, isGenericFile, directoryQuery, directoryInput, directoryPlaceholder, directoryCount, filteredFriends, filteredGroups, filteredRecent, clearDirectorySearch, showSearch, searchInput, searchQuery, searchedQuery, searchResults, searchBusy, searchError, searchHasMore, searchStarted, locatingMessage, highlightedMessage, openSearch, closeSearch, changeSearch, searchMessages, locateMessage, highlightMatches, searchDate, me, mode, email, password, name, error, users, friends, recentConversations, groupConversations, friendCandidates, sortedFriends, friendQuery, conversationFilter, active, messages, pendingSend, draft, groupName, inviteUsers, inviteCandidates, inviteQuery, inviteInitial, inviteVisible, inviteGroups, inviteInitials, inviteSummary, inviteSelectedCount, inviteSelectedPeople, chooseInviteInitial, toggleInvite, selectAllInvites, clearInvites, resetInviteFilters, OTHER_INITIAL, conversationBusy, friendBusy, showCreate, showAddUser, showInvite, showSettings, showProfile, showFriendRequests, showRequestComposer, friendRequests, pendingIncomingRequests, friendRequestFor, friendRequestStatus, friendRequestBusy, requestMessage, requestTarget, profileEditing, profileBusy, profileName, profileEmail, passwordEditing, passwordBusy, currentPassword, newPassword, confirmPassword, startPasswordChange, changePassword, connected, loading, sending, stream, current, title, sender, time, directConversation, preview, contactPreview, unreadLabel, hasUnread, authenticate, logout, openCreate, openAddUser, openFriendRequests, openProfile, updateProfile, addFriend, sendFriendRequest, decideFriendRequest, openDirect, openInvite, addMembers, createGroup, select, send, loadOlder, onEnter, discardPending, mediaInput, uploadBusy, attachment, previewFile, mediaURL, formatBytes, openMediaPicker, chooseMedia, clearAttachment, composerImages, composerHasContent, removeComposerImage, clearComposerImages, syncDraftFromDom, onComposerInput, onComposerKeydown, onComposerClick, onComposerBlur, restorePending, dragging, onComposerPaste, onDragOver, onDragLeave, onDrop, draftArea, startReply, replyPreview, replyAuthor, bodyOf, segmentsOf, usesBlocks, recalledText, canRecallMessage, recallMessage, showMentions, mentionList, mentionIndex, mentionQuery, chooseMention, mentionKeydown, updateMentionState }
   },
   template,
 }).mount('#app')
