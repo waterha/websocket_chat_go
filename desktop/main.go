@@ -102,6 +102,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	config, err = automaticLocalConfig(path, config)
+	if err != nil {
+		log.Fatal(err)
+	}
 	embeddedMigrations, err := migrationFS()
 	if err != nil {
 		log.Fatal(err)
